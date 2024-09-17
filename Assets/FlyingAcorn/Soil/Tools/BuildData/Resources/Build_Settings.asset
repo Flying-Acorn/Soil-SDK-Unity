@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: df22a131f7417413c989eb82bf0c02bd, type: 3}
+  m_Name: Build_Settings
+  m_EditorClassIdentifier: 
+  BuildNumber: 0
+  LastBuildTime: 2022/01/01-19:11:13
+  RepositoryVersion: 
+  ScriptingBackend: IL2CPP
