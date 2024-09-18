@@ -6,7 +6,6 @@ using FlyingAcorn.Soil.Core.Data;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
-using Utils = FlyingAcorn.Soil.Core.JWTTools.Utils;
 
 namespace FlyingAcorn.Soil.Core.User
 {
@@ -29,7 +28,7 @@ namespace FlyingAcorn.Soil.Core.User
             {
                 { "iss", appID }
             };
-            var bearerToken = Utils.GenerateJwt(payload, sdkToken);
+            var bearerToken = JWTTools.Utils.GenerateJwt(payload, sdkToken);
             var body = Data.Utils.GenerateUserProperties();
             var form = new WWWForm();
             form.AddField("properties", JsonConvert.SerializeObject(body));
@@ -54,13 +53,13 @@ namespace FlyingAcorn.Soil.Core.User
                 }
         }
 
-        public static async Task AuthenticateUser(string appID, string sdkToken)
+        public static async Task AuthenticateUser(string appID, string sdkToken, bool forceRegister = false, bool forceRefresh = false)
         {
             AuthenticatePlayerPrefs.AppID = appID;
             AuthenticatePlayerPrefs.SDKToken = sdkToken;
             
             var currentPlayerInfo = AuthenticatePlayerPrefs.UserInfo;
-            if (currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid) ||
+            if (forceRegister || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid) ||
                 string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Access) ||
                 string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Refresh))
             {
@@ -69,19 +68,50 @@ namespace FlyingAcorn.Soil.Core.User
             else
             {
                 Debug.Log($"Player is already registered. Player info: {currentPlayerInfo}");
-                if (!CanUseAccessToken()) await RefreshToken();
+                if (forceRefresh || !CanUseAccessToken()) 
+                    SoilInitializer.Instance.StartCoroutine(RefreshToken());
             }
         }
 
-        private static async Task RefreshToken()
+        private static IEnumerator RefreshToken()
         {
-            Debug.Log("Refreshing token...");
-            await Task.CompletedTask;
+            Debug.Log("Refreshing tokens...");
+            if (JWTTools.Utils.IsTokenAlmostExpired(AuthenticatePlayerPrefs.TokenData.Refresh))
+            {
+                Debug.LogError("Refresh token is almost expired. Please re-register.");
+                yield break;
+            }
+            
+            var payload = new Dictionary<string, string>
+            {
+                { "iss", AuthenticatePlayerPrefs.AppID }
+            };
+            var bearerToken = AuthenticatePlayerPrefs.TokenData.Refresh;
+            var form = new WWWForm();
+            form.AddField("refresh_token", AuthenticatePlayerPrefs.TokenData.Refresh);
+            
+            using var request = UnityWebRequest.Post(RefreshTokenUrl, form);
+            request.SetRequestHeader("Content-Type", "application/json");
+            
+            yield return request.SendWebRequest();
+            
+            if (request.result != UnityWebRequest.Result.Success)
+                Debug.LogError(request.error);
+            else
+                try
+                {
+                    AuthenticatePlayerPrefs.TokenData = JsonUtility.FromJson<TokenData>(request.downloadHandler.text);
+                    Debug.Log($"Tokens refreshed successfully. Response: {request.downloadHandler.text}");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error: {e.Message}");
+                }
         }
 
         private static bool CanUseAccessToken()
         {
-            return true;
+            return !JWTTools.Utils.IsTokenAlmostExpired(AuthenticatePlayerPrefs.TokenData.Access);
         }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using JWT;
 using JWT.Algorithms;
+using JWT.Builder;
 using JWT.Serializers;
 
 namespace FlyingAcorn.Soil.Core.JWTTools
@@ -24,6 +25,17 @@ namespace FlyingAcorn.Soil.Core.JWTTools
 
             var token = encoder.Encode(payload, secret);
             return token;
+        }
+
+        public static bool IsTokenAlmostExpired(string token)
+        {
+            var jwt = new JwtBuilder()
+                .WithAlgorithm(new HMACSHA256Algorithm())
+                .MustVerifySignature()
+                .Decode<IDictionary<string, object>>(token);
+            var exp = Convert.ToInt64(jwt["exp"]);
+            var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+            return exp - now < 60;
         }
     }
 }
