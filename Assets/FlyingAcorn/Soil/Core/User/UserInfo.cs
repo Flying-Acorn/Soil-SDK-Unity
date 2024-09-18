@@ -2,7 +2,7 @@
 
 using JetBrains.Annotations;
 
-namespace FlyingAcorn.Soil.Core.Models
+namespace FlyingAcorn.Soil.Core.User
 {
     /* json schema:
      {
@@ -25,7 +25,7 @@ namespace FlyingAcorn.Soil.Core.Models
        }
      */
     [UsedImplicitly]
-    public abstract class PlayerInfo
+    public abstract class UserInfo
     {
         public string username;
         public string uuid;

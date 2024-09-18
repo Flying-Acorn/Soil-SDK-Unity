@@ -1,19 +1,12 @@
-using FlyingAcorn.Soil.Core.Models;
+using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Soil.Core.User;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core
 {
-    public class AuthenticatePlayerPrefs
+    public static class AuthenticatePlayerPrefs
     {
         private const string KeysPrefix = "flying_acorn_soil_";
-
-        public static string AccessToken
-        {
-            get => PlayerPrefs.GetString(GetKeysPrefix() + "access_token");
-            set => PlayerPrefs.SetString(GetKeysPrefix() + "access_token", value);
-        }
-
-        public static string RefreshToken => PlayerPrefs.GetString(GetKeysPrefix() + "refresh_token");
 
         public static string AppID
         {
@@ -38,14 +31,20 @@ namespace FlyingAcorn.Soil.Core
         private static string GetKeysPrefix()
         {
             if (!string.IsNullOrEmpty(AppID)) return $"{KeysPrefix}{AppID}_";
-            Debug.LogError("GameID is not set. Please set GameID before using AuthenticatePlayerPrefs.");
+            Debug.LogWarning("GameID is not set. Please set GameID before using AuthenticatePlayerPrefs.");
             return string.Empty;
         }
         
-        public static PlayerInfo PlayerInfo
+        public static UserInfo UserInfo
         {
-            get => JsonUtility.FromJson<PlayerInfo>(PlayerPrefs.GetString(GetKeysPrefix() + "player_info"));
+            get => JsonUtility.FromJson<UserInfo>(PlayerPrefs.GetString(GetKeysPrefix() + "player_info"));
             set => PlayerPrefs.SetString(GetKeysPrefix() + "player_info", JsonUtility.ToJson(value));
+        }
+
+        public static TokenData TokenData 
+        {
+            get => JsonUtility.FromJson<TokenData>(PlayerPrefs.GetString(GetKeysPrefix() + "token_data"));
+            set => PlayerPrefs.SetString(GetKeysPrefix() + "token_data", JsonUtility.ToJson(value));
         }
     }
 }

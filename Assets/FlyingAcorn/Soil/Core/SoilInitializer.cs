@@ -1,35 +1,38 @@
-using FlyingAcorn.Soil.Core.Models;
+using FlyingAcorn.Soil.Core.User;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core
 {
     public class SoilInitializer : MonoBehaviour
     {
-        // singleton
-        private static SoilInitializer _instance;
-        private static PlayerInfo _currentPlayerInfo;
+        [SerializeField] private string appID;
+        [SerializeField] private string sdkToken;
+        [SerializeField] private bool initOnStart;
+        internal static SoilInitializer Instance { get; private set; }
+
+        private static UserInfo _currentUserInfo;
         
         private void Awake()
         {
-            if (_instance != null)
+            if (Instance != null)
             {
                 Destroy(gameObject);
                 return;
             }
 
-            _instance = this;
+            Instance = this;
             DontDestroyOnLoad(gameObject);
         }
         
         private void Start()
         {
-            Initialize();
+            if (initOnStart)
+                Initialize();
         }
 
-        private static async void Initialize()
+        private async void Initialize()
         {
-            _currentPlayerInfo = AuthenticatePlayerPrefs.PlayerInfo;
-            await Authenticate.AuthenticateUser(_currentPlayerInfo);
+            await Authenticate.AuthenticateUser(appID, sdkToken);
         }
     }
 }

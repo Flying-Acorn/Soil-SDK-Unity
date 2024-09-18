@@ -6,20 +6,23 @@ using JWT.Serializers;
 
 namespace FlyingAcorn.Soil.Core.JWTTools
 {
-    public class Utils
+    public static class Utils
     {
-        public static string GenerateJwt(Dictionary<string, object> header, Dictionary<string, object> payload, string secret)
+        public static string GenerateJwt(Dictionary<string, string> payload, string secret, string algorithm = "HS256")
         {
-            payload.Add("iat", DateTimeOffset.Now.ToUnixTimeSeconds());
-            payload.Add("iss", AuthenticatePlayerPrefs.AppID);
+            if (algorithm != "HS256")
+            {
+                throw new NotImplementedException("Algorithm not implemented");
+            }
+            if (!payload.ContainsKey("iat"))
+                payload.Add("iat", DateTimeOffset.Now.ToUnixTimeSeconds().ToString());
 
-            IJwtAlgorithm algorithm = new HMACSHA256Algorithm();
+            IJwtAlgorithm algorithmInstance = new HMACSHA256Algorithm();
             IJsonSerializer serializer = new JsonNetSerializer();
             IBase64UrlEncoder urlEncoder = new JwtBase64UrlEncoder();
-            IJwtEncoder encoder = new JwtEncoder(algorithm, serializer, urlEncoder);
+            IJwtEncoder encoder = new JwtEncoder(algorithmInstance, serializer, urlEncoder);
 
             var token = encoder.Encode(payload, secret);
-            Console.WriteLine(token);
             return token;
         }
     }
