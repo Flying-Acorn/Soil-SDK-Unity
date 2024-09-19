@@ -1,51 +1,73 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Soil.Core.JWTTools;
 using Newtonsoft.Json;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace FlyingAcorn.Soil.Core.User
 {
     public static class Authenticate
     {
         private const string ApiUrl = "https://soil.flyingacorn.studio/api";
-
         private static readonly string UserBaseUrl = $"{ApiUrl}/users";
-        private static readonly string RegisterPlayerUrl = $"{UserBaseUrl}/register";
-        private static readonly string RefreshTokenUrl = $"{UserBaseUrl}/refreshtoken";
+
+        private static readonly string RegisterPlayerUrl = $"{UserBaseUrl}/register/";
+        private static readonly string RefreshTokenUrl = $"{UserBaseUrl}/refreshtoken/";
         private static readonly string GetPlayerInfoUrl = $"{UserBaseUrl}/";
 
-        private static IEnumerator RegisterPlayer()
+        public static async Task AuthenticateUser(string appID, string sdkToken, bool forceRegister = false,
+            bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+        {
+            AuthenticatePlayerPrefs.AppID = appID;
+            AuthenticatePlayerPrefs.SDKToken = sdkToken;
+
+            if (forceRegister || AuthenticatePlayerPrefs.TokenData == null ||
+                string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Access) ||
+                string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Refresh))
+                await RegisterPlayer();
+            else
+                await RefreshTokenIfNeeded(forceRefresh);
+
+            var currentPlayerInfo = AuthenticatePlayerPrefs.UserInfo;
+            if (forceFetchPlayerInfo || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid))
+                await FetchPlayerInfo();
+        }
+
+        private static async Task RegisterPlayer()
         {
             Debug.Log("Registering player...");
             var appID = AuthenticatePlayerPrefs.AppID;
             var sdkToken = AuthenticatePlayerPrefs.SDKToken;
-            
+
             var payload = new Dictionary<string, string>
             {
                 { "iss", appID }
             };
-            var bearerToken = JWTTools.Utils.GenerateJwt(payload, sdkToken);
-            var body = Data.Utils.GenerateUserProperties();
-            var form = new WWWForm();
-            form.AddField("properties", JsonConvert.SerializeObject(body));
+            var bearerToken = JwtUtils.GenerateJwt(payload, sdkToken);
+            var body = UserInfo.Properties.GeneratePropertiesFromDevice();
+            var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", body } });
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            using var request = UnityWebRequest.Post(RegisterPlayerUrl, form);
-            request.SetRequestHeader("Authorization", $"Bearer {bearerToken}");
-            request.SetRequestHeader("Content-Type", "application/json");
+            var request = new HttpRequestMessage(HttpMethod.Post, RegisterPlayerUrl);
+            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
+            var response = await client.SendAsync(request);
+            var responseString = response.Content.ReadAsStringAsync().Result;
 
-            yield return request.SendWebRequest();
 
-            if (request.result != UnityWebRequest.Result.Success)
-                Debug.LogError(request.error);
+            if (!response.IsSuccessStatusCode)
+                Debug.LogError(responseString);
             else
                 try
                 {
-                    AuthenticatePlayerPrefs.TokenData = JsonUtility.FromJson<TokenData>(request.downloadHandler.text);
-                    Debug.Log($"Player registered successfully. Response: {request.downloadHandler.text}");
+                    AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+                    Debug.Log($"Player registered successfully. Response: {responseString}");
                 }
                 catch (Exception e)
                 {
@@ -53,65 +75,82 @@ namespace FlyingAcorn.Soil.Core.User
                 }
         }
 
-        public static async Task AuthenticateUser(string appID, string sdkToken, bool forceRegister = false, bool forceRefresh = false)
+        private static async Task FetchPlayerInfo()
         {
-            AuthenticatePlayerPrefs.AppID = appID;
-            AuthenticatePlayerPrefs.SDKToken = sdkToken;
-            
-            var currentPlayerInfo = AuthenticatePlayerPrefs.UserInfo;
-            if (forceRegister || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid) ||
-                string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Access) ||
-                string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Refresh))
+            Debug.Log("Fetching player info...");
+
+            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Access))
             {
-                SoilInitializer.Instance.StartCoroutine(RegisterPlayer());
+                Debug.LogError("Access token is not valid. Trying to refresh tokens...");
+                await RefreshTokenIfNeeded(true);
             }
+
+            var bearerToken = AuthenticatePlayerPrefs.TokenData.Access;
+
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
+
+            var response = await client.SendAsync(request);
+            var responseString = response.Content.ReadAsStringAsync().Result;
+
+            if (!response.IsSuccessStatusCode)
+                Debug.LogError(responseString);
             else
-            {
-                Debug.Log($"Player is already registered. Player info: {currentPlayerInfo}");
-                if (forceRefresh || !CanUseAccessToken()) 
-                    SoilInitializer.Instance.StartCoroutine(RefreshToken());
-            }
+                try
+                {
+                    AuthenticatePlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
+                    Debug.Log($"Player info fetched successfully. Response: {responseString}");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error: {e.Message}");
+                }
         }
 
-        private static IEnumerator RefreshToken()
+        private static async Task RefreshTokenIfNeeded(bool force)
         {
             Debug.Log("Refreshing tokens...");
-            if (JWTTools.Utils.IsTokenAlmostExpired(AuthenticatePlayerPrefs.TokenData.Refresh))
+
+            if (!force && JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Access))
+            {
+                Debug.Log("Access token is still valid. No need to refresh.");
+                return;
+            }
+
+            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Refresh, 10))
             {
                 Debug.LogError("Refresh token is almost expired. Please re-register.");
-                yield break;
+                return;
             }
-            
-            var payload = new Dictionary<string, string>
+
+            var stringBody = JsonConvert.SerializeObject(new Dictionary<string, string>
             {
-                { "iss", AuthenticatePlayerPrefs.AppID }
-            };
-            var bearerToken = AuthenticatePlayerPrefs.TokenData.Refresh;
-            var form = new WWWForm();
-            form.AddField("refresh_token", AuthenticatePlayerPrefs.TokenData.Refresh);
-            
-            using var request = UnityWebRequest.Post(RefreshTokenUrl, form);
-            request.SetRequestHeader("Content-Type", "application/json");
-            
-            yield return request.SendWebRequest();
-            
-            if (request.result != UnityWebRequest.Result.Success)
-                Debug.LogError(request.error);
+                { "refresh", AuthenticatePlayerPrefs.TokenData.Refresh }
+            });
+
+
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            var request = new HttpRequestMessage(HttpMethod.Post, RefreshTokenUrl);
+            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
+            var response = await client.SendAsync(request);
+            var responseString = response.Content.ReadAsStringAsync().Result;
+
+            if (!response.IsSuccessStatusCode)
+                Debug.LogError(responseString);
             else
                 try
                 {
-                    AuthenticatePlayerPrefs.TokenData = JsonUtility.FromJson<TokenData>(request.downloadHandler.text);
-                    Debug.Log($"Tokens refreshed successfully. Response: {request.downloadHandler.text}");
+                    AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+                    Debug.Log($"Tokens refreshed successfully. Response: {responseString}");
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"Error: {e.Message}");
                 }
-        }
-
-        private static bool CanUseAccessToken()
-        {
-            return !JWTTools.Utils.IsTokenAlmostExpired(AuthenticatePlayerPrefs.TokenData.Access);
         }
     }
 }

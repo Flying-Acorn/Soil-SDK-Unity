@@ -1,17 +1,14 @@
-using FlyingAcorn.Soil.Core.User;
 using UnityEngine;
 
-namespace FlyingAcorn.Soil.Core
+namespace FlyingAcorn.Soil.Core.Sample
 {
-    public class SoilInitializer : MonoBehaviour
+    public class Initializer : MonoBehaviour
     {
         [SerializeField] private string appID;
         [SerializeField] private string sdkToken;
         [SerializeField] private bool initOnStart;
-        internal static SoilInitializer Instance { get; private set; }
+        private static Initializer Instance { get; set; }
 
-        private static UserInfo _currentUserInfo;
-        
         private void Awake()
         {
             if (Instance != null)
@@ -23,7 +20,7 @@ namespace FlyingAcorn.Soil.Core
             Instance = this;
             DontDestroyOnLoad(gameObject);
         }
-        
+
         private void Start()
         {
             if (initOnStart)
@@ -32,7 +29,7 @@ namespace FlyingAcorn.Soil.Core
 
         private async void Initialize()
         {
-            await Authenticate.AuthenticateUser(appID, sdkToken);
+            await SoilServices.Initialize(appID, sdkToken);
         }
     }
 }

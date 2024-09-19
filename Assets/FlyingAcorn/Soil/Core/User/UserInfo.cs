@@ -1,6 +1,12 @@
 // ReSharper disable InconsistentNaming
 
+using System;
+using System.Collections.Generic;
+using FlyingAcorn.Soil.Core.Data;
 using JetBrains.Annotations;
+using UnityEngine;
+
+// ReSharper disable UnusedMember.Global
 
 namespace FlyingAcorn.Soil.Core.User
 {
@@ -25,28 +31,67 @@ namespace FlyingAcorn.Soil.Core.User
        }
      */
     [UsedImplicitly]
-    public abstract class UserInfo
+    public class UserInfo
     {
-        public string username;
-        public string uuid;
-        public string name;
-        
         public string app;
         public string app_id;
         public string bundle;
-        
+
         public string country;
         public string created_at;
         public string current_build;
+        public string name;
         public Properties properties;
+        public string username;
+        public string uuid;
 
-        public abstract class Properties
+        [UsedImplicitly]
+        public class Properties
         {
+            private const string KeysPrefix = "flyingacorn_";
             public string flyingacorn_build;
+            public string flyingacorn_build_time;
+            public string flyingacorn_device_model;
+            public string flyingacorn_device_name;
+            public string flyingacorn_device_type;
+            public string flyingacorn_device_unique_id;
+            public string flyingacorn_graphics_device_id;
+            public string flyingacorn_graphics_device_name;
+            public string flyingacorn_graphics_device_type;
+            public string flyingacorn_graphics_device_vendor;
+            public string flyingacorn_graphics_device_vendor_id;
+            public string flyingacorn_graphics_device_version;
             public string flyingacorn_package;
             public string flyingacorn_platform;
+            public string flyingacorn_scripting_backend;
             public string flyingacorn_store_name;
+            public string flyingacorn_unity_version;
             public string flyingacorn_version;
+
+            public static Dictionary<string, object> GeneratePropertiesFromDevice()
+            {
+                return new Dictionary<string, object>
+                {
+                    { $"{KeysPrefix}platform", Application.platform.ToString() },
+                    { $"{KeysPrefix}version", Application.version },
+                    { $"{KeysPrefix}build", DataUtils.GetUserBuildNumber() },
+                    { $"{KeysPrefix}build_time", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
+                    { $"{KeysPrefix}scripting_backend", DataUtils.GetScriptingBackend() },
+                    { $"{KeysPrefix}unity_version", Application.unityVersion },
+                    { $"{KeysPrefix}store_name", SystemInfo.graphicsDeviceName },
+                    { $"{KeysPrefix}package", Application.identifier },
+                    { $"{KeysPrefix}device_model", SystemInfo.deviceModel },
+                    { $"{KeysPrefix}device_type", SystemInfo.deviceType.ToString() },
+                    { $"{KeysPrefix}device_name", SystemInfo.deviceName },
+                    { $"{KeysPrefix}device_unique_id", SystemInfo.deviceUniqueIdentifier },
+                    { $"{KeysPrefix}graphics_device_name", SystemInfo.graphicsDeviceName },
+                    { $"{KeysPrefix}graphics_device_type", SystemInfo.graphicsDeviceType.ToString() },
+                    { $"{KeysPrefix}graphics_device_vendor", SystemInfo.graphicsDeviceVendor },
+                    { $"{KeysPrefix}graphics_device_id", SystemInfo.graphicsDeviceID },
+                    { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
+                    { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion }
+                };
+            }
         }
     }
 }
