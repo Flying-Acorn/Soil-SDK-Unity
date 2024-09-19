@@ -24,14 +24,13 @@ namespace FlyingAcorn.Soil.Core.JWTTools
             return token;
         }
 
-        public static bool IsTokenValid(string token, int minutesBeforeExpiration = 5)
+        public static bool IsTokenValid(string token)
         {
             var validationParameters = new ValidationParameters
             {
-                ValidateSignature = true,
+                ValidateSignature = false,
                 ValidateExpirationTime = true,
                 ValidateIssuedTime = true,
-                TimeMargin = minutesBeforeExpiration * 60
             };
             IJwtAlgorithm algorithm = new HMACSHA256Algorithm();
             IDateTimeProvider provider = new UtcDateTimeProvider();
@@ -39,9 +38,10 @@ namespace FlyingAcorn.Soil.Core.JWTTools
             IBase64UrlEncoder urlEncoder = new JwtBase64UrlEncoder();
             IJwtValidator validator = new JwtValidator(serializer, provider, validationParameters);
             IJwtDecoder decoder = new JwtDecoder(serializer, validator, urlEncoder, algorithm);
+            const string fakeKey = "fakeKey";
             try
             {
-                decoder.Decode(token, false);
+                decoder.Decode(token, fakeKey);
                 return true;
             }
             catch (TokenNotYetValidException)

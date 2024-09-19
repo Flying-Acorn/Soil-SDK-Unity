@@ -119,7 +119,7 @@ namespace FlyingAcorn.Soil.Core.User
                 return;
             }
 
-            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Refresh, 10))
+            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Refresh))
             {
                 Debug.LogError("Refresh token is almost expired. Please re-register.");
                 return;
