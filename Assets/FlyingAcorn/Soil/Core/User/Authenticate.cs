@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
+using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -13,12 +14,16 @@ namespace FlyingAcorn.Soil.Core.User
 {
     public static class Authenticate
     {
-        private const string ApiUrl = "https://soil.flyingacorn.studio/api";
-        private static readonly string UserBaseUrl = $"{ApiUrl}/users";
+        private static readonly string UserBaseUrl = $"{Constants.ApiUrl}/users";
 
         private static readonly string RegisterPlayerUrl = $"{UserBaseUrl}/register/";
         private static readonly string RefreshTokenUrl = $"{UserBaseUrl}/refreshtoken/";
         private static readonly string GetPlayerInfoUrl = $"{UserBaseUrl}/";
+        
+        [UsedImplicitly] public static Action<TokenData> OnTokenRefreshed;
+        [UsedImplicitly] public static Action<TokenData> OnUserRegistered;
+        [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
+        [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
         public static async Task AuthenticateUser(string appID, string sdkToken, bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
@@ -36,6 +41,8 @@ namespace FlyingAcorn.Soil.Core.User
             var currentPlayerInfo = AuthenticatePlayerPrefs.UserInfo;
             if (forceFetchPlayerInfo || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid))
                 await FetchPlayerInfo();
+            
+            OnUserReady?.Invoke(AuthenticatePlayerPrefs.UserInfo);
         }
 
         private static async Task RegisterPlayer()
@@ -68,6 +75,7 @@ namespace FlyingAcorn.Soil.Core.User
                 {
                     AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
                     Debug.Log($"Player registered successfully. Response: {responseString}");
+                    OnUserRegistered?.Invoke(AuthenticatePlayerPrefs.TokenData);
                 }
                 catch (Exception e)
                 {
@@ -85,10 +93,9 @@ namespace FlyingAcorn.Soil.Core.User
                 await RefreshTokenIfNeeded(true);
             }
 
-            var bearerToken = AuthenticatePlayerPrefs.TokenData.Access;
 
             var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+            client.DefaultRequestHeaders.Authorization = GetAuthorizationHeader();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
 
@@ -102,6 +109,7 @@ namespace FlyingAcorn.Soil.Core.User
                 {
                     AuthenticatePlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
                     Debug.Log($"Player info fetched successfully. Response: {responseString}");
+                    OnPlayerInfoFetched?.Invoke(AuthenticatePlayerPrefs.UserInfo);
                 }
                 catch (Exception e)
                 {
@@ -146,11 +154,17 @@ namespace FlyingAcorn.Soil.Core.User
                 {
                     AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
                     Debug.Log($"Tokens refreshed successfully. Response: {responseString}");
+                    OnTokenRefreshed?.Invoke(AuthenticatePlayerPrefs.TokenData);
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"Error: {e.Message}");
                 }
+        }
+
+        public static AuthenticationHeaderValue GetAuthorizationHeader()
+        {
+            return new AuthenticationHeaderValue("Bearer", AuthenticatePlayerPrefs.TokenData.Access);
         }
     }
 }

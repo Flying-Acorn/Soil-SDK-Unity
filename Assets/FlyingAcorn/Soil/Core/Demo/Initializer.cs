@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace FlyingAcorn.Soil.Core.Sample
+namespace FlyingAcorn.Soil.Core.Demo
 {
     public class Initializer : MonoBehaviour
     {
@@ -29,7 +29,8 @@ namespace FlyingAcorn.Soil.Core.Sample
 
         private async void Initialize()
         {
-            await SoilServices.Initialize(appID, sdkToken);
+            SoilServices.SetRegistrationInfo(appID, sdkToken);
+            await SoilServices.Initialize();
         }
     }
 }

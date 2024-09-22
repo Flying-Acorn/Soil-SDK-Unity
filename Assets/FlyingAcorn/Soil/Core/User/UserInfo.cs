@@ -2,9 +2,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using FlyingAcorn.Soil.Core.Data;
 using JetBrains.Annotations;
 using UnityEngine;
+// ReSharper disable UnassignedField.Global
 
 // ReSharper disable UnusedMember.Global
 
@@ -31,6 +33,7 @@ namespace FlyingAcorn.Soil.Core.User
        }
      */
     [UsedImplicitly]
+    [Serializable]
     public class UserInfo
     {
         public string app;
@@ -46,6 +49,7 @@ namespace FlyingAcorn.Soil.Core.User
         public string uuid;
 
         [UsedImplicitly]
+        [Serializable]
         public class Properties
         {
             private const string KeysPrefix = "flyingacorn_";
@@ -91,6 +95,19 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
                     { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion }
                 };
+            }
+
+            public Dictionary<string,object> ToDictionary()
+            {
+                var allFields = GetType().GetFields();
+                var result = new Dictionary<string, object>();
+                foreach (var field in allFields)
+                {
+                    if (field.GetValue(this) != null)
+                        result[field.Name] = field.GetValue(this);
+                }
+                
+                return result;
             }
         }
     }

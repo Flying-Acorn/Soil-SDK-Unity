@@ -1,0 +1,69 @@
+﻿using System.Collections.Generic;
+using Newtonsoft.Json;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace FlyingAcorn.Soil.RemoteConfig.Demo
+{
+    public class RemoteConfigDemoHandler : MonoBehaviour
+    {
+        [SerializeField] private Button setDevButton;
+        [SerializeField] private TextMeshProUGUI setDevText;
+
+        [SerializeField] private TextMeshProUGUI fetchedDataText;
+
+        [SerializeField] private Button fetchButton;
+
+        private void Start()
+        {
+            SetDevButton();
+
+            setDevButton.onClick.AddListener(SetDevMode);
+            fetchButton.onClick.AddListener(InitializeAndFetchTest);
+        }
+
+        #region remote config usage
+
+        private void InitializeAndFetchTest()
+        {
+            FetchTest();
+        }
+
+        private void FetchTest()
+        {
+            RemoteConfig.OnRemoteConfigServerAnswer -= HandleReceivedConfigs;
+            RemoteConfig.OnRemoteConfigServerAnswer += HandleReceivedConfigs;
+            RemoteConfig.FetchConfig(new Dictionary<string, object>
+                { { "devmode", RemoteConfigPlayerPrefs.DevMode ? "1" : "0" } });
+        }
+
+        private void HandleReceivedConfigs(bool b)
+        {
+            if (!b)
+            {
+                fetchedDataText.text = "Failed to fetch remote config";
+                return;
+            }
+
+            fetchedDataText.text = RemoteConfig.LatestRemoteConfigData.ToString(Formatting.Indented);
+        }
+
+        #endregion
+
+        #region buttons
+
+        private void SetDevMode()
+        {
+            RemoteConfigPlayerPrefs.DevMode = !RemoteConfigPlayerPrefs.DevMode;
+            SetDevButton();
+        }
+
+        private void SetDevButton()
+        {
+            setDevText.text = "Devmode=" + (RemoteConfigPlayerPrefs.DevMode ? 1 : 0);
+        }
+
+        #endregion
+    }
+}
