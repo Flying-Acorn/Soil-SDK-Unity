@@ -71,7 +71,7 @@ namespace FlyingAcorn.Soil.Core.User
             public string flyingacorn_unity_version;
             public string flyingacorn_version;
 
-            public static Dictionary<string, object> GeneratePropertiesFromDevice()
+            public static Dictionary<string, object> GeneratePropertiesDynamicPlayerProperties()
             {
                 return new Dictionary<string, object>
                 {
@@ -81,7 +81,7 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}build_time", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
                     { $"{KeysPrefix}scripting_backend", DataUtils.GetScriptingBackend() },
                     { $"{KeysPrefix}unity_version", Application.unityVersion },
-                    { $"{KeysPrefix}store_name", SystemInfo.graphicsDeviceName },
+                    { $"{KeysPrefix}store_name", DataUtils.GetStoreName() },
                     { $"{KeysPrefix}package", Application.identifier },
                     { $"{KeysPrefix}device_model", SystemInfo.deviceModel },
                     { $"{KeysPrefix}device_type", SystemInfo.deviceType.ToString() },

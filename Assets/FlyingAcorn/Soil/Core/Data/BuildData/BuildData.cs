@@ -7,6 +7,7 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData
     public class BuildData : ScriptableObject
     {
         public string BuildNumber;
+        public string StoreName;
         public string LastBuildTime;
         public string ScriptingBackend;
 

@@ -52,7 +52,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
                 return;
             }
 
-            fetchedDataText.text = RemoteConfig.Configs.ToString(Formatting.Indented);
+            fetchedDataText.text = RemoteConfig.UserDefinedConfigs.ToString(Formatting.Indented);
         }
 
         #endregion

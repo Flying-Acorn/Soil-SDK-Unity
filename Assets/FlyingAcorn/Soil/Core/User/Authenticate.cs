@@ -79,7 +79,7 @@ namespace FlyingAcorn.Soil.Core.User
                 { "iss", appID }
             };
             var bearerToken = JwtUtils.GenerateJwt(payload, sdkToken);
-            var body = UserInfo.Properties.GeneratePropertiesFromDevice();
+            var body = UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties();
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", body } });
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);

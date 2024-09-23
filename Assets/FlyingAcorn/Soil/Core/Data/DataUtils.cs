@@ -27,5 +27,19 @@ namespace FlyingAcorn.Soil.Core.Data
 
             return build;
         }
+
+        public static string GetStoreName()
+        {
+            if (!_buildSettings)
+                _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
+            string storeName = null;
+            if (_buildSettings && !string.IsNullOrEmpty(_buildSettings.StoreName))
+                storeName = _buildSettings.StoreName;
+
+            if (!string.IsNullOrEmpty(storeName)) return storeName;
+            Debug.LogError("Store name is not set in Build_Settings. Please set it.");
+            storeName = "Unknown";
+            return storeName;
+        }
     }
 }

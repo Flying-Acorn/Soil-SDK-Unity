@@ -41,6 +41,15 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                 EditorUtility.SetDirty(buildSettings);
                 Debug.LogFormat("[FABuildTools] Updated settings LastBuildDate to \"{0}\". Settings Path: {1}",
                     buildSettings.LastBuildTime, path);
+
+                if (string.IsNullOrEmpty(buildSettings.StoreName))
+                {
+                    Debug.LogError("[FABuildTools] Please set store name through build_settings.asset, did you intentionally left it empty? please set it!");
+                }
+                else
+                {
+                    Debug.LogFormat("[FABuildTools] Store Name: {0}", buildSettings.StoreName);
+                }
             }
             else
             {

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
-using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
@@ -17,9 +16,19 @@ namespace FlyingAcorn.Soil.RemoteConfig
     {
         [UsedImplicitly] public static Action<JObject> OnSuccessfulFetch;
         [UsedImplicitly] public static Action<bool> OnServerAnswer;
-        [UsedImplicitly] public static JObject Configs => RemoteConfigPlayerPrefs.CachedRemoteConfigData;
+
+        [UsedImplicitly]
+        public static JObject UserDefinedConfigs =>
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData?["remote_configs"] as JObject;
+
+        [UsedImplicitly]
+        public static JObject ExchangeRates =>
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData?["exchange_rates"] as JObject;
+
+        [UsedImplicitly] public static bool FetchSuccessState;
 
         private static Dictionary<string, object> _sessionExtraProperties = new();
+        private static bool _fetching;
 
         private const string FetchUrl = Constants.ApiUrl + "/remoteconfig/";
 
@@ -27,21 +36,34 @@ namespace FlyingAcorn.Soil.RemoteConfig
         public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
         {
             _sessionExtraProperties = extraProperties ?? new Dictionary<string, object>();
-            await FetchRemoteConfig();
+
+            FetchRemoteConfig();
         }
 
         private static Dictionary<string, object> GetPlayerProperties()
         {
             var properties = _sessionExtraProperties;
-            if (SoilServices.UserInfo == null || SoilServices.UserInfo.properties == null) return properties;
-            foreach (var property in SoilServices.UserInfo.properties.ToDictionary())
+            foreach (var property in UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties())
                 properties[property.Key] = property.Value;
             return properties;
         }
 
-        private static async Task FetchRemoteConfig()
+        private static async void FetchRemoteConfig()
         {
-            await SoilServices.Initialize();
+            if (_fetching) return;
+            _fetching = true;
+            try
+            {
+                await SoilServices.Initialize();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
+                _fetching = false;
+                FetchSuccessState = false;
+                OnServerAnswer?.Invoke(false);
+                return;
+            }
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
                 { { "properties", GetPlayerProperties() } });
@@ -56,24 +78,27 @@ namespace FlyingAcorn.Soil.RemoteConfig
             if (!response.IsSuccessStatusCode)
             {
                 Debug.LogError(responseString);
-                OnServerAnswer?.Invoke(false);
+                FetchSuccessState = false;
             }
             else
             {
                 try
                 {
                     RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
+                    FetchSuccessState = true;
+                    Debug.Log("FlyingAcorn ====> Remote config fetched successfully."); 
                 }
                 catch (Exception)
                 {
                     Debug.LogError($"FlyingAcorn ====> Failed to parse fetched data. Data: {responseString}");
-                    OnServerAnswer?.Invoke(false);
-                    return;
+                    FetchSuccessState = false;
                 }
-
-                OnServerAnswer?.Invoke(true);
-                OnSuccessfulFetch?.Invoke(Configs);
             }
+
+            _fetching = false;
+            OnServerAnswer?.Invoke(FetchSuccessState);
+            if (FetchSuccessState)
+                OnSuccessfulFetch?.Invoke(RemoteConfigPlayerPrefs.CachedRemoteConfigData);
         }
     }
 }
