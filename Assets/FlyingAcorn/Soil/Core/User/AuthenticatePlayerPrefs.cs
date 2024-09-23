@@ -6,21 +6,12 @@ namespace FlyingAcorn.Soil.Core.User
 {
     public static class AuthenticatePlayerPrefs
     {
-        private const string KeysPrefix = "flying_acorn_soil_";
         internal static UserInfo UserInfoInstance;
 
-        public static string AppID
-        {
-            get => PlayerPrefs.GetString(KeysPrefix + "app_id", Constants.DemoAppID);
-            set => PlayerPrefs.SetString(KeysPrefix + "app_id", value);
-        }
-
-        public static string SDKToken
-        {
-            get => PlayerPrefs.GetString(KeysPrefix + "sdk_token", Constants.DemoAppSDKToken);
-
-            set => PlayerPrefs.SetString(GetKeysPrefix() + "sdk_token", value);
-        }
+        private static readonly string TokenDataKey = $"{GetKeysPrefix()}token_data";
+        private static readonly string UserInfoKey = $"{GetKeysPrefix()}player_info";
+        private static readonly string AppIDKey = $"{GetKeysPrefix()}app_id";
+        private static readonly string SDKTokenKey = $"{GetKeysPrefix()}sdk_token";
 
         internal static UserInfo UserInfo
         {
@@ -28,27 +19,38 @@ namespace FlyingAcorn.Soil.Core.User
             {
                 if (UserInfoInstance != null) return UserInfoInstance;
                 UserInfoInstance =
-                    JsonConvert.DeserializeObject<UserInfo>(PlayerPrefs.GetString(GetKeysPrefix() + "player_info"));
+                    JsonConvert.DeserializeObject<UserInfo>(PlayerPrefs.GetString(UserInfoKey));
                 return UserInfoInstance;
             }
             set
             {
-                PlayerPrefs.SetString(GetKeysPrefix() + "player_info", JsonConvert.SerializeObject(value));
+                PlayerPrefs.SetString(UserInfoKey, JsonConvert.SerializeObject(value));
                 UserInfoInstance = value;
             }
         }
 
         public static TokenData TokenData
         {
-            get => JsonConvert.DeserializeObject<TokenData>(PlayerPrefs.GetString(GetKeysPrefix() + "token_data"));
-            set => PlayerPrefs.SetString(GetKeysPrefix() + "token_data", JsonConvert.SerializeObject(value));
+            get => JsonConvert.DeserializeObject<TokenData>(PlayerPrefs.GetString(TokenDataKey));
+            set => PlayerPrefs.SetString(TokenDataKey, JsonConvert.SerializeObject(value));
         }
+        
+        public static string AppID
+        {
+            get => PlayerPrefs.GetString(AppIDKey, Constants.DemoAppID);
+            set => PlayerPrefs.SetString(AppIDKey, value);
+        }
+
+        public static string SDKToken
+        {
+            get => PlayerPrefs.GetString(SDKTokenKey, Constants.DemoAppSDKToken);
+            set => PlayerPrefs.SetString(SDKTokenKey, value);
+        }
+
 
         internal static string GetKeysPrefix()
         {
-            if (!string.IsNullOrEmpty(AppID)) return $"{KeysPrefix}{AppID}_";
-            Debug.LogWarning("AppID is not set. Please set AppID before using AuthenticatePlayerPrefs.");
-            return string.Empty;
+            return $"flying_acorn_soil_{AppID}_";
         }
     }
 }

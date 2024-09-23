@@ -9,7 +9,6 @@ using FlyingAcorn.Soil.Core.User;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Unity.VisualScripting;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.RemoteConfig
@@ -34,8 +33,9 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static Dictionary<string, object> GetPlayerProperties()
         {
             var properties = _sessionExtraProperties;
-            if (SoilServices.UserInfo != null && SoilServices.UserInfo.properties != null)
-                properties.AddRange(SoilServices.UserInfo.properties.ToDictionary());
+            if (SoilServices.UserInfo == null || SoilServices.UserInfo.properties == null) return properties;
+            foreach (var property in SoilServices.UserInfo.properties.ToDictionary())
+                properties[property.Key] = property.Value;
             return properties;
         }
 
