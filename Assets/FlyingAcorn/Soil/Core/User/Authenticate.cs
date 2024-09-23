@@ -25,12 +25,9 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
         [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
-        public static async Task AuthenticateUser(string appID, string sdkToken, bool forceRegister = false,
+        public static async Task AuthenticateUser(bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
-            AuthenticatePlayerPrefs.AppID = appID;
-            AuthenticatePlayerPrefs.SDKToken = sdkToken;
-
             if (forceRegister || AuthenticatePlayerPrefs.TokenData == null ||
                 string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Access) ||
                 string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Refresh))

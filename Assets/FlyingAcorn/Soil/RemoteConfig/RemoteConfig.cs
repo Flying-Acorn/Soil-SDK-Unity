@@ -14,11 +14,11 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.RemoteConfig
 {
-    public class RemoteConfig : MonoBehaviour
+    public static class RemoteConfig
     {
         [UsedImplicitly] public static Action<JObject> OnRemoteConfigSuccessfulFetch;
         [UsedImplicitly] public static Action<bool> OnRemoteConfigServerAnswer;
-        [UsedImplicitly] public static JObject LatestRemoteConfigData { get; private set; }
+        [UsedImplicitly] public static JObject LatestRemoteConfigData => RemoteConfigPlayerPrefs.CachedRemoteConfigData;
         private static Action _onInitialize;
 
 
@@ -63,7 +63,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
             {
                 try
                 {
-                    LatestRemoteConfigData = JObject.Parse(responseString);
+                    RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
                 }
                 catch (Exception)
                 {

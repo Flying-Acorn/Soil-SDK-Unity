@@ -15,6 +15,12 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
 
         [SerializeField] private Button fetchButton;
 
+        private static bool DevMode
+        {
+            get => PlayerPrefs.GetInt($"{RemoteConfigPlayerPrefs.PrefsPrefix}_demo_dev_mode", 0) == 1;
+            set => PlayerPrefs.SetInt($"{RemoteConfigPlayerPrefs.PrefsPrefix}_demo_dev_mode", value ? 1 : 0);
+        }
+
         private void Start()
         {
             SetDevButton();
@@ -35,7 +41,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
             RemoteConfig.OnRemoteConfigServerAnswer -= HandleReceivedConfigs;
             RemoteConfig.OnRemoteConfigServerAnswer += HandleReceivedConfigs;
             RemoteConfig.FetchConfig(new Dictionary<string, object>
-                { { "devmode", RemoteConfigPlayerPrefs.DevMode ? "1" : "0" } });
+                { { "devmode", DevMode ? "1" : "0" } });
         }
 
         private void HandleReceivedConfigs(bool b)
@@ -55,13 +61,13 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
 
         private void SetDevMode()
         {
-            RemoteConfigPlayerPrefs.DevMode = !RemoteConfigPlayerPrefs.DevMode;
+            DevMode = !DevMode;
             SetDevButton();
         }
 
         private void SetDevButton()
         {
-            setDevText.text = "Devmode=" + (RemoteConfigPlayerPrefs.DevMode ? 1 : 0);
+            setDevText.text = "Devmode=" + (DevMode ? 1 : 0);
         }
 
         #endregion

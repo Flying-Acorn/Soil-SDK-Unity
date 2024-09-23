@@ -1,13 +1,32 @@
+using FlyingAcorn.Soil.Core.User;
+using JetBrains.Annotations;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.RemoteConfig
 {
     internal static class RemoteConfigPlayerPrefs
     {
-        public static bool DevMode
+        internal static string PrefsPrefix => $"{AuthenticatePlayerPrefs.GetKeysPrefix()}remoteconfig_";
+        private static string CacheKey => PrefsPrefix + "latest_remote_config_data";
+
+        [UsedImplicitly] public static JObject ReceivedRemoteConfigData;
+        
+        internal static JObject CachedRemoteConfigData
         {
-            get => PlayerPrefs.GetInt("dev_mode", 0) == 1;
-            set => PlayerPrefs.SetInt("dev_mode", value ? 1 : 0);
+            get
+            {
+                if (ReceivedRemoteConfigData != null) return ReceivedRemoteConfigData;
+                var jsonString = PlayerPrefs.GetString(CacheKey, "{}");
+                ReceivedRemoteConfigData = JObject.Parse(jsonString);
+                return ReceivedRemoteConfigData;
+            }
+            set
+            {
+                ReceivedRemoteConfigData = value;
+                PlayerPrefs.SetString(CacheKey, ReceivedRemoteConfigData.ToString(Formatting.None));
+            }
         }
     }
 }

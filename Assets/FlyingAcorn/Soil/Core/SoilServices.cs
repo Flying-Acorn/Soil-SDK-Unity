@@ -1,5 +1,7 @@
 using System.Threading.Tasks;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
+using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core
 {
@@ -9,7 +11,11 @@ namespace FlyingAcorn.Soil.Core
 
         public static async Task Initialize()
         {
-            await Authenticate.AuthenticateUser(AuthenticatePlayerPrefs.AppID, AuthenticatePlayerPrefs.SDKToken);
+            if (AuthenticatePlayerPrefs.AppID == Constants.DemoAppID ||
+                AuthenticatePlayerPrefs.SDKToken == Constants.DemoAppSDKToken)
+                Debug.LogError(
+                    "AppID or SDKToken are not set. You must call SetRegistrationInfo at least once. Using demo values.");
+            await Authenticate.AuthenticateUser();
         }
 
         public static void SetRegistrationInfo(string appID, string sdkToken)
