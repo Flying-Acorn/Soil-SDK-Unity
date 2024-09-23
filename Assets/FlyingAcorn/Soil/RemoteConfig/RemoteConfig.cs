@@ -16,21 +16,19 @@ namespace FlyingAcorn.Soil.RemoteConfig
 {
     public static class RemoteConfig
     {
-        [UsedImplicitly] public static Action<JObject> OnRemoteConfigSuccessfulFetch;
-        [UsedImplicitly] public static Action<bool> OnRemoteConfigServerAnswer;
-        [UsedImplicitly] public static JObject LatestRemoteConfigData => RemoteConfigPlayerPrefs.CachedRemoteConfigData;
-        private static Action _onInitialize;
-
+        [UsedImplicitly] public static Action<JObject> OnSuccessfulFetch;
+        [UsedImplicitly] public static Action<bool> OnServerAnswer;
+        [UsedImplicitly] public static JObject Configs => RemoteConfigPlayerPrefs.CachedRemoteConfigData;
 
         private static Dictionary<string, object> _sessionExtraProperties = new();
 
         private const string FetchUrl = Constants.ApiUrl + "/remoteconfig/";
 
 
-        public static void FetchConfig(Dictionary<string, object> extraProperties = null)
+        public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
         {
             _sessionExtraProperties = extraProperties ?? new Dictionary<string, object>();
-            _ = FetchRemoteConfig();
+            await FetchRemoteConfig();
         }
 
         private static Dictionary<string, object> GetPlayerProperties()
@@ -45,7 +43,8 @@ namespace FlyingAcorn.Soil.RemoteConfig
         {
             await SoilServices.Initialize();
 
-            var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", GetPlayerProperties() } });
+            var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
+                { { "properties", GetPlayerProperties() } });
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
@@ -53,11 +52,11 @@ namespace FlyingAcorn.Soil.RemoteConfig
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
             var response = await client.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 Debug.LogError(responseString);
-                OnRemoteConfigServerAnswer?.Invoke(false);
+                OnServerAnswer?.Invoke(false);
             }
             else
             {
@@ -68,12 +67,12 @@ namespace FlyingAcorn.Soil.RemoteConfig
                 catch (Exception)
                 {
                     Debug.LogError($"FlyingAcorn ====> Failed to parse fetched data. Data: {responseString}");
-                    OnRemoteConfigServerAnswer?.Invoke(false);
+                    OnServerAnswer?.Invoke(false);
                     return;
                 }
 
-                OnRemoteConfigServerAnswer?.Invoke(true);
-                OnRemoteConfigSuccessfulFetch?.Invoke(LatestRemoteConfigData);
+                OnServerAnswer?.Invoke(true);
+                OnSuccessfulFetch?.Invoke(Configs);
             }
         }
     }

@@ -38,8 +38,8 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
 
         private void FetchTest()
         {
-            RemoteConfig.OnRemoteConfigServerAnswer -= HandleReceivedConfigs;
-            RemoteConfig.OnRemoteConfigServerAnswer += HandleReceivedConfigs;
+            RemoteConfig.OnServerAnswer -= HandleReceivedConfigs;
+            RemoteConfig.OnServerAnswer += HandleReceivedConfigs;
             RemoteConfig.FetchConfig(new Dictionary<string, object>
                 { { "devmode", DevMode ? "1" : "0" } });
         }
@@ -52,7 +52,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
                 return;
             }
 
-            fetchedDataText.text = RemoteConfig.LatestRemoteConfigData.ToString(Formatting.Indented);
+            fetchedDataText.text = RemoteConfig.Configs.ToString(Formatting.Indented);
         }
 
         #endregion

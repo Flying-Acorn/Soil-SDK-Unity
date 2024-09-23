@@ -14,12 +14,11 @@ namespace FlyingAcorn.Soil.Core.User
 {
     public static class Authenticate
     {
-        private static readonly string UserBaseUrl = $"{Constants.ApiUrl}/users";
+        internal static readonly string UserBaseUrl = $"{Constants.ApiUrl}/users";
 
         private static readonly string RegisterPlayerUrl = $"{UserBaseUrl}/register/";
         private static readonly string RefreshTokenUrl = $"{UserBaseUrl}/refreshtoken/";
-        private static readonly string GetPlayerInfoUrl = $"{UserBaseUrl}/";
-        
+
         [UsedImplicitly] public static Action<TokenData> OnTokenRefreshed;
         [UsedImplicitly] public static Action<TokenData> OnUserRegistered;
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
@@ -31,14 +30,41 @@ namespace FlyingAcorn.Soil.Core.User
             if (forceRegister || AuthenticatePlayerPrefs.TokenData == null ||
                 string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Access) ||
                 string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Refresh))
-                await RegisterPlayer();
+            {
+                try
+                {
+                    await RegisterPlayer();
+                }
+                catch (Exception e)
+                {
+                    throw new Exception($"Failed to register player: {e.Message}, abandoning the process.");
+                }
+            }
             else
-                await RefreshTokenIfNeeded(forceRefresh);
+            {
+                try
+                {
+                    await RefreshTokenIfNeeded(forceRefresh);
+                }
+                catch (Exception e)
+                {
+                    throw new Exception($"Failed to refresh tokens: {e.Message}, abandoning the process.");
+                }
+            }
 
             var currentPlayerInfo = AuthenticatePlayerPrefs.UserInfo;
             if (forceFetchPlayerInfo || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid))
-                await FetchPlayerInfo();
-            
+            {
+                try
+                {
+                    await UserApiHandler.FetchPlayerInfo();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError(e.Message);
+                }
+            }
+
             OnUserReady?.Invoke(AuthenticatePlayerPrefs.UserInfo);
         }
 
@@ -66,55 +92,16 @@ namespace FlyingAcorn.Soil.Core.User
 
 
             if (!response.IsSuccessStatusCode)
-                Debug.LogError(responseString);
-            else
-                try
-                {
-                    AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
-                    Debug.Log($"Player registered successfully. Response: {responseString}");
-                    OnUserRegistered?.Invoke(AuthenticatePlayerPrefs.TokenData);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error: {e.Message}");
-                }
-        }
-
-        private static async Task FetchPlayerInfo()
-        {
-            Debug.Log("Fetching player info...");
-
-            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Access))
             {
-                Debug.LogError("Access token is not valid. Trying to refresh tokens...");
-                await RefreshTokenIfNeeded(true);
+                throw new Exception($"Network error while registering player. Response: {responseString}");
             }
 
-
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = GetAuthorizationHeader();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
-
-            var response = await client.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
-
-            if (!response.IsSuccessStatusCode)
-                Debug.LogError(responseString);
-            else
-                try
-                {
-                    AuthenticatePlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
-                    Debug.Log($"Player info fetched successfully. Response: {responseString}");
-                    OnPlayerInfoFetched?.Invoke(AuthenticatePlayerPrefs.UserInfo);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error: {e.Message}");
-                }
+            AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            Debug.Log($"Player registered successfully. Response: {responseString}");
+            OnUserRegistered?.Invoke(AuthenticatePlayerPrefs.TokenData);
         }
 
-        private static async Task RefreshTokenIfNeeded(bool force)
+        internal static async Task RefreshTokenIfNeeded(bool force)
         {
             Debug.Log("Refreshing tokens...");
 
@@ -145,18 +132,13 @@ namespace FlyingAcorn.Soil.Core.User
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (!response.IsSuccessStatusCode)
-                Debug.LogError(responseString);
-            else
-                try
-                {
-                    AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
-                    Debug.Log($"Tokens refreshed successfully. Response: {responseString}");
-                    OnTokenRefreshed?.Invoke(AuthenticatePlayerPrefs.TokenData);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error: {e.Message}");
-                }
+            {
+                throw new Exception($"Network error while refreshing tokens. Response: {responseString}");
+            }
+
+            AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            Debug.Log($"Tokens refreshed successfully. Response: {responseString}");
+            OnTokenRefreshed?.Invoke(AuthenticatePlayerPrefs.TokenData);
         }
 
         public static AuthenticationHeaderValue GetAuthorizationHeader()
