@@ -15,7 +15,7 @@ namespace FlyingAcorn.Analytics
         public static Constants.ErrorSeverity.FlyingAcornErrorSeverity SavedLogLevel
         {
             get => (Constants.ErrorSeverity.FlyingAcornErrorSeverity)PlayerPrefs.GetInt(
-                $"{Prefix}SavedLogLevel", (int)Constants.ErrorSeverity.FlyingAcornErrorSeverity.DebugSeverity);
+                $"{Prefix}SavedLogLevel", (int)Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity);
             set => PlayerPrefs.SetInt($"{Prefix}SavedLogLevel", (int)value);
         }
     }

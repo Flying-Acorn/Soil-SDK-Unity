@@ -5,7 +5,7 @@ using UnityEngine;
 namespace FlyingAcorn.Analytics
 {
     [Serializable]
-    public abstract class AnalyticsManager : MonoBehaviour
+    public class AnalyticsManager : MonoBehaviour
     {
         [SerializeField] private bool initOnAwake;
         protected static AnalyticsManager Instance;
@@ -64,8 +64,15 @@ namespace FlyingAcorn.Analytics
             AnalyticServiceProvider?.DesignEvent("FA_session", "end");
         }
 
-        public abstract void SetConsents();
-        public abstract void SetUserIdentifier(string playerId);
+        public virtual void SetConsents()
+        {
+            Debug.LogWarning("SetConsents not implemented");
+        }
+
+        public virtual void SetUserIdentifier(string playerId)
+        {
+            Debug.LogWarning("SetUserIdentifier not implemented");
+        }
         
         public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
             StoreType storeType, string receipt, Dictionary<string, object> customData)
