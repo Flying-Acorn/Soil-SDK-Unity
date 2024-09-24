@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using FlyingAcorn.Soil.Core;
-using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -19,21 +19,21 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         [UsedImplicitly]
         public static JObject UserDefinedConfigs =>
-            RemoteConfigPlayerPrefs.CachedRemoteConfigData?["remote_configs"] as JObject;
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserDefinedParentKey] as JObject;
 
         [UsedImplicitly]
         public static JObject ExchangeRates =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?["exchange_rates"] as JObject;
 
-        [UsedImplicitly] public static bool FetchSuccessState;
+        private static bool _fetchSuccessState;
 
         private static Dictionary<string, object> _sessionExtraProperties = new();
         private static bool _fetching;
 
-        private const string FetchUrl = Constants.ApiUrl + "/remoteconfig/";
+        private const string FetchUrl = Core.Data.Constants.ApiUrl + "/remoteconfig/";
 
 
-        public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
+        public static void FetchConfig(Dictionary<string, object> extraProperties = null)
         {
             _sessionExtraProperties = extraProperties ?? new Dictionary<string, object>();
 
@@ -60,7 +60,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
             {
                 Debug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
                 _fetching = false;
-                FetchSuccessState = false;
+                _fetchSuccessState = false;
                 OnServerAnswer?.Invoke(false);
                 return;
             }
@@ -72,32 +72,42 @@ namespace FlyingAcorn.Soil.RemoteConfig
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = await client.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            var response = new HttpResponseMessage();
+            var responseString = string.Empty;
+            try
+            {
+                response = await client.SendAsync(request);
+                responseString = response.Content.ReadAsStringAsync().Result;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"FlyingAcorn ====> Failed to fetch remote config. Error: {e.Message}");
+            }
 
-            if (!response.IsSuccessStatusCode)
+            if (response is not { IsSuccessStatusCode: true })
             {
                 Debug.LogError(responseString);
-                FetchSuccessState = false;
+                _fetchSuccessState = false;
             }
             else
             {
                 try
                 {
                     RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
-                    FetchSuccessState = true;
+                    ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
+                    _fetchSuccessState = true;
                     Debug.Log("FlyingAcorn ====> Remote config fetched successfully."); 
                 }
                 catch (Exception)
                 {
                     Debug.LogError($"FlyingAcorn ====> Failed to parse fetched data. Data: {responseString}");
-                    FetchSuccessState = false;
+                    _fetchSuccessState = false;
                 }
             }
 
             _fetching = false;
-            OnServerAnswer?.Invoke(FetchSuccessState);
-            if (FetchSuccessState)
+            OnServerAnswer?.Invoke(_fetchSuccessState);
+            if (_fetchSuccessState)
                 OnSuccessfulFetch?.Invoke(RemoteConfigPlayerPrefs.CachedRemoteConfigData);
         }
     }

@@ -16,7 +16,7 @@ namespace FlyingAcorn.Soil.Core.User
         {
             Debug.Log("Fetching player info...");
 
-            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Access))
+            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
             {
                 Debug.LogWarning("Access token is not valid. Trying to refresh tokens...");
                 await Authenticate.RefreshTokenIfNeeded(true);
@@ -36,7 +36,7 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new Exception($"Network error while fetching player info. Response: {responseString}");
             }
 
-            AuthenticatePlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            UserPlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
             Debug.Log($"Player info fetched successfully. Response: {responseString}");
         }
     }

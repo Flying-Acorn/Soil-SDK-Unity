@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User
 {
-    public static class AuthenticatePlayerPrefs
+    public static class UserPlayerPrefs
     {
         internal static UserInfo UserInfoInstance;
 
@@ -50,7 +50,7 @@ namespace FlyingAcorn.Soil.Core.User
 
         internal static string GetKeysPrefix()
         {
-            return $"flying_acorn_soil_{AppID}_";
+            return $"FA_soil_{AppID}_";
         }
     }
 }

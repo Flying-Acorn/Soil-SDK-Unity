@@ -8,15 +8,15 @@ namespace FlyingAcorn.Soil.Core
 {
     public static class SoilServices
     {
-        public static UserInfo UserInfo => AuthenticatePlayerPrefs.UserInfoInstance;
+        public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         public static Action OnServicesReady;
 
         public static bool Ready;
 
         public static async Task Initialize()
         {
-            if (AuthenticatePlayerPrefs.AppID == Constants.DemoAppID ||
-                AuthenticatePlayerPrefs.SDKToken == Constants.DemoAppSDKToken)
+            if (UserPlayerPrefs.AppID == Constants.DemoAppID ||
+                UserPlayerPrefs.SDKToken == Constants.DemoAppSDKToken)
                 Debug.LogError(
                     "AppID or SDKToken are not set. You must call SetRegistrationInfo at least once. Using demo values.");
             await Authenticate.AuthenticateUser();
@@ -26,8 +26,8 @@ namespace FlyingAcorn.Soil.Core
 
         public static void SetRegistrationInfo(string appID, string sdkToken)
         {
-            AuthenticatePlayerPrefs.AppID = appID;
-            AuthenticatePlayerPrefs.SDKToken = sdkToken;
+            UserPlayerPrefs.AppID = appID;
+            UserPlayerPrefs.SDKToken = sdkToken;
         }
     }
 }

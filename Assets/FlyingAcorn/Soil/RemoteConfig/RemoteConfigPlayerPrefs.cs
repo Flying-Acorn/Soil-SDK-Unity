@@ -8,7 +8,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
 {
     internal static class RemoteConfigPlayerPrefs
     {
-        internal static string PrefsPrefix => $"{AuthenticatePlayerPrefs.GetKeysPrefix()}remoteconfig_";
+        internal static string PrefsPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}remoteconfig_";
         private static string CacheKey => PrefsPrefix + "latest_remote_config_data";
 
         [UsedImplicitly] public static JObject ReceivedRemoteConfigData;

@@ -27,9 +27,9 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task AuthenticateUser(bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
-            if (forceRegister || AuthenticatePlayerPrefs.TokenData == null ||
-                string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Access) ||
-                string.IsNullOrEmpty(AuthenticatePlayerPrefs.TokenData.Refresh))
+            if (forceRegister || UserPlayerPrefs.TokenData == null ||
+                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
+                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh))
             {
                 try
                 {
@@ -52,7 +52,7 @@ namespace FlyingAcorn.Soil.Core.User
                 }
             }
 
-            var currentPlayerInfo = AuthenticatePlayerPrefs.UserInfo;
+            var currentPlayerInfo = UserPlayerPrefs.UserInfo;
             if (forceFetchPlayerInfo || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid))
             {
                 try
@@ -65,14 +65,14 @@ namespace FlyingAcorn.Soil.Core.User
                 }
             }
 
-            OnUserReady?.Invoke(AuthenticatePlayerPrefs.UserInfo);
+            OnUserReady?.Invoke(UserPlayerPrefs.UserInfo);
         }
 
         private static async Task RegisterPlayer()
         {
             Debug.Log("Registering player...");
-            var appID = AuthenticatePlayerPrefs.AppID;
-            var sdkToken = AuthenticatePlayerPrefs.SDKToken;
+            var appID = UserPlayerPrefs.AppID;
+            var sdkToken = UserPlayerPrefs.SDKToken;
 
             var payload = new Dictionary<string, string>
             {
@@ -96,22 +96,19 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new Exception($"Network error while registering player. Response: {responseString}");
             }
 
-            AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
             Debug.Log($"Player registered successfully. Response: {responseString}");
-            OnUserRegistered?.Invoke(AuthenticatePlayerPrefs.TokenData);
+            OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
         }
 
         internal static async Task RefreshTokenIfNeeded(bool force)
         {
-            Debug.Log("Refreshing tokens...");
-
-            if (!force && JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Access))
+            if (!force && JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
             {
-                Debug.Log("Access token is still valid. No need to refresh.");
                 return;
             }
 
-            if (!JwtUtils.IsTokenValid(AuthenticatePlayerPrefs.TokenData.Refresh))
+            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Refresh))
             {
                 Debug.LogError("Refresh token is almost expired. Please re-register.");
                 return;
@@ -119,7 +116,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, string>
             {
-                { "refresh", AuthenticatePlayerPrefs.TokenData.Refresh }
+                { "refresh", UserPlayerPrefs.TokenData.Refresh }
             });
 
 
@@ -136,14 +133,14 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new Exception($"Network error while refreshing tokens. Response: {responseString}");
             }
 
-            AuthenticatePlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
             Debug.Log($"Tokens refreshed successfully. Response: {responseString}");
-            OnTokenRefreshed?.Invoke(AuthenticatePlayerPrefs.TokenData);
+            OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);
         }
 
         public static AuthenticationHeaderValue GetAuthorizationHeader()
         {
-            return new AuthenticationHeaderValue("Bearer", AuthenticatePlayerPrefs.TokenData.Access);
+            return new AuthenticationHeaderValue("Bearer", UserPlayerPrefs.TokenData.Access);
         }
     }
 }
