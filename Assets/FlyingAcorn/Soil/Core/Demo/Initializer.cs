@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Demo
@@ -30,7 +31,14 @@ namespace FlyingAcorn.Soil.Core.Demo
         private async void Initialize()
         {
             SoilServices.SetRegistrationInfo(appID, sdkToken);
-            await SoilServices.Initialize();
+            try
+            {
+                await SoilServices.Initialize();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("Failed to initialize SoilServices: " + e.Message + " " + e.StackTrace);
+            }
         }
     }
 }

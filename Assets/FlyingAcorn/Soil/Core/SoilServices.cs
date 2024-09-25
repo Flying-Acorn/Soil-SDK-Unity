@@ -1,14 +1,15 @@
 using System;
 using System.Threading.Tasks;
-using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.User;
-using UnityEngine;
+using JetBrains.Annotations;
+using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core
 {
     public static class SoilServices
     {
-        public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
+        [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         public static Action OnServicesReady;
 
         public static bool Ready;
@@ -17,9 +18,17 @@ namespace FlyingAcorn.Soil.Core
         {
             if (UserPlayerPrefs.AppID == Constants.DemoAppID ||
                 UserPlayerPrefs.SDKToken == Constants.DemoAppSDKToken)
-                Debug.LogError(
+                MyDebug.LogError(
                     "AppID or SDKToken are not set. You must call SetRegistrationInfo at least once. Using demo values.");
-            await Authenticate.AuthenticateUser();
+            try
+            {
+                await Authenticate.AuthenticateUser();
+            }
+            catch (Exception e)
+            {
+                MyDebug.LogWarning("Failed to authenticate user: " + e.Message + " " + e.StackTrace);
+                throw;
+            }
             Ready = true;
             OnServicesReady?.Invoke();
         }

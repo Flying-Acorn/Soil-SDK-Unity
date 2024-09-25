@@ -17,9 +17,14 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         private static bool _canAcceptChallengers;
         private static bool _abTestingInitialized;
 
-
         internal static void InitializeAbTesting(JObject remoteConfigData)
         {
+            if (!AnalyticsManager.InitCalled)
+            {
+                Debug.LogWarning("AnalyticsManager.InitCalled is false. Calling Initialize manually.");
+                AnalyticsManager.Initialize();
+            }
+
             try
             {
                 // ReSharper disable once PossibleNullReferenceException
@@ -31,10 +36,12 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
                 Debug.LogWarning("FA_ABTesting ====> AbTestingConfig is not valid");
                 return;
             }
+
             _aBTestingConfig.Challengers ??= new List<Challenger>();
 
             HandleBasicAbTestingTasks();
-            if (_aBTestingConfig.Challengers.Any(challenger => challenger.ActivationEvent == Constants.SessionStartEventName))
+            if (_aBTestingConfig.Challengers.Any(challenger =>
+                    challenger.ActivationEvent == Constants.SessionStartEventName))
                 ActivateAbTestingExperiment(Constants.SessionStartEventName);
             AnalyticServiceProvider.OnEventSent -= ActivateAbTestingExperiment;
             AnalyticServiceProvider.OnEventSent += ActivateAbTestingExperiment;
@@ -56,7 +63,8 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
                 if (index >= 0)
                 {
                     var currentData = RemoteConfig.UserDefinedConfigs;
-                    currentData[_aBTestingConfig.Challengers[index].KeyToChallenge] = _aBTestingConfig.Challengers[index].StringConfig;
+                    currentData[_aBTestingConfig.Challengers[index].KeyToChallenge] =
+                        _aBTestingConfig.Challengers[index].StringConfig;
                     ManipulateRemoteConfig(currentData);
                     HandleCohortChange(_aBTestingConfig.Challengers[index].ChallengerId);
                 }
@@ -77,7 +85,8 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 
         private static void ManipulateRemoteConfig(JObject currentData)
         {
-            RemoteConfigPlayerPrefs.CachedRemoteConfigData[Soil.RemoteConfig.Constants.UserDefinedParentKey] = currentData;
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData[Soil.RemoteConfig.Constants.UserDefinedParentKey] =
+                currentData;
         }
 
         private static void ActivateAbTestingExperiment(string activationEvent)
@@ -89,7 +98,8 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
                 return;
             }
 
-            var suitableChallengers = _aBTestingConfig.Challengers.FindAll(challenger => activationEvent == challenger.ActivationEvent);
+            var suitableChallengers =
+                _aBTestingConfig.Challengers.FindAll(challenger => activationEvent == challenger.ActivationEvent);
             var pickedChallenger = PickAChallenger(suitableChallengers);
             if (pickedChallenger != null)
             {

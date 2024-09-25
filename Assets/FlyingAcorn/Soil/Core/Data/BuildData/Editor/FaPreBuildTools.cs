@@ -6,7 +6,7 @@ using Debug = UnityEngine.Debug;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 {
-    public class FaBuildTools : UnityEditor.Editor, IPreprocessBuildWithReport
+    public class FaPreBuildTools : UnityEditor.Editor, IPreprocessBuildWithReport
     {
         public int callbackOrder => 0;
 
@@ -18,7 +18,7 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             #region Set Build Properties LastBuildTime - Reference: https: //answers.unity.com/questions/1425758/how-can-i-find-all-instances-of-a-scriptable-objec.html
 
             //FindAssets uses tags check documentation for more info
-            var guids = AssetDatabase.FindAssets($"t:{typeof(Core.Data.BuildData.BuildData)}");
+            var guids = AssetDatabase.FindAssets($"t:{typeof(BuildData)}");
             if (guids.Length > 1)
                 Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
                     guids.Length);
@@ -26,7 +26,7 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             if (guids.Length > 0)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                var buildSettings = AssetDatabase.LoadAssetAtPath<Core.Data.BuildData.BuildData>(path);
+                var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
                 buildSettings.LastBuildTime = DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss"); // case sensitive
                 buildSettings.EditorRefreshScriptingBackend(report.summary.platform);
 #if UNITY_IOS

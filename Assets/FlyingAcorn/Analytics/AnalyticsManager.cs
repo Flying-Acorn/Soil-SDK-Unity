@@ -12,12 +12,12 @@ namespace FlyingAcorn.Analytics
 
         [SerializeReference] private List<IAnalytics> services = new();
         protected AnalyticServiceProvider AnalyticServiceProvider;
-        protected bool InitCalled;
+        protected internal static bool InitCalled;
         private bool _started;
 
         protected void Awake()
         {
-            if (Instance != null)
+            if (Instance)
             {
                 Destroy(gameObject);
                 return;
@@ -77,7 +77,7 @@ namespace FlyingAcorn.Analytics
         public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
             StoreType storeType, string receipt, Dictionary<string, object> customData)
         {
-            if (Instance == null || Instance.AnalyticServiceProvider == null)
+            if (!Instance || Instance.AnalyticServiceProvider == null)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
@@ -88,7 +88,7 @@ namespace FlyingAcorn.Analytics
         // ATTENTION: DO NOT USE MYDEBUG HERE
         public static void ErrorEvent(Constants.ErrorSeverity.FlyingAcornErrorSeverity severity, string message)
         {
-            if (Instance == null || Instance.AnalyticServiceProvider == null)
+            if (!Instance || Instance.AnalyticServiceProvider == null)
             {
                 Debug.Log("Analytics not initialized");
                 return;
@@ -98,12 +98,22 @@ namespace FlyingAcorn.Analytics
         
         public static void UserSegmentation(string name, string value)
         {
-            if (Instance == null || Instance.AnalyticServiceProvider == null)
+            if (!Instance || Instance.AnalyticServiceProvider == null)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
             Instance.AnalyticServiceProvider.UserSegmentation(name, value);
+        }
+
+        public static void Initialize()
+        {
+            if (!Instance)
+            {
+                MyDebug.LogWarning("Instance is null");
+                return;
+            }
+            Instance.Init();
         }
 
         // ReSharper disable once MemberCanBePrivate.Global
