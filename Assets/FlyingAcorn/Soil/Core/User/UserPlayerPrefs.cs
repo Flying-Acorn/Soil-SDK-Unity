@@ -6,7 +6,9 @@ namespace FlyingAcorn.Soil.Core.User
 {
     public static class UserPlayerPrefs
     {
-        internal static UserInfo UserInfoInstance;
+        internal static UserInfo UserInfoInstance => _userInfoInstance ?? UserInfo;
+
+        private static UserInfo _userInfoInstance;
 
         private static readonly string TokenDataKey = $"{GetKeysPrefix()}token_data";
         private static readonly string UserInfoKey = $"{GetKeysPrefix()}player_info";
@@ -17,15 +19,15 @@ namespace FlyingAcorn.Soil.Core.User
         {
             get
             {
-                if (UserInfoInstance != null) return UserInfoInstance;
-                UserInfoInstance =
-                    JsonConvert.DeserializeObject<UserInfo>(PlayerPrefs.GetString(UserInfoKey));
-                return UserInfoInstance;
+                if (_userInfoInstance != null) return _userInfoInstance;
+                _userInfoInstance = JsonConvert.DeserializeObject<UserInfo>(PlayerPrefs.GetString(UserInfoKey, "")) ??
+                                   new UserInfo();
+                return _userInfoInstance;
             }
             set
             {
                 PlayerPrefs.SetString(UserInfoKey, JsonConvert.SerializeObject(value));
-                UserInfoInstance = value;
+                _userInfoInstance = value;
             }
         }
 

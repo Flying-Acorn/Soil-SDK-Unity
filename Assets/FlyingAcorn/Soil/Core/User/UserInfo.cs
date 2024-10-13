@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using UnityEngine;
 // ReSharper disable UnassignedField.Global
@@ -43,7 +44,7 @@ namespace FlyingAcorn.Soil.Core.User
         public string created_at;
         public string current_build;
         public string name;
-        public Properties properties;
+        public Properties properties = new();
         public string username;
         public string uuid;
 
@@ -70,6 +71,7 @@ namespace FlyingAcorn.Soil.Core.User
             public string flyingacorn_store_name;
             public string flyingacorn_unity_version;
             public string flyingacorn_version;
+            public string flyingacorn_cohort_id;
 
             public static Dictionary<string, object> GeneratePropertiesDynamicPlayerProperties()
             {
@@ -92,7 +94,8 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}graphics_device_vendor", SystemInfo.graphicsDeviceVendor },
                     { $"{KeysPrefix}graphics_device_id", SystemInfo.graphicsDeviceID },
                     { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
-                    { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion }
+                    { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion },
+                    { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() }
                 };
             }
 

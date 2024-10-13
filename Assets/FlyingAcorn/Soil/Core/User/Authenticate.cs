@@ -52,7 +52,7 @@ namespace FlyingAcorn.Soil.Core.User
                 }
             }
 
-            var currentPlayerInfo = UserPlayerPrefs.UserInfo;
+            var currentPlayerInfo = UserPlayerPrefs.UserInfoInstance;
             if (forceFetchPlayerInfo || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid))
             {
                 try
@@ -65,7 +65,7 @@ namespace FlyingAcorn.Soil.Core.User
                 }
             }
 
-            OnUserReady?.Invoke(UserPlayerPrefs.UserInfo);
+            OnUserReady?.Invoke(UserPlayerPrefs.UserInfoInstance);
         }
 
         private static async Task RegisterPlayer()
