@@ -17,7 +17,7 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
 
-        public static async void ReportScore(string score, string leaderboardId, Action successCallback = null,
+        public static async void ReportScore(string score, string leaderboardId, Action<UserScore> successCallback = null,
             Action<string> errorCallback = null)
         {
             try
@@ -65,7 +65,8 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             else
             {
-                successCallback?.Invoke();
+                var userScore = JsonConvert.DeserializeObject<UserScore>(responseString);
+                successCallback?.Invoke(userScore);
             }
         }
 

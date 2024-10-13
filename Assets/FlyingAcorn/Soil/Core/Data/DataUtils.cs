@@ -37,7 +37,7 @@ namespace FlyingAcorn.Soil.Core.Data
                 storeName = _buildSettings.StoreName;
 
             if (!string.IsNullOrEmpty(storeName)) return storeName;
-            Debug.LogError("Store name is not set in Build_Settings. Please set it.");
+            Debug.LogWarning("Store name is not set in Build_Settings. Please set it.");
             storeName = "Unknown";
             return storeName;
         }

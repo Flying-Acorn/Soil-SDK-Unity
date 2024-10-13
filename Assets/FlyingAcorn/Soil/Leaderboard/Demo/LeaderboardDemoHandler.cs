@@ -51,7 +51,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             Leaderboard.ReportScore(score.ToString(), "demo_dec_manual", GetLeaderboard, Failed);
         }
 
-        private void GetLeaderboard()
+        private void GetLeaderboard(UserScore userScore)
         {
             Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode, GetLeaderboardSuccess, Failed);
         }
