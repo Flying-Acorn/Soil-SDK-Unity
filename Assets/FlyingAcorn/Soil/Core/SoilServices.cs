@@ -10,7 +10,7 @@ namespace FlyingAcorn.Soil.Core
     public static class SoilServices
     {
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
-        public static Action OnServicesReady;
+        [UsedImplicitly] public static Action OnServicesReady;
 
         public static bool Ready;
 

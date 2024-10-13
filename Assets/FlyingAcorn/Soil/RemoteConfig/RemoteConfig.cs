@@ -30,7 +30,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static Dictionary<string, object> _sessionExtraProperties = new();
         private static bool _fetching;
 
-        private const string FetchUrl = Core.Data.Constants.ApiUrl + "/remoteconfig/";
+        private static readonly string FetchUrl = $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
 
 
         public static void FetchConfig(Dictionary<string, object> extraProperties = null)
