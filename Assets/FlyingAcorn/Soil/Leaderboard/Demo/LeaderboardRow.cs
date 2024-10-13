@@ -1,0 +1,18 @@
+using FlyingAcorn.Soil.Leaderboard.Models;
+using UnityEngine;
+
+namespace FlyingAcorn.Soil.Leaderboard.Demo
+{
+    public class LeaderboardRow : MonoBehaviour
+    {
+        [SerializeField] private TMPro.TextMeshProUGUI nameText;
+        [SerializeField] private TMPro.TextMeshProUGUI rankText;
+        [SerializeField] private TMPro.TextMeshProUGUI scoreText;
+        public void SetData(UserScore score)
+        {
+            nameText.text = score.name;
+            rankText.text = score.rank.ToString();
+            scoreText.text = score.score;
+        }
+    }
+}
