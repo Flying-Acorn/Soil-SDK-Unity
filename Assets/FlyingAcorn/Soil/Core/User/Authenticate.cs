@@ -27,9 +27,10 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task AuthenticateUser(bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
-            if (forceRegister || UserPlayerPrefs.TokenData == null ||
-                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
-                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh))
+            var userIsMissing = UserPlayerPrefs.TokenData == null ||
+                                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
+                                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh);
+            if (forceRegister || userIsMissing)
             {
                 try
                 {
@@ -53,7 +54,8 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             var currentPlayerInfo = UserPlayerPrefs.UserInfoInstance;
-            if (forceFetchPlayerInfo || currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid))
+            var playerInfoIsMissing = currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid);
+            if (forceFetchPlayerInfo || playerInfoIsMissing)
             {
                 try
                 {
@@ -138,7 +140,7 @@ namespace FlyingAcorn.Soil.Core.User
             OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);
         }
 
-        public static AuthenticationHeaderValue GetAuthorizationHeader()
+        internal static AuthenticationHeaderValue GetAuthorizationHeader()
         {
             return new AuthenticationHeaderValue("Bearer", UserPlayerPrefs.TokenData.Access);
         }

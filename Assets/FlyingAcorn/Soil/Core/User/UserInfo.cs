@@ -1,4 +1,8 @@
 // ReSharper disable InconsistentNaming
+// ReSharper disable ArrangeThisQualifier
+// ReSharper disable ParameterHidesMember
+// ReSharper disable UnassignedField.Global
+// ReSharper disable UnusedMember.Global
 
 using System;
 using System.Collections.Generic;
@@ -6,9 +10,6 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using UnityEngine;
-// ReSharper disable UnassignedField.Global
-
-// ReSharper disable UnusedMember.Global
 
 namespace FlyingAcorn.Soil.Core.User
 {
@@ -23,6 +24,7 @@ namespace FlyingAcorn.Soil.Core.User
            "current_build": "4.0.3",
            "created_at": "2024-09-17 09:41:28.697506+00:00",
            "country": "FI",
+           "avatar_asset": "avatar_asset",
            "properties": {
                "flyingacorn_platform": "Android",
                "flyingacorn_version": "4.0.3",
@@ -32,21 +34,53 @@ namespace FlyingAcorn.Soil.Core.User
            }
        }
      */
+
     [UsedImplicitly]
     [Serializable]
     public class UserInfo
     {
-        public string app;
-        public string app_id;
-        public string bundle;
+        public string app { get; private set; }
+        public string app_id { get; private set; }
+        public string bundle { get; private set; }
+        public string country { get; private set; }
+        public string avatar_asset { get; private set; }
+        public string created_at { get; private set; }
+        public string current_build { get; private set; }
+        public string name { get; private set; }
+        public Properties properties { get; private set; } = new();
+        public Dictionary<string, object> custom_properties { get; private set; } = new();
+        public string username { get; private set; }
+        public string uuid { get; private set; }
 
-        public string country;
-        public string created_at;
-        public string current_build;
-        public string name;
-        public Properties properties = new();
-        public string username;
-        public string uuid;
+        public UserInfo RecordCustomProperty(string key, object value)
+        {
+            this.custom_properties[key] = value;
+            return this;
+        }
+
+        public UserInfo RecordAvatarAsset(string avatarAsset)
+        {
+            this.avatar_asset = avatarAsset;
+            return this;
+        }
+
+        public UserInfo RecordCountry(string country)
+        {
+            this.country = country;
+            return this;
+        }
+
+        public UserInfo RecordName(string name)
+        {
+            this.name = name;
+            return this;
+        }
+
+        public UserInfo RecordUsername(string username)
+        {
+            this.username = username;
+            return this;
+        }
 
         [UsedImplicitly]
         [Serializable]
@@ -99,7 +133,7 @@ namespace FlyingAcorn.Soil.Core.User
                 };
             }
 
-            public Dictionary<string,object> ToDictionary()
+            public Dictionary<string, object> ToDictionary()
             {
                 var allFields = GetType().GetFields();
                 var result = new Dictionary<string, object>();
@@ -108,7 +142,7 @@ namespace FlyingAcorn.Soil.Core.User
                     if (field.GetValue(this) != null)
                         result[field.Name] = field.GetValue(this);
                 }
-                
+
                 return result;
             }
         }
