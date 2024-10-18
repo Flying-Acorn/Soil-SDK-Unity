@@ -21,7 +21,7 @@ namespace FlyingAcorn.Soil.Core.User
             {
                 if (_userInfoInstance != null) return _userInfoInstance;
                 _userInfoInstance = JsonConvert.DeserializeObject<UserInfo>(PlayerPrefs.GetString(UserInfoKey, "")) ??
-                                   new UserInfo();
+                                    new UserInfo();
                 return _userInfoInstance;
             }
             set
@@ -36,17 +36,27 @@ namespace FlyingAcorn.Soil.Core.User
             get => JsonConvert.DeserializeObject<TokenData>(PlayerPrefs.GetString(TokenDataKey));
             set => PlayerPrefs.SetString(TokenDataKey, JsonConvert.SerializeObject(value));
         }
-        
+
         public static string AppID
         {
-            get => PlayerPrefs.GetString(AppIDKey, Constants.DemoAppID);
-            set => PlayerPrefs.SetString(AppIDKey, value);
+            get
+            {
+                var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
+                var appIdIsValid = settings && !string.IsNullOrEmpty(settings.AppID);
+                return appIdIsValid ? settings.AppID : PlayerPrefs.GetString(AppIDKey, Constants.DemoAppID);
+            }
         }
 
         public static string SDKToken
         {
-            get => PlayerPrefs.GetString(SDKTokenKey, Constants.DemoAppSDKToken);
-            set => PlayerPrefs.SetString(SDKTokenKey, value);
+            get
+            {
+                var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
+                var sdkTokenIsValid = settings && !string.IsNullOrEmpty(settings.SdkToken);
+                return sdkTokenIsValid
+                    ? settings.SdkToken
+                    : PlayerPrefs.GetString(SDKTokenKey, Constants.DemoAppSDKToken);
+            }
         }
 
 

@@ -5,8 +5,6 @@ namespace FlyingAcorn.Soil.Core.Demo
 {
     public class Initializer : MonoBehaviour
     {
-        [SerializeField] private string appID;
-        [SerializeField] private string sdkToken;
         [SerializeField] private bool initOnStart;
         private static Initializer Instance { get; set; }
 
@@ -28,9 +26,8 @@ namespace FlyingAcorn.Soil.Core.Demo
                 Initialize();
         }
 
-        private async void Initialize()
+        private static async void Initialize()
         {
-            SoilServices.SetRegistrationInfo(appID, sdkToken);
             try
             {
                 await SoilServices.Initialize();

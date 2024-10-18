@@ -24,7 +24,7 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
         [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
-        public static async Task AuthenticateUser(bool forceRegister = false,
+        internal static async Task AuthenticateUser(bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
             var userIsMissing = UserPlayerPrefs.TokenData == null ||
@@ -66,7 +66,7 @@ namespace FlyingAcorn.Soil.Core.User
                     Debug.LogError(e.Message);
                 }
             }
-
+            
             OnUserReady?.Invoke(UserPlayerPrefs.UserInfoInstance);
         }
 

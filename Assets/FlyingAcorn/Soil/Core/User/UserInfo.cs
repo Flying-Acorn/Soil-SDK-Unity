@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User
@@ -39,18 +40,26 @@ namespace FlyingAcorn.Soil.Core.User
     [Serializable]
     public class UserInfo
     {
-        public string app { get; private set; }
-        public string app_id { get; private set; }
-        public string bundle { get; private set; }
-        public string country { get; private set; }
-        public string avatar_asset { get; private set; }
-        public string created_at { get; private set; }
-        public string current_build { get; private set; }
-        public string name { get; private set; }
-        public Properties properties { get; private set; } = new();
-        public Dictionary<string, object> custom_properties { get; private set; } = new();
-        public string username { get; private set; }
-        public string uuid { get; private set; }
+        [JsonProperty]
+        internal string bundle;
+        [JsonProperty]
+        internal string country;
+        [JsonProperty]
+        internal string avatar_asset;
+        [JsonProperty]
+        internal string created_at;
+        [JsonProperty]
+        internal string current_build;
+        [JsonProperty]
+        internal string name;
+        [JsonProperty]
+        internal Properties properties;
+        [JsonProperty]
+        internal Dictionary<string, object> custom_properties;
+        [JsonProperty]
+        internal string username;
+        [JsonProperty]
+        internal string uuid;
 
         public UserInfo RecordCustomProperty(string key, object value)
         {
@@ -61,12 +70,6 @@ namespace FlyingAcorn.Soil.Core.User
         public UserInfo RecordAvatarAsset(string avatarAsset)
         {
             this.avatar_asset = avatarAsset;
-            return this;
-        }
-
-        public UserInfo RecordCountry(string country)
-        {
-            this.country = country;
             return this;
         }
 
