@@ -17,6 +17,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         [SerializeField] private Button getLeaderboardButton;
         [SerializeField] private long score = 100;
         [SerializeField] private int resultCount = 100;
+        private List<LeaderboardRow> _rows = new();
         private bool _relativeMode;
 
         private async void Start()
@@ -32,6 +33,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             {
                 Debug.LogError("Failed to initialize SoilServices");
             }
+
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
         }
@@ -53,7 +55,8 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
         private void GetLeaderboard(UserScore userScore)
         {
-            _ = Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode, GetLeaderboardSuccess, Failed);
+            _ = Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode, GetLeaderboardSuccess,
+                Failed);
         }
 
         private void Failed(string error)
@@ -65,16 +68,25 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         {
             SetYourScore();
             resultText.text = "OK";
+            foreach (var row in _rows)
+            {
+                Destroy(row.gameObject);
+            }
+
+            _rows = new List<LeaderboardRow>();
+
             foreach (var userScore in rows)
             {
                 var row = Instantiate(leaderboardRowPrefab, leaderboardContainer.transform);
                 row.SetData(userScore);
+                _rows.Add(row);
             }
         }
 
         private void SetRelativeMode()
         {
             _relativeMode = !_relativeMode;
+            SetRelativeText();
         }
 
         private void SetRelativeText()
