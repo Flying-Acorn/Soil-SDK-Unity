@@ -8,6 +8,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         [SerializeField] private TMPro.TextMeshProUGUI nameText;
         [SerializeField] private TMPro.TextMeshProUGUI rankText;
         [SerializeField] private TMPro.TextMeshProUGUI scoreText;
+
         public void SetData(UserScore score)
         {
             nameText.text = score.name;

@@ -30,7 +30,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             }
             catch
             {
-                Debug.LogError("SoilServices.Init() failed");
+                Debug.LogError("Failed to initialize SoilServices");
             }
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
@@ -48,12 +48,12 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
         private void ReportScore()
         {
-            Leaderboard.ReportScore(score.ToString(), "demo_dec_manual", GetLeaderboard, Failed);
+            _ = Leaderboard.ReportScore(score.ToString(), "demo_dec_manual", GetLeaderboard, Failed);
         }
 
         private void GetLeaderboard(UserScore userScore)
         {
-            Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode, GetLeaderboardSuccess, Failed);
+            _ = Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode, GetLeaderboardSuccess, Failed);
         }
 
         private void Failed(string error)

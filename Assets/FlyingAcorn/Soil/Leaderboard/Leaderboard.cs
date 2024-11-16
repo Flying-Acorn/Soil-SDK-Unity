@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Leaderboard.Models;
 using Newtonsoft.Json;
-using UnityEngine;
 
 namespace FlyingAcorn.Soil.Leaderboard
 {
@@ -17,8 +18,7 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
 
-        public static async void ReportScore(string score, string leaderboardId, Action<UserScore> successCallback = null,
-            Action<string> errorCallback = null)
+        private static async Task Initialize()
         {
             try
             {
@@ -26,7 +26,20 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                Debug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
+                MyDebug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
+            }
+        }
+
+        public static async Task ReportScore(string score, string leaderboardId,
+            Action<UserScore> successCallback = null,
+            Action<string> errorCallback = null)
+        {
+            try
+            {
+                await Initialize();
+            }
+            catch (Exception e)
+            {
                 errorCallback?.Invoke(e.Message);
                 return;
             }
@@ -53,14 +66,14 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"FlyingAcorn ====> Failed to Update score. Error: {e.Message}");
+                MyDebug.LogWarning($"FlyingAcorn ====> Failed to Update score. Error: {e.Message}");
                 errorCallback?.Invoke(e.Message);
                 return;
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                Debug.LogWarning($"FlyingAcorn ====> Failed to Update score. Error: {responseString}");
+                MyDebug.LogWarning($"FlyingAcorn ====> Failed to Update score. Error: {responseString}");
                 errorCallback?.Invoke(responseString);
             }
             else
@@ -70,18 +83,16 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
         }
 
-        public static async void FetchLeaderboard(string leaderboardId, int count = 10, bool relative = false,
+        public static async Task FetchLeaderboard(string leaderboardId, int count = 10, bool relative = false,
             Action<List<UserScore>> successCallback = null, Action<string> errorCallback = null)
         {
             try
             {
-                await SoilServices.Initialize();
+                await Initialize();
             }
             catch (Exception e)
             {
-                Debug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
                 errorCallback?.Invoke(e.Message);
-                return;
             }
 
             var payload = new Dictionary<string, object>
@@ -107,14 +118,14 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"FlyingAcorn ====> Failed to fetch leaderboard. Error: {e.Message}");
+                MyDebug.LogWarning($"FlyingAcorn ====> Failed to fetch leaderboard. Error: {e.Message}");
                 errorCallback?.Invoke(e.Message);
                 return;
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                Debug.LogWarning($"FlyingAcorn ====> Failed to fetch leaderboard. Error: {responseString}");
+                MyDebug.LogWarning($"FlyingAcorn ====> Failed to fetch leaderboard. Error: {responseString}");
                 errorCallback?.Invoke(responseString);
             }
             else
