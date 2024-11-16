@@ -19,12 +19,12 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task<UserInfo> FetchPlayerInfo()
         {
             Debug.Log("Fetching player info...");
-
-            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
+            if (!SoilServices.Ready)
             {
-                Debug.LogWarning("Access token is not valid. Trying to refresh tokens...");
-                await Authenticate.RefreshTokenIfNeeded(true);
+                Debug.LogWarning("Soil services are not ready. Trying to initialize...");
+                await SoilServices.Initialize();
             }
+
 
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -49,12 +49,12 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task<UserInfo> UpdatePlayerInfo(UserInfo userInfo)
         {
             Debug.Log("Updating player info...");
-
-            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
+            if (!SoilServices.Ready)
             {
-                Debug.LogWarning("Access token is not valid. Trying to refresh tokens...");
-                await Authenticate.RefreshTokenIfNeeded(true);
+                Debug.LogWarning("Soil services are not ready. Trying to initialize...");
+                await SoilServices.Initialize();
             }
+
 
             var legalFields = new Dictionary<string, object>();
             foreach (var propertyInfo in userInfo.GetType().GetProperties())

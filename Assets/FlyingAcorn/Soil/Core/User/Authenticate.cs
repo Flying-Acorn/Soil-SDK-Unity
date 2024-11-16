@@ -24,8 +24,8 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
         [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
-        internal static async Task AuthenticateUser(bool forceRegister = false,
-            bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+        internal static async Task AuthenticateUser(bool forceRegister = false, bool forceRefresh = false,
+            bool forceFetchPlayerInfo = false)
         {
             var userIsMissing = UserPlayerPrefs.TokenData == null ||
                                 string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
@@ -66,7 +66,7 @@ namespace FlyingAcorn.Soil.Core.User
                     Debug.LogError(e.Message);
                 }
             }
-            
+
             OnUserReady?.Invoke(UserPlayerPrefs.UserInfoInstance);
         }
 
@@ -103,7 +103,7 @@ namespace FlyingAcorn.Soil.Core.User
             OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
         }
 
-        internal static async Task RefreshTokenIfNeeded(bool force)
+        internal static async Task RefreshTokenIfNeeded(bool force = false)
         {
             if (!force && JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
             {
@@ -112,7 +112,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Refresh))
             {
-                Debug.LogError("Refresh token is almost expired. Please re-register.");
+                Debug.LogException(new Exception("Refresh token is invalid. Re-registering player."));
                 return;
             }
 
