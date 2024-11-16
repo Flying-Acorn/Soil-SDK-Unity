@@ -19,12 +19,12 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task<UserInfo> FetchPlayerInfo()
         {
             Debug.Log("Fetching player info...");
-            if (!SoilServices.Ready)
-            {
-                Debug.LogWarning("Soil services are not ready. Trying to initialize...");
-                await SoilServices.Initialize();
-            }
 
+            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access)) // Because Authenticate is dependent on this
+            {
+                Debug.LogWarning("Access token is not valid. Trying to refresh tokens...");
+                await Authenticate.RefreshTokenIfNeeded(true);
+            }
 
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -49,10 +49,15 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task<UserInfo> UpdatePlayerInfo(UserInfo userInfo)
         {
             Debug.Log("Updating player info...");
-            if (!SoilServices.Ready)
+            try
             {
                 Debug.LogWarning("Soil services are not ready. Trying to initialize...");
                 await SoilServices.Initialize();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Failed to initialize Soil services: {e.Message}");
+                throw;
             }
 
 
