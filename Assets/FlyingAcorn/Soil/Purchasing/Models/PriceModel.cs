@@ -9,6 +9,6 @@ namespace FlyingAcorn.Soil.Purchasing.Models
     public class PriceModel
     {
         public string currency;
-        public double price;
+        public decimal amount;
     }
 }

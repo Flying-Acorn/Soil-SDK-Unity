@@ -11,6 +11,7 @@ namespace FlyingAcorn.Soil.Purchasing.Models
     {
         public string title;
         public string description;
+        public string tagline;
         public string language;
     }
 }
