@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
@@ -33,11 +34,31 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static readonly string FetchUrl = $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
 
 
-        public static void FetchConfig(Dictionary<string, object> extraProperties = null)
+        private static async Task Initialize()
         {
-            _sessionExtraProperties = extraProperties ?? new Dictionary<string, object>();
+            await SoilServices.Initialize();
+        }
 
-            FetchRemoteConfig();
+        public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
+        {
+            if (_fetching) return;
+            _fetching = true;
+            _sessionExtraProperties = extraProperties ?? new Dictionary<string, object>();
+            try
+            {
+                await FetchRemoteConfig();
+            }
+            catch (Exception)
+            {
+                _fetching = false;
+                _fetchSuccessState = false;
+                OnServerAnswer?.Invoke(false);
+            }
+
+            _fetching = false;
+            OnServerAnswer?.Invoke(_fetchSuccessState);
+            if (_fetchSuccessState)
+                OnSuccessfulFetch?.Invoke(RemoteConfigPlayerPrefs.CachedRemoteConfigData);
         }
 
         private static Dictionary<string, object> GetPlayerProperties()
@@ -48,22 +69,9 @@ namespace FlyingAcorn.Soil.RemoteConfig
             return properties;
         }
 
-        private static async void FetchRemoteConfig()
+        private static async Task FetchRemoteConfig()
         {
-            if (_fetching) return;
-            _fetching = true;
-            try
-            {
-                await SoilServices.Initialize();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
-                _fetching = false;
-                _fetchSuccessState = false;
-                OnServerAnswer?.Invoke(false);
-                return;
-            }
+            await Initialize();
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
                 { { "properties", GetPlayerProperties() } });
@@ -72,8 +80,8 @@ namespace FlyingAcorn.Soil.RemoteConfig
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = new HttpResponseMessage();
-            var responseString = string.Empty;
+            HttpResponseMessage response;
+            string responseString;
             try
             {
                 response = await client.SendAsync(request);
@@ -81,34 +89,25 @@ namespace FlyingAcorn.Soil.RemoteConfig
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"FlyingAcorn ====> Failed to fetch remote config. Error: {e.Message}");
+                throw new Exception($"FlyingAcorn ====> Failed to fetch remote config. Error: {e.Message}");
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                Debug.LogError(responseString);
-                _fetchSuccessState = false;
-            }
-            else
-            {
-                try
-                {
-                    RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
-                    ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
-                    _fetchSuccessState = true;
-                    Debug.Log("FlyingAcorn ====> Remote config fetched successfully."); 
-                }
-                catch (Exception)
-                {
-                    Debug.LogError($"FlyingAcorn ====> Failed to parse fetched data. Data: {responseString}");
-                    _fetchSuccessState = false;
-                }
+                throw new Exception(
+                    $"FlyingAcorn ====> Failed to fetch remote config. Status code: {response.StatusCode}");
             }
 
-            _fetching = false;
-            OnServerAnswer?.Invoke(_fetchSuccessState);
-            if (_fetchSuccessState)
-                OnSuccessfulFetch?.Invoke(RemoteConfigPlayerPrefs.CachedRemoteConfigData);
+            try
+            {
+                RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
+                ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
+                _fetchSuccessState = true;
+            }
+            catch (Exception)
+            {
+                throw new Exception($"FlyingAcorn ====> Failed to parse remote config. Response: {responseString}");
+            }
         }
     }
 }

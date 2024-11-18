@@ -48,34 +48,9 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly]
         public static async Task<UserInfo> UpdatePlayerInfo(UserInfo userInfo)
         {
-            Debug.Log("Updating player info...");
-            try
-            {
-                Debug.LogWarning("Soil services are not ready. Trying to initialize...");
-                await SoilServices.Initialize();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Failed to initialize Soil services: {e.Message}");
-                throw;
-            }
+            await SoilServices.Initialize();
 
-
-            var legalFields = new Dictionary<string, object>();
-            foreach (var propertyInfo in userInfo.GetType().GetProperties())
-            {
-                var value = propertyInfo.GetValue(userInfo);
-                var isNullOrEmpty = value == null || string.IsNullOrEmpty(value.ToString());
-                if (isNullOrEmpty)
-                    continue;
-                var currentUser = UserPlayerPrefs.UserInfo;
-                var unchanged = value.ToString() ==
-                                currentUser.GetType().GetProperty(propertyInfo.Name)?.GetValue(currentUser)?.ToString();
-                if (unchanged)
-                    continue;
-                legalFields.Add(propertyInfo.Name, value);
-            }
-
+            var legalFields = UserPlayerPrefs.UserInfo.GetChangedFields(userInfo);
             if (legalFields.Count == 0)
             {
                 Debug.Log("No legal fields to update.");

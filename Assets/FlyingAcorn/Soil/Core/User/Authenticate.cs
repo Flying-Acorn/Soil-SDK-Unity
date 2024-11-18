@@ -24,8 +24,8 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
         [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
-        internal static async Task AuthenticateUser(bool forceRegister = false, bool forceRefresh = false,
-            bool forceFetchPlayerInfo = false)
+        internal static async Task AuthenticateUser(bool forceRegister = false,
+            bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
             var userIsMissing = UserPlayerPrefs.TokenData == null ||
                                 string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||

@@ -40,26 +40,16 @@ namespace FlyingAcorn.Soil.Core.User
     [Serializable]
     public class UserInfo
     {
-        [JsonProperty]
-        internal string bundle;
-        [JsonProperty]
-        internal string country;
-        [JsonProperty]
-        internal string avatar_asset;
-        [JsonProperty]
-        internal string created_at;
-        [JsonProperty]
-        internal string current_build;
-        [JsonProperty]
-        internal string name;
-        [JsonProperty]
-        internal Properties properties;
-        [JsonProperty]
-        internal Dictionary<string, object> custom_properties;
-        [JsonProperty]
-        internal string username;
-        [JsonProperty]
-        internal string uuid;
+        [JsonProperty] internal string bundle;
+        [JsonProperty] internal string country;
+        [JsonProperty] internal string avatar_asset;
+        [JsonProperty] internal string created_at;
+        [JsonProperty] internal string current_build;
+        [JsonProperty] internal string name;
+        [JsonProperty] internal Properties properties;
+        [JsonProperty] internal Dictionary<string, object> custom_properties;
+        [JsonProperty] internal string username;
+        [JsonProperty] internal string uuid;
 
         public UserInfo RecordCustomProperty(string key, object value)
         {
@@ -83,6 +73,23 @@ namespace FlyingAcorn.Soil.Core.User
         {
             this.username = username;
             return this;
+        }
+
+        public Dictionary<string, object> GetChangedFields(UserInfo userInfo)
+        {
+            var changedFields = new Dictionary<string, object>();
+            foreach (var propertyInfo in userInfo.GetType().GetAllFields())
+            {
+                var value = propertyInfo.GetValue(userInfo);
+                var isNullOrEmpty = value == null || string.IsNullOrEmpty(value.ToString());
+                if (isNullOrEmpty)
+                    continue;
+
+                if (!propertyInfo.GetValue(this).Equals(value))
+                    changedFields.Add(propertyInfo.Name, value);
+            }
+
+            return changedFields;
         }
 
         [UsedImplicitly]

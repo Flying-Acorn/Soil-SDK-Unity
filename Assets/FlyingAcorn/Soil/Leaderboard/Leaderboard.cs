@@ -7,6 +7,7 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Leaderboard.Models;
+using JetBrains.Annotations;
 using Newtonsoft.Json;
 
 namespace FlyingAcorn.Soil.Leaderboard
@@ -17,22 +18,14 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
+        [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
-        private static async Task Initialize()
+        public static async Task Initialize()
         {
-            try
-            {
-                await SoilServices.Initialize();
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogError($"FlyingAcorn ====> Failed to initialize SoilServices. Error: {e.Message}");
-            }
+            await SoilServices.Initialize();
         }
 
-        public static async Task ReportScore(string score, string leaderboardId,
-            Action<UserScore> successCallback = null,
-            Action<string> errorCallback = null)
+        public static async Task<UserScore> ReportScore(string score, string leaderboardId)
         {
             try
             {
@@ -40,8 +33,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                errorCallback?.Invoke(e.Message);
-                return;
+                throw new Exception(e.Message);
             }
 
             var payload = new Dictionary<string, object>
@@ -66,25 +58,20 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to Update score. Error: {e.Message}");
-                errorCallback?.Invoke(e.Message);
-                return;
+                var fullMessage = $"Soil ====> Failed to Report score. Error: {e.Message}";
+                throw new Exception(fullMessage);
             }
 
-            if (response is not { IsSuccessStatusCode: true })
+            if (response is { IsSuccessStatusCode: true })
+                return JsonConvert.DeserializeObject<UserScore>(responseString);
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to Update score. Error: {responseString}");
-                errorCallback?.Invoke(responseString);
-            }
-            else
-            {
-                var userScore = JsonConvert.DeserializeObject<UserScore>(responseString);
-                successCallback?.Invoke(userScore);
+                var fullMessage = $"Soil ====> Failed to Report score. Error: {responseString}";
+                throw new Exception(fullMessage);
             }
         }
 
-        public static async Task FetchLeaderboard(string leaderboardId, int count = 10, bool relative = false,
-            Action<List<UserScore>> successCallback = null, Action<string> errorCallback = null)
+        public static async Task<List<UserScore>> FetchLeaderboard(string leaderboardId, int count = 10,
+            bool relative = false)
         {
             try
             {
@@ -92,7 +79,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                errorCallback?.Invoke(e.Message);
+                throw new Exception(e.Message);
             }
 
             var payload = new Dictionary<string, object>
@@ -118,22 +105,19 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (Exception e)
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to fetch leaderboard. Error: {e.Message}");
-                errorCallback?.Invoke(e.Message);
-                return;
+                var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {e.Message}";
+                throw new Exception(fullMessage);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to fetch leaderboard. Error: {responseString}");
-                errorCallback?.Invoke(responseString);
+                var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {responseString}";
+                throw new Exception(fullMessage);
             }
-            else
-            {
-                var leaderboard = JsonConvert.DeserializeObject<List<Models.UserScore>>(responseString);
-                LeaderboardPlayerPrefs.SetCachedLeaderboardData(leaderboardId, responseString);
-                successCallback?.Invoke(leaderboard);
-            }
+
+            var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);
+            LeaderboardPlayerPrefs.SetCachedLeaderboardData(leaderboardId, responseString, relative);
+            return leaderboard;
         }
     }
 }

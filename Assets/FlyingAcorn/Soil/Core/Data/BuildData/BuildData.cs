@@ -10,6 +10,7 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData
         public string StoreName;
         public string LastBuildTime;
         public string ScriptingBackend;
+        public bool hasIAP = true;
 
 #if UNITY_EDITOR
 

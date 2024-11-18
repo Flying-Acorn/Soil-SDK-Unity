@@ -28,14 +28,7 @@ namespace FlyingAcorn.Soil.Core.Demo
 
         private static async void Initialize()
         {
-            try
-            {
-                await SoilServices.Initialize();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("Failed to initialize SoilServices: " + e.Message + " " + e.StackTrace);
-            }
+            await SoilServices.Initialize();
         }
     }
 }

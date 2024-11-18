@@ -19,43 +19,35 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 
             //FindAssets uses tags check documentation for more info
             var guids = AssetDatabase.FindAssets($"t:{typeof(BuildData)}");
-            if (guids.Length > 1)
-                Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
-                    guids.Length);
-
-            if (guids.Length > 0)
+            switch (guids.Length)
             {
-                var path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
-                buildSettings.LastBuildTime = DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss"); // case sensitive
-                buildSettings.EditorRefreshScriptingBackend(report.summary.platform);
+                case > 1:
+                    Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
+                        guids.Length);
+                    break;
+                case <= 0:
+                    throw new UnityEditor.Build.BuildFailedException("[FABuildTools] Couldn't find Build Settings, please create one!");
+            }
+
+            var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
+            buildSettings.LastBuildTime = DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss"); // case sensitive
+            buildSettings.EditorRefreshScriptingBackend(report.summary.platform);
 #if UNITY_IOS
-                buildSettings.BuildNumber = PlayerSettings.iOS.buildNumber;
+            buildSettings.BuildNumber = PlayerSettings.iOS.buildNumber;
 #endif
 #if UNITY_ANDROID
-                buildSettings.BuildNumber = PlayerSettings.Android.bundleVersionCode.ToString();
+            buildSettings.BuildNumber = PlayerSettings.Android.bundleVersionCode.ToString();
 #endif
 #if UNITY_CLOUD_BUILD
             buildSettings.RepositoryVersion += "-cloud";
 #endif
-                EditorUtility.SetDirty(buildSettings);
-                Debug.LogFormat("[FABuildTools] Updated settings LastBuildDate to \"{0}\". Settings Path: {1}",
-                    buildSettings.LastBuildTime, path);
+            if (string.IsNullOrWhiteSpace(buildSettings.StoreName))
+                throw new UnityEditor.Build.BuildFailedException("[FABuildTools] Store Name is empty, please fill it in!");
 
-                if (string.IsNullOrEmpty(buildSettings.StoreName))
-                {
-                    Debug.LogError("[FABuildTools] Please set store name through build_settings.asset, did you intentionally left it empty? please set it!");
-                }
-                else
-                {
-                    Debug.LogFormat("[FABuildTools] Store Name: {0}", buildSettings.StoreName);
-                }
-            }
-            else
-            {
-                // TODO: AUTO-CREATE ONE!
-                Debug.LogWarning("[FABuildTools] Couldn't find Build Settings, please create one!");
-            }
+            EditorUtility.SetDirty(buildSettings);
+            Debug.LogFormat("[FABuildTools] Updated settings LastBuildDate to \"{0}\". Settings Path: {1}",
+                buildSettings.LastBuildTime, path);
 
             #endregion
         }

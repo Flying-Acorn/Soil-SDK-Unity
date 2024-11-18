@@ -27,7 +27,7 @@ namespace FlyingAcorn.Soil.Purchasing
         private static readonly string PurchaseInvoiceUrl = PurchaseBaseUrl + "{purchase_id}/invoice/";
 
         [UsedImplicitly] public static Action<Item> OnPurchaseStart;
-        [UsedImplicitly] public static Action<Item> OnPurchaseSuccessful;
+        [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
         [UsedImplicitly] public static Action OnPurchasingInitialized;
         [UsedImplicitly] public static List<Item> AvailableItems => AllItems.FindAll(item => item.enabled);
@@ -40,6 +40,8 @@ namespace FlyingAcorn.Soil.Purchasing
             set => PurchasingPlayerPrefs.CachedItems = value;
         }
 
+        public static bool Ready { get; private set; }
+
         public static async Task Initialize()
         {
             if (_initCalled)
@@ -50,36 +52,27 @@ namespace FlyingAcorn.Soil.Purchasing
             {
                 await SoilServices.Initialize();
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 _initCalled = false;
-                MyDebug.LogWarning($"Failed to initialize purchasing: {e.Message}");
-                return;
+                throw;
             }
 
+            OnPurchasingInitialized += SafeVerifyAllPurchases;
             OnItemsReceived += PurchasingInitialized;
             _ = QueryItems();
-            OnPurchasingInitialized += VerifyAllPurchases;
         }
 
         private static void PurchasingInitialized(List<Item> items)
         {
             OnItemsReceived -= PurchasingInitialized;
+            Ready = true;
             OnPurchasingInitialized?.Invoke();
         }
 
         private static async Task QueryItems()
         {
-            try
-            {
-                await Initialize();
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to query items: {e.Message}");
-                return;
-            }
-
+            await Initialize();
 
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -91,8 +84,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to query items. Error: {responseString}");
-                return;
+                throw new Exception($"FlyingAcorn ====> Failed to query items. Error: {responseString}");
             }
 
             try
@@ -101,8 +93,7 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             catch (Exception)
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to deserialize items: {responseString}");
-                return;
+                throw new Exception($"FlyingAcorn ====> Failed to deserialize items: {responseString}");
             }
 
             OnItemsReceived?.Invoke(AvailableItems);
@@ -110,15 +101,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
         public static async Task BuyItem(string sku)
         {
-            try
-            {
-                await Initialize();
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to buy item: {e.Message}");
-                return;
-            }
+            await Initialize();
 
             var payload = new Dictionary<string, object>
             {
@@ -133,48 +116,19 @@ namespace FlyingAcorn.Soil.Purchasing
             var request = new HttpRequestMessage(HttpMethod.Post, CreatePurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            HttpResponseMessage response;
-            string responseString;
-            try
-            {
-                response = await client.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to buy item. Error: {e.Message}");
-
-                return;
-            }
+            var response = await client.SendAsync(request);
+            var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response is not { IsSuccessStatusCode: true })
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to buy item. Error: {responseString}");
-                return;
-            }
+                throw new Exception($"FlyingAcorn ====> Failed to buy item. Error: {responseString}");
 
-            try
-            {
-                var createResponse = JsonConvert.DeserializeObject<CreateResponse>(responseString);
-                OnPurchaseCreated(createResponse);
-            }
-            catch (Exception)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to deserialize create response: {responseString}");
-            }
+            var createResponse = JsonConvert.DeserializeObject<CreateResponse>(responseString);
+            OnPurchaseCreated(createResponse);
         }
 
         private static async Task VerifyPurchase(string purchaseId)
         {
-            try
-            {
-                await Initialize();
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to verify purchase: {e.Message}");
-                return;
-            }
+            await Initialize();
 
             var payload = new Dictionary<string, object>
             {
@@ -189,35 +143,28 @@ namespace FlyingAcorn.Soil.Purchasing
             var request = new HttpRequestMessage(HttpMethod.Post, VerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            HttpResponseMessage response;
-            string responseString;
-            try
-            {
-                response = await client.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to verify purchase. Error: {e.Message}");
-
-                return;
-            }
+            var response = await client.SendAsync(request);
+            var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to verify purchase. Error: {responseString}");
-                return;
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    OnVerificationResponse(new VerifyResponse
+                    {
+                        purchase = new Purchase
+                        {
+                            purchase_id = purchaseId,
+                            expired = true
+                        }
+                    });
+                    return;
+                }
+                throw new Exception($"FlyingAcorn ====> Failed to verify item. Error: {responseString}");
             }
 
-            try
-            {
-                var verifyResponse = JsonConvert.DeserializeObject<VerifyResponse>(responseString);
-                OnVerificationResponse(verifyResponse);
-            }
-            catch (Exception)
-            {
-                MyDebug.LogWarning($"FlyingAcorn ====> Failed to deserialize verify response: {responseString}");
-            }
+            var verifyResponse = JsonConvert.DeserializeObject<VerifyResponse>(responseString);
+            OnVerificationResponse(verifyResponse);
         }
 
         private static void OnPurchaseCreated(CreateResponse response)
@@ -227,7 +174,7 @@ namespace FlyingAcorn.Soil.Purchasing
             Application.OpenURL(purchase.pay_url);
             OnPurchaseStart?.Invoke(AllItems.Find(item => item.sku == purchase.sku));
         }
-        
+
         [UsedImplicitly]
         public static void OpenInvoice(string purchaseId)
         {
@@ -240,14 +187,24 @@ namespace FlyingAcorn.Soil.Purchasing
             if (purchase.paid || purchase.expired || !AllItems.Exists(item => item.sku == purchase.sku))
                 PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchase.purchase_id);
             if (purchase.paid)
-                OnPurchaseSuccessful?.Invoke(AllItems.Find(item => item.sku == purchase.sku));
+                OnPurchaseSuccessful?.Invoke(purchase);
         }
 
         [UsedImplicitly]
-        public static void VerifyAllPurchases()
+        public static async void SafeVerifyAllPurchases()
         {
             foreach (var purchaseId in PurchasingPlayerPrefs.UnverifiedPurchaseIds)
-                _ = VerifyPurchase(purchaseId);
+            {
+                try
+                {
+                    await VerifyPurchase(purchaseId);
+                }
+                catch (Exception e)
+                {
+                    var message = $"Failed to verify {purchaseId} - {e} - {e.StackTrace}";
+                    MyDebug.LogWarning(message);
+                }
+            }
         }
     }
 }

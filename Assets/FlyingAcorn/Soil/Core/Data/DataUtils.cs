@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Data
@@ -40,6 +44,24 @@ namespace FlyingAcorn.Soil.Core.Data
             Debug.LogWarning("Store name is not set in Build_Settings. Please set it.");
             storeName = "Unknown";
             return storeName;
+        }
+        
+        public static bool HasIAP()
+        {
+            if (!_buildSettings)
+                _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
+            return _buildSettings && _buildSettings.hasIAP;
+        }
+
+        public static IEnumerable<FieldInfo> GetAllFields(this Type t)
+        {
+            if (t == null)
+                return Enumerable.Empty<FieldInfo>();
+
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic |
+                                       BindingFlags.Static | BindingFlags.Instance |
+                                       BindingFlags.DeclaredOnly;
+            return t.GetFields(flags).Concat(GetAllFields(t.BaseType));
         }
     }
 }

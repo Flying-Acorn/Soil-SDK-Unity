@@ -29,7 +29,7 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             Failed($"Purchasing {obj.sku}...");
         }
 
-        private void OnPurchaseSuccessful(Item obj)
+        private void OnPurchaseSuccessful(Purchase obj)
         {
             Failed($"Purchased {obj.sku} successfully!");
         }
@@ -72,7 +72,7 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
                 Failed("No unverified purchases.");
                 return;
             }
-            Purchasing.VerifyAllPurchases();
+            Purchasing.SafeVerifyAllPurchases();
         }
     }
 }

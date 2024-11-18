@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Leaderboard.Models;
@@ -26,7 +27,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             Failed("Press Get Leaderboard");
             try
             {
-                await SoilServices.Initialize();
+                await Leaderboard.Initialize();
                 SetYourScore();
             }
             catch
@@ -48,15 +49,31 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             yourScore.text = SoilServices.UserInfo.name + ":" + score;
         }
 
-        private void ReportScore()
+        private async void ReportScore()
         {
-            _ = Leaderboard.ReportScore(score.ToString(), "demo_dec_manual", GetLeaderboard, Failed);
+
+            try
+            {
+                var userScore = await Leaderboard.ReportScore(score.ToString(), "demo_dec_manual");
+                GetLeaderboard(userScore);
+            }
+            catch (Exception e)
+            {
+                Failed(e.Message);
+            }
         }
 
-        private void GetLeaderboard(UserScore userScore)
+        private async void GetLeaderboard(UserScore userScore)
         {
-            _ = Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode, GetLeaderboardSuccess,
-                Failed);
+            try
+            {
+                var leaderboard = await Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode);
+                GetLeaderboardSuccess(leaderboard);
+            }
+            catch (Exception e)
+            {
+                Failed(e.Message);
+            }
         }
 
         private void Failed(string error)

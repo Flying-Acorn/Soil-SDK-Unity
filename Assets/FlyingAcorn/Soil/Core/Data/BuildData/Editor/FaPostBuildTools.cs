@@ -16,24 +16,22 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                 $"[FABuildTools] OnPostprocessBuild for target {report.summary.platform} at path {report.summary.outputPath}");
 
             var guids = AssetDatabase.FindAssets($"t:{typeof(BuildData)}");
-            if (guids.Length > 1)
-                Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
-                    guids.Length);
+            switch (guids.Length)
+            {
+                case > 1:
+                    Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
+                        guids.Length);
+                    break;
+                case <= 0:
+                    throw new BuildFailedException("[FABuildTools] Couldn't find Build Settings, please create one!");
+            }
 
-            if (guids.Length > 0)
-            {
-                var path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
-                buildSettings.StoreName = null;
-                
-                EditorUtility.SetDirty(buildSettings);
-                Debug.LogFormat("[FABuildTools] Cleaned build settings \"{0}\".", path);
-            }
-            else
-            {
-                // TODO: AUTO-CREATE ONE!
-                Debug.LogWarning("[FABuildTools] Couldn't find Build Settings, please create one!");
-            }
+            var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
+            buildSettings.StoreName = null;
+
+            EditorUtility.SetDirty(buildSettings);
+            Debug.LogFormat("[FABuildTools] Cleaned build settings \"{0}\".", path);
         }
     }
 }

@@ -10,17 +10,21 @@ namespace FlyingAcorn.Soil.Leaderboard
     public static class LeaderboardPlayerPrefs
     {
         private static string PrefsPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}leaderboard_";
-        private static string CacheKey(string leaderboardId) => PrefsPrefix + leaderboardId;
 
-        internal static List<UserScore> CachedLeaderboardData(string leaderboardId)
+        private static string CacheKey(string leaderboardId, bool relative)
         {
-            var jsonString = PlayerPrefs.GetString(CacheKey(leaderboardId), "{}");
+            return PrefsPrefix + leaderboardId + (relative ? "_relative" : "");
+        }
+
+        internal static List<UserScore> CachedLeaderboardData(string leaderboardId, bool relative)
+        {
+            var jsonString = PlayerPrefs.GetString(CacheKey(leaderboardId, relative), "{}");
             return JsonConvert.DeserializeObject<List<UserScore>>(jsonString);
         }
 
-        internal static void SetCachedLeaderboardData(string leaderboardId, string data)
+        internal static void SetCachedLeaderboardData(string leaderboardId, string data, bool relative)
         {
-            PlayerPrefs.SetString(CacheKey(leaderboardId), data);
+            PlayerPrefs.SetString(CacheKey(leaderboardId, relative), data);
         }
     }
 }
