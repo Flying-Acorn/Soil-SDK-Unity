@@ -6,11 +6,10 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData
     [CreateAssetMenu(fileName = "Build_Settings.asset", menuName = "FlyingAcorn/Build Settings")]
     public class BuildData : ScriptableObject
     {
-        public string BuildNumber;
-        public string StoreName;
-        public string LastBuildTime;
-        public string ScriptingBackend;
-        public bool hasIAP = true;
+        public Constants.Store StoreName;
+        [HideInInspector] public string BuildNumber;
+        [HideInInspector] public string LastBuildTime;
+        [HideInInspector] public string ScriptingBackend;
 
 #if UNITY_EDITOR
 

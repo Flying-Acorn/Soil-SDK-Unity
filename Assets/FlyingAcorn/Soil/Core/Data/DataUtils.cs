@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using FlyingAcorn.Analytics;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Data
@@ -37,20 +38,12 @@ namespace FlyingAcorn.Soil.Core.Data
             if (!_buildSettings)
                 _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
             string storeName = null;
-            if (_buildSettings && !string.IsNullOrEmpty(_buildSettings.StoreName))
-                storeName = _buildSettings.StoreName;
-
-            if (!string.IsNullOrEmpty(storeName)) return storeName;
-            Debug.LogWarning("Store name is not set in Build_Settings. Please set it.");
-            storeName = "Unknown";
-            return storeName;
-        }
-        
-        public static bool HasIAP()
-        {
-            if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
-            return _buildSettings && _buildSettings.hasIAP;
+            if (_buildSettings && _buildSettings.StoreName == Constants.Store.Unknown)
+                storeName = _buildSettings.StoreName.ToString();
+            if (storeName != null) return storeName;
+            if (!Application.isEditor)
+                MyDebug.LogError("Store name is not set in BuildData");
+            return Constants.Store.Unknown.ToString();
         }
 
         public static IEnumerable<FieldInfo> GetAllFields(this Type t)

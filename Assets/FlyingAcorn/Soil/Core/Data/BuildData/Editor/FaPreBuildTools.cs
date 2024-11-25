@@ -42,8 +42,8 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 #if UNITY_CLOUD_BUILD
             buildSettings.RepositoryVersion += "-cloud";
 #endif
-            if (string.IsNullOrWhiteSpace(buildSettings.StoreName))
-                throw new UnityEditor.Build.BuildFailedException("[FABuildTools] Store Name is empty, please fill it in!");
+            if (buildSettings.StoreName == Constants.Store.Unknown)
+                throw new UnityEditor.Build.BuildFailedException("[FABuildTools] Store name is not set in BuildData");
 
             EditorUtility.SetDirty(buildSettings);
             Debug.LogFormat("[FABuildTools] Updated settings LastBuildDate to \"{0}\". Settings Path: {1}",
