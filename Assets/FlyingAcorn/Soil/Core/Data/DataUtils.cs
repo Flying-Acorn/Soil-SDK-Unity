@@ -33,17 +33,17 @@ namespace FlyingAcorn.Soil.Core.Data
             return build;
         }
 
-        public static string GetStoreName()
+        public static Constants.Store GetStore()
         {
             if (!_buildSettings)
                 _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
-            string storeName = null;
-            if (_buildSettings && _buildSettings.StoreName == Constants.Store.Unknown)
-                storeName = _buildSettings.StoreName.ToString();
-            if (storeName != null) return storeName;
+            var storeName = Constants.Store.Unknown;
+            if (_buildSettings && _buildSettings.StoreName != Constants.Store.Unknown)
+                storeName = _buildSettings.StoreName;
+            if (storeName != Constants.Store.Unknown) return storeName;
             if (!Application.isEditor)
                 MyDebug.LogError("Store name is not set in BuildData");
-            return Constants.Store.Unknown.ToString();
+            return Constants.Store.Unknown;
         }
 
         public static IEnumerable<FieldInfo> GetAllFields(this Type t)
