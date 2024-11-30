@@ -9,6 +9,7 @@ namespace FlyingAcorn.Analytics
     {
         int EventLengthLimit { get; }
         int EventStepLengthLimit { get; }
+        bool IsInitialized { get; }
         string EventSeparator { get; }
         void Initialize();
         void ErrorEvent(FlyingAcornErrorSeverity severity, string message);

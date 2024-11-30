@@ -18,5 +18,11 @@ namespace FlyingAcorn.Analytics
                 $"{Prefix}SavedLogLevel", (int)Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity);
             set => PlayerPrefs.SetInt($"{Prefix}SavedLogLevel", (int)value);
         }
+
+        public static bool UserDebugMode
+        {
+            get => PlayerPrefs.GetInt($"{Prefix}UserDebugMode", 0) == 1;
+            internal set => PlayerPrefs.SetInt($"{Prefix}UserDebugMode", value ? 1 : 0);
+        }
     }
 }

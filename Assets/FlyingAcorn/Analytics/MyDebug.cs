@@ -7,20 +7,20 @@ namespace FlyingAcorn.Analytics
 {
     public static class MyDebug
     {
-        public static readonly bool GeneralDebugMode = false;
-
         private static readonly string LogTag = $"[{Constants.FlyingAcorn}]:";
         private const int DebugDepth = 2;
 
         public static void SetLogLevel(FlyingAcornErrorSeverity logLevel)
         {
-            logLevel = GeneralDebugMode ? FlyingAcornErrorSeverity.DebugSeverity : logLevel;
+            logLevel = AnalyticsPlayerPrefs.UserDebugMode ? FlyingAcornErrorSeverity.DebugSeverity : logLevel;
             AnalyticsPlayerPrefs.SavedLogLevel = logLevel;
         }
-        
+
         public static FlyingAcornErrorSeverity GetLogLevel()
         {
-            return GeneralDebugMode ? FlyingAcornErrorSeverity.DebugSeverity : AnalyticsPlayerPrefs.SavedLogLevel;
+            return AnalyticsPlayerPrefs.UserDebugMode
+                ? FlyingAcornErrorSeverity.DebugSeverity
+                : AnalyticsPlayerPrefs.SavedLogLevel;
         }
 
         private static string GetPrefix()

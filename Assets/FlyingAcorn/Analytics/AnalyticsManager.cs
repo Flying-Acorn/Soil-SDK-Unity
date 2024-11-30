@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using JetBrains.Annotations;
 using UnityEngine;
 
 namespace FlyingAcorn.Analytics
@@ -26,6 +27,7 @@ namespace FlyingAcorn.Analytics
             Instance = this;
             DontDestroyOnLoad(gameObject);
             AnalyticServiceProvider = new AnalyticServiceProvider(services);
+
             if (initOnAwake)
                 Init();
         }
@@ -66,12 +68,23 @@ namespace FlyingAcorn.Analytics
 
         public virtual void SetConsents()
         {
-            Debug.LogWarning("SetConsents not implemented");
+            Debug.Log("SetConsents not implemented");
         }
 
         public virtual void SetUserIdentifier(string playerId)
         {
-            Debug.LogWarning("SetUserIdentifier not implemented");
+            Debug.Log("SetUserIdentifier not implemented");
+        }
+
+        public static void SetAnalyticsConsents()
+        {
+            if (!Instance || Instance.AnalyticServiceProvider == null)
+            {
+                MyDebug.LogWarning("Analytics not initialized");
+                return;
+            }
+            
+            Instance.SetConsents();
         }
         
         public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
@@ -127,6 +140,20 @@ namespace FlyingAcorn.Analytics
             }
             InitCalled = true;
             AnalyticServiceProvider.Initialize();
+        }
+
+        public static IAnalytics GetRunningService([NotNull] Type type)
+        {
+            if (!Instance || Instance.AnalyticServiceProvider == null)
+            {
+                return null;
+            }
+            return Instance.services.Find(s => s.GetType() == type);
+        }
+
+        public IAnalytics GetService([NotNull] Type type)
+        {
+            return services.Find(s => s.GetType() == type);
         }
     }
 }
