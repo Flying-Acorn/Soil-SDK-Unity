@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
@@ -139,7 +140,8 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}graphics_device_id", SystemInfo.graphicsDeviceID },
                     { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
                     { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion },
-                    { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() }
+                    { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() },
+                    { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode }
                 };
             }
 
