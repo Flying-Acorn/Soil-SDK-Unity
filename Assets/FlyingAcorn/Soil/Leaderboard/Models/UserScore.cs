@@ -1,5 +1,6 @@
 using System;
 using JetBrains.Annotations;
+
 // ReSharper disable InconsistentNaming
 
 namespace FlyingAcorn.Soil.Leaderboard.Models

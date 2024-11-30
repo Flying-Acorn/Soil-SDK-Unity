@@ -18,9 +18,10 @@ namespace FlyingAcorn.Soil.Purchasing
                 var jsonString = PlayerPrefs.GetString(PrefsPrefix + "unverifiedPurchaseIds", "[]");
                 return JsonConvert.DeserializeObject<List<string>>(jsonString);
             }
-            private set => PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
+            private set =>
+                PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
         }
-        
+
         public static void RemoveUnverifiedPurchaseId(string purchaseID)
         {
             var unverifiedPurchaseIds = UnverifiedPurchaseIds;

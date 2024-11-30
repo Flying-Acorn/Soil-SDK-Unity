@@ -72,6 +72,7 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
                 Failed("No unverified purchases.");
                 return;
             }
+
             Purchasing.SafeVerifyAllPurchases();
         }
     }

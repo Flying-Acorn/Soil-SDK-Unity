@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using FlyingAcorn.Soil.Purchasing.EconomyExtension.Models;
 using FlyingAcorn.Soil.Purchasing.Models.Items;
 using JetBrains.Annotations;
+
 // ReSharper disable InconsistentNaming
 
 namespace FlyingAcorn.Soil.Purchasing.Models

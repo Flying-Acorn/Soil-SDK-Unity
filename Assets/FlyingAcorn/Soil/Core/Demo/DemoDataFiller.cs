@@ -32,7 +32,6 @@ namespace FlyingAcorn.Soil.Core.Demo
 
         private void FillData(UserInfo obj)
         {
-            
             dataBox.text += $"\n\nReady\nUsername: {obj.username}\nName: {obj.name}";
         }
 

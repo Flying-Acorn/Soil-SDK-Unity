@@ -26,7 +26,8 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                         guids.Length);
                     break;
                 case <= 0:
-                    throw new UnityEditor.Build.BuildFailedException("[FABuildTools] Couldn't find Build Settings, please create one!");
+                    throw new UnityEditor.Build.BuildFailedException(
+                        "[FABuildTools] Couldn't find Build Settings, please create one!");
             }
 
             var path = AssetDatabase.GUIDToAssetPath(guids[0]);

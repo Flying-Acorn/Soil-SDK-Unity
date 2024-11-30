@@ -16,7 +16,7 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
         [SerializeField] private TMPro.TextMeshProUGUI virtualCurrencyItemsText;
         [SerializeField] private Button buyButton;
         public Action<string> OnClick;
-        
+
         private void Start()
         {
             buyButton.onClick.AddListener(() => OnClick?.Invoke(skuText.text));

@@ -37,7 +37,7 @@ namespace FlyingAcorn.Analytics
 
             return $"{LogTag}-[{callerClassName}] ";
         }
-        
+
         public static void Log(object message, FlyingAcornErrorSeverity severity)
         {
             switch (severity)

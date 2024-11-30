@@ -12,7 +12,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static string CacheKey => PrefsPrefix + "latest_remote_config_data";
 
         [UsedImplicitly] public static JObject ReceivedRemoteConfigData;
-        
+
         internal static JObject CachedRemoteConfigData
         {
             get
