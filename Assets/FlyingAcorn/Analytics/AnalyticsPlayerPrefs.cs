@@ -1,3 +1,5 @@
+using System;
+using FlyingAcorn.Soil.Core.Data;
 using UnityEngine;
 
 namespace FlyingAcorn.Analytics
@@ -17,6 +19,18 @@ namespace FlyingAcorn.Analytics
             get => (Constants.ErrorSeverity.FlyingAcornErrorSeverity)PlayerPrefs.GetInt(
                 $"{Prefix}SavedLogLevel", (int)Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity);
             set => PlayerPrefs.SetInt($"{Prefix}SavedLogLevel", (int)value);
+        }
+        
+        public static string InstallationVersion
+        {
+            get => PlayerPrefs.GetString($"{Prefix}InstallationVersion");
+            set => PlayerPrefs.SetString($"{Prefix}InstallationVersion", value);
+        }
+        
+        public static string InstallationBuild
+        {
+            get => PlayerPrefs.GetString($"{Prefix}InstallationBuild");
+            set => PlayerPrefs.SetString($"{Prefix}InstallationBuild", value);
         }
 
         public static bool UserDebugMode

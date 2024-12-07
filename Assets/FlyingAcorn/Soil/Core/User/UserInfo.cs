@@ -141,7 +141,9 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
                     { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion },
                     { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() },
-                    { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode }
+                    { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode },
+                    { $"{KeysPrefix}installation_version", AnalyticsPlayerPrefs.InstallationVersion },
+                    { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild }
                 };
             }
 

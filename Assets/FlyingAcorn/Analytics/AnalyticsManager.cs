@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlyingAcorn.Soil.Core.Data;
 using JetBrains.Annotations;
 using UnityEngine;
 
@@ -38,8 +39,12 @@ namespace FlyingAcorn.Analytics
             Instance._started = true;
             MyDebug.Verbose("AnalyticsManager.Start");
             if (AnalyticsPlayerPrefs.SessionCount <= 0)
+            {
+                AnalyticsPlayerPrefs.InstallationVersion = Application.version;
+                AnalyticsPlayerPrefs.InstallationBuild = DataUtils.GetUserBuildNumber();
                 AnalyticServiceProvider?.DesignEvent("FA_session", "first");
-            
+            }
+
             AnalyticsPlayerPrefs.SessionCount++;
             AnalyticServiceProvider?.DesignEvent(AnalyticsPlayerPrefs.SessionCount, "FA_session", "start");
         }
@@ -48,7 +53,7 @@ namespace FlyingAcorn.Analytics
         {
             if (!Instance._started)
                 return;
-            
+
             if (pauseStatus)
             {
                 AnalyticServiceProvider?.DesignEvent("FA_session", "pause");
@@ -83,11 +88,12 @@ namespace FlyingAcorn.Analytics
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-            
+
             Instance.SetConsents();
         }
-        
-        public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
+
+        public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId,
+            string cartType,
             StoreType storeType, string receipt, Dictionary<string, object> customData)
         {
             if (!Instance || Instance.AnalyticServiceProvider == null)
@@ -95,9 +101,11 @@ namespace FlyingAcorn.Analytics
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-            Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt, customData);
+
+            Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType,
+                receipt, customData);
         }
-        
+
         // ATTENTION: DO NOT USE MYDEBUG HERE
         public static void ErrorEvent(Constants.ErrorSeverity.FlyingAcornErrorSeverity severity, string message)
         {
@@ -106,9 +114,10 @@ namespace FlyingAcorn.Analytics
                 Debug.Log("Analytics not initialized");
                 return;
             }
+
             Instance.AnalyticServiceProvider.ErrorEvent(severity, message);
         }
-        
+
         public static void UserSegmentation(string name, string value)
         {
             if (!Instance || Instance.AnalyticServiceProvider == null)
@@ -116,6 +125,7 @@ namespace FlyingAcorn.Analytics
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
+
             Instance.AnalyticServiceProvider.UserSegmentation(name, value);
         }
 
@@ -126,6 +136,7 @@ namespace FlyingAcorn.Analytics
                 MyDebug.LogWarning("Instance is null");
                 return;
             }
+
             Instance.Init();
         }
 
@@ -138,6 +149,7 @@ namespace FlyingAcorn.Analytics
                 MyDebug.LogWarning("Init already called");
                 return;
             }
+
             InitCalled = true;
             AnalyticServiceProvider.Initialize();
         }
@@ -148,6 +160,7 @@ namespace FlyingAcorn.Analytics
             {
                 return null;
             }
+
             return Instance.services.Find(s => s.GetType() == type);
         }
 
