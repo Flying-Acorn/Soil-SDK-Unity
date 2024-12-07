@@ -24,14 +24,13 @@ namespace FlyingAcorn.Soil.Core
                 case true when !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access):
                     try
                     {
+                        _initTask = null;
                         _initTask = Authenticate.RefreshTokenIfNeeded();
                     }
                     catch (Exception e)
                     {
-                        MyDebug.LogWarning("Soil: " + $"Failed to refresh token " + e.Message + " " +
-                                           e.StackTrace);
+                        MyDebug.LogWarning("Soil-Core: " + $"Failed to refresh token {e.Message} {e.StackTrace}");
                     }
-
                     break;
                 case true:
                     return;
@@ -40,7 +39,7 @@ namespace FlyingAcorn.Soil.Core
             if (UserPlayerPrefs.AppID == Constants.DemoAppID ||
                 UserPlayerPrefs.SDKToken == Constants.DemoAppSDKToken)
                 MyDebug.LogError(
-                    $"Soil-Core: AppID or SDKToken are not set. You must create and fill a {nameof(SDKSettings)}. Using demo values.");
+                    $"Soil-Core: AppID or SDKToken are not set. You must create and fill {nameof(SDKSettings)}. Using demo values.");
 
             try
             {

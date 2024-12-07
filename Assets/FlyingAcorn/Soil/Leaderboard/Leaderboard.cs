@@ -27,14 +27,7 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         public static async Task<UserScore> ReportScore(string score, string leaderboardId)
         {
-            try
-            {
-                await Initialize();
-            }
-            catch (Exception e)
-            {
-                throw new Exception(e.Message);
-            }
+            await Initialize();
 
             var payload = new Dictionary<string, object>
             {

@@ -112,8 +112,8 @@ namespace FlyingAcorn.Soil.Core.User
 
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Refresh))
             {
-                Debug.LogException(new Exception("Refresh token is invalid. Re-registering player."));
-                return;
+                // TODO: Check user lifetime and re-register
+                throw new Exception("Refresh token is invalid. Re-register player."); 
             }
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, string>

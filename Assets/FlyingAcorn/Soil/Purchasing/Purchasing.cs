@@ -17,7 +17,7 @@ namespace FlyingAcorn.Soil.Purchasing
 {
     public static class Purchasing
     {
-        private static bool _initCalled;
+        private static bool _eventsSubscribed;
         private static readonly string PurchasingBaseUrl = $"{Core.Data.Constants.ApiUrl}/iap";
         private static readonly string PurchaseBaseUrl = $"{PurchasingBaseUrl}/purchase";
 
@@ -44,21 +44,14 @@ namespace FlyingAcorn.Soil.Purchasing
 
         public static async Task Initialize()
         {
-            if (_initCalled)
+            await SoilServices.Initialize();
+            
+            if (_eventsSubscribed)
                 return;
-
-            _initCalled = true;
-            try
-            {
-                await SoilServices.Initialize();
-            }
-            catch (Exception)
-            {
-                _initCalled = false;
-                throw;
-            }
-
+            _eventsSubscribed = true;
+            OnPurchasingInitialized -= SafeVerifyAllPurchases;
             OnPurchasingInitialized += SafeVerifyAllPurchases;
+            OnItemsReceived -= PurchasingInitialized;
             OnItemsReceived += PurchasingInitialized;
             _ = QueryItems();
         }
