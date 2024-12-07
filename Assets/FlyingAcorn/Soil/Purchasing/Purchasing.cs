@@ -30,15 +30,9 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
         [UsedImplicitly] public static Action OnPurchasingInitialized;
-        [UsedImplicitly] public static List<Item> AvailableItems => AllItems.FindAll(item => item.enabled);
+        [UsedImplicitly] public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
 
         private static Action<CreateResponse> _onCreatePurchaseResponse;
-
-        private static List<Item> AllItems
-        {
-            get => PurchasingPlayerPrefs.CachedItems;
-            set => PurchasingPlayerPrefs.CachedItems = value;
-        }
 
         public static bool Ready { get; private set; }
 
@@ -165,7 +159,7 @@ namespace FlyingAcorn.Soil.Purchasing
             var purchase = response.purchase;
             PurchasingPlayerPrefs.AddUnverifiedPurchaseId(purchase.purchase_id);
             Application.OpenURL(purchase.pay_url);
-            OnPurchaseStart?.Invoke(AllItems.Find(item => item.sku == purchase.sku));
+            OnPurchaseStart?.Invoke(PurchasingPlayerPrefs.CachedItems.Find(item => item.sku == purchase.sku));
         }
 
         [UsedImplicitly]
@@ -177,7 +171,7 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void OnVerificationResponse(VerifyResponse response)
         {
             var purchase = response.purchase;
-            if (purchase.paid || purchase.expired || !AllItems.Exists(item => item.sku == purchase.sku))
+            if (purchase.paid || purchase.expired || !PurchasingPlayerPrefs.CachedItems.Exists(item => item.sku == purchase.sku))
                 PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchase.purchase_id);
             if (purchase.paid)
                 OnPurchaseSuccessful?.Invoke(purchase);

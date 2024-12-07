@@ -2,6 +2,7 @@
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
+using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
@@ -14,8 +15,6 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
         {
             Debug.Log(
                 $"[FABuildTools] OnPreprocessBuild for target {report.summary.platform} at path {report.summary.outputPath}");
-
-            #region Set Build Properties LastBuildTime - Reference: https: //answers.unity.com/questions/1425758/how-can-i-find-all-instances-of-a-scriptable-objec.html
 
             //FindAssets uses tags check documentation for more info
             var guids = AssetDatabase.FindAssets($"t:{typeof(BuildData)}");
@@ -43,14 +42,32 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 #if UNITY_CLOUD_BUILD
             buildSettings.RepositoryVersion += "-cloud";
 #endif
-            if (buildSettings.StoreName == Constants.Store.Unknown)
-                throw new UnityEditor.Build.BuildFailedException("[FABuildTools] Store name is not set in BuildData");
+            switch (buildSettings.StoreName)
+            {
+                case Constants.Store.Googleplay:
+                case Constants.Store.Cafebazaar:
+                case Constants.Store.Myket:
+#if !UNITY_ANDROID
+                    throw new BuildFailedException(
+                        "[FABuildTools] Store name is set to Android store but the platform is not Android");
+#endif
+                    break;
+                case Constants.Store.AppStore:
+#if !UNITY_IOS
+                        throw new BuildFailedException("[FABuildTools] Store name is set to iOS store but the platform is not iOS");
+#endif
+                    break;
+                case Constants.Store.BetaChannel:
+                case Constants.Store.Postman:
+                    break;
+                case Constants.Store.Unknown:
+                default:
+                    throw new BuildFailedException("[FABuildTools] Store name is not set");
+            }
 
             EditorUtility.SetDirty(buildSettings);
             Debug.LogFormat("[FABuildTools] Updated settings LastBuildDate to \"{0}\". Settings Path: {1}",
                 buildSettings.LastBuildTime, path);
-
-            #endregion
         }
     }
 }

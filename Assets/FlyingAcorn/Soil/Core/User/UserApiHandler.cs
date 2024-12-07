@@ -39,8 +39,8 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new Exception($"Network error while fetching player info. Response: {responseString}");
             }
 
-            Debug.Log($"Player info fetched successfully. Response: {responseString}");
             UserPlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            Debug.Log($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
@@ -73,8 +73,8 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new Exception($"Network error while updating player info. Response: {responseString}");
             }
 
-            Debug.Log($"Player info updated successfully. Response: {responseString}");
             UserPlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            Debug.Log($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
     }
