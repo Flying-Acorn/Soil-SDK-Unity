@@ -24,6 +24,12 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             _ = Purchasing.Initialize();
         }
 
+        private void OnApplicationFocus(bool focusStatus)
+        {
+            if (focusStatus)
+                VerifyAllPurchases();
+        }
+
         private void OnPurchaseStart(Item obj)
         {
             Failed($"Purchasing {obj.sku}...");
