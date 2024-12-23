@@ -1,0 +1,14 @@
+using System;
+using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
+
+namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
+{
+    public interface IPlatformAuthentication
+    {
+        public ThirdPartySettings ThirdPartySettings { get; }
+        public Action<AuthenticatedUser> OnSignInSuccessCallback { get; set; }
+        public Action<string> OnSignInFailureCallback { get; set; }
+
+        public void Authenticate();
+    }
+}

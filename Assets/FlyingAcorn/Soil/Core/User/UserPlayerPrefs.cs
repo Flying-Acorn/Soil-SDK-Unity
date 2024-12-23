@@ -59,6 +59,15 @@ namespace FlyingAcorn.Soil.Core.User
             }
         }
 
+        public static bool DeepLinkActivated
+        {
+            get
+            {
+                var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
+                return settings && settings.DeepLinkEnabled;
+            }
+        }
+
 
         internal static string GetKeysPrefix()
         {

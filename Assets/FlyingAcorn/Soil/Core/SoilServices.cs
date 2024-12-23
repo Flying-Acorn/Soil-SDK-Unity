@@ -5,20 +5,24 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
 using FlyingAcorn.Soil.Core.User;
 using JetBrains.Annotations;
+using UnityEngine;
 using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core
 {
     public static class SoilServices
     {
+        private static DeepLinkHandler _deepLinkComponent;
         private static bool _readyBroadcasted;
         private static Task _initTask;
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
         [UsedImplicitly] public static bool Ready => _initTask is { IsCompleted: true };
 
-        public static async Task Initialize()
+        public static async Task Initialize(GameObject persistantObjectToAttachDependencies = null)
         {
+            SetupDeeplink(persistantObjectToAttachDependencies);
+
             switch (Ready)
             {
                 case true when !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access):
@@ -31,6 +35,7 @@ namespace FlyingAcorn.Soil.Core
                     {
                         MyDebug.LogWarning("Soil-Core: " + $"Failed to refresh token {e.Message} {e.StackTrace}");
                     }
+
                     break;
                 case true:
                     return;
@@ -54,8 +59,27 @@ namespace FlyingAcorn.Soil.Core
             }
 
             if (_readyBroadcasted) return;
+            MyDebug.Info("Soil-Core: Services are ready");
+
             _readyBroadcasted = true;
             OnServicesReady?.Invoke();
+        }
+
+        [UsedImplicitly]
+        public static void SetupDeeplink(GameObject persistantObjectToAttachDependencies)
+        {
+            if (!UserPlayerPrefs.DeepLinkActivated) return;
+            if (_deepLinkComponent)
+            {
+                MyDebug.Info("Soil-Core: DeepLinkHandler already attached to an object.");
+                return;
+            }
+
+            if (persistantObjectToAttachDependencies)
+                _deepLinkComponent = persistantObjectToAttachDependencies.AddComponent<DeepLinkHandler>();
+            else
+                MyDebug.LogWarning(
+                    "Soil-Core: DeepLinkHandler was not attached to any object. DeepLinkActivated will not work.");
         }
     }
 }

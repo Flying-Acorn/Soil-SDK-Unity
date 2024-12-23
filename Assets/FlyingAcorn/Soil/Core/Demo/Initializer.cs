@@ -28,7 +28,9 @@ namespace FlyingAcorn.Soil.Core.Demo
 
         private static async void Initialize()
         {
-            await SoilServices.Initialize();
+            if (Instance == null)
+                throw new Exception("Initializer instance is null");
+            await SoilServices.Initialize(Instance.gameObject);
         }
     }
 }

@@ -4,5 +4,8 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Core/User/Demo/SoilThirdAuthExample.unity
+    guid: 747995c3cbbe9443493f1d11652359d1
   m_configObjects: {}

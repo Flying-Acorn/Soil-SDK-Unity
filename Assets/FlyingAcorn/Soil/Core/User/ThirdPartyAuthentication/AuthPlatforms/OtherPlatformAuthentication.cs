@@ -1,0 +1,22 @@
+using Cdm.Authentication.Browser;
+using UnityEngine;
+
+namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
+{
+    public class OtherPlatformAuthentication : IOSAuthentication
+    {
+        public OtherPlatformAuthentication(ThirdPartySettings thirdPartySettings) : base(thirdPartySettings)
+        {
+        }
+
+        public override IBrowser GetSuitableBrowsers()
+        {
+            if (Application.platform == RuntimePlatform.Android || Application.platform == RuntimePlatform.IPhonePlayer)
+            {
+                return new DeepLinkBrowser();
+            }
+
+            return new StandaloneBrowser();
+        }
+    }
+}
