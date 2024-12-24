@@ -6,6 +6,24 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity
+    guid: 68c3b7e9762be47f9b600ee99006d76e
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Core/Demo/SoilExample.unity
+    guid: cd8af88fb2e53462badce8a6cd5bbe61
+  - enabled: 1
     path: Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/Demo/SoilThirdAuthExample.unity
     guid: 747995c3cbbe9443493f1d11652359d1
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/CloudSave/Demo/SoilCloudSaveExample.unity
+    guid: 6fcb263a3100244188f289990c0021af
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Leaderboard/Demo/SoilLeaderboardExample.unity
+    guid: 421253a49ed1944bfa52abfadb761df1
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Purchasing/Demo/SoilPurchasingExample.unity
+    guid: 216b7ddd8c755476a8a2e03497356721
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/RemoteConfig/Demo/SoilRemoteConfigExample.unity
+    guid: 410c04b094fa44110ab3d4da1bea1062
   m_configObjects: {}

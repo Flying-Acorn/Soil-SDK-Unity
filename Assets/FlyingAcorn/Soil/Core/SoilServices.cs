@@ -12,6 +12,7 @@ namespace FlyingAcorn.Soil.Core
 {
     public static class SoilServices
     {
+        private static bool _deepLinkWarningBroadcasted;
         private static DeepLinkHandler _deepLinkComponent;
         private static bool _readyBroadcasted;
         private static Task _initTask;
@@ -71,15 +72,21 @@ namespace FlyingAcorn.Soil.Core
             if (!UserPlayerPrefs.DeepLinkActivated) return;
             if (_deepLinkComponent)
             {
-                MyDebug.Info("Soil-Core: DeepLinkHandler already attached to an object.");
+                MyDebug.Verbose("Soil-Core: DeepLinkHandler already attached to an object.");
                 return;
             }
 
             if (persistantObjectToAttachDependencies)
                 _deepLinkComponent = persistantObjectToAttachDependencies.AddComponent<DeepLinkHandler>();
             else
-                MyDebug.LogWarning(
-                    "Soil-Core: DeepLinkHandler was not attached to any object. DeepLinkActivated will not work.");
+            {
+                if (!_deepLinkWarningBroadcasted)
+                {
+                    _deepLinkWarningBroadcasted = true;
+                    MyDebug.LogWarning(
+                        "Soil-Core: DeepLinkHandler was not attached to any object. DeepLinkActivated will not work.");
+                }
+            }
         }
     }
 }
