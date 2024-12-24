@@ -71,7 +71,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                         throw new Exception("Link found but alternate user is null");
                     var tokens = linkResponse.alternate_user.tokens;
                     UserApiHandler.ReplaceUser(linkResponse.alternate_user, tokens);
-                    LinkingPlayerPrefs.AddLink(linkResponse);
                     break;
                 case (int)Constants.LinkStatus.AlreadyLinked:
                 case (int)Constants.LinkStatus.LinkCreated:
@@ -80,6 +79,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                     throw new Exception(
                         $"Unaccepted link status: {linkResponse.detail.code} - {linkResponse.detail.message}");
             }
+
+            LinkingPlayerPrefs.AddLink(linkResponse);
 
             return linkResponse;
         }
@@ -112,14 +113,14 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             {
                 throw new Exception($"Network error while fetching player info. Response: {responseString}");
             }
-            
+
             var getLinksResponse = JsonConvert.DeserializeObject<LinkGetResponse>(responseString);
             LinkingPlayerPrefs.Links = getLinksResponse.linked_accounts;
             return getLinksResponse;
         }
 
         [UsedImplicitly]
-        internal static Task<UnlinkResponse> Unlink(ThirdPartySettings settings)
+        internal static async Task<UnlinkResponse> Unlink(ThirdPartySettings settings)
         {
             var body = new Dictionary<string, object>
             {
@@ -138,23 +139,24 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                return Task.FromResult(new UnlinkResponse
+                return new UnlinkResponse
                 {
                     detail = new LinkStatusResponse
                     {
                         code = (int)Constants.LinkStatus.LinkNotFound,
                         message = Constants.LinkStatus.LinkNotFound.ToString()
                     }
-                });
+                };
             }
 
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception($"Network error while updating player info. Response: {responseString}");
             }
-            
-            LinkingPlayerPrefs.RemoveLink(settings.ThirdParty);
-            return Task.FromResult(JsonConvert.DeserializeObject<UnlinkResponse>(responseString));
+
+            var unlinkResponse = JsonConvert.DeserializeObject<UnlinkResponse>(responseString);
+            LinkingPlayerPrefs.RemoveLink(unlinkResponse);
+            return unlinkResponse;
         }
     }
 }

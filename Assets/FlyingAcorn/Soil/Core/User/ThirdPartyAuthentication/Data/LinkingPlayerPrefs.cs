@@ -26,10 +26,12 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
             }
         }
 
-        internal static void RemoveLink(Constants.ThirdParty settingsThirdParty)
+        internal static void RemoveLink(UnlinkResponse unlinkResponse)
         {
+            MyDebug.Info($"Removing link for {unlinkResponse.detail.app_party.party}");
             var links = Links;
-            links.RemoveAll(l => l.detail.app_party.party == settingsThirdParty.ToString());
+            links.RemoveAll(l => l.detail.app_party.party == unlinkResponse.detail.app_party.party);
+            Links = links;
         }
 
         public static List<LinkPostResponse> Links
