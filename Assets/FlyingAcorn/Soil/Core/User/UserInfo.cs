@@ -54,6 +54,13 @@ namespace FlyingAcorn.Soil.Core.User
         [JsonProperty] internal string uuid;
         [JsonProperty] internal List<AppParty> linkable_parties;
 
+        public UserInfo ChangeUser(UserInfo newUser)
+        {
+            newUser.Validate();
+            uuid = newUser.uuid;
+            return RecordAvatarAsset(newUser.avatar_asset).RecordName(newUser.name).RecordUsername(newUser.username);
+        }
+
         public UserInfo RecordCustomProperty(string key, object value)
         {
             this.custom_properties[key] = value;
@@ -161,6 +168,16 @@ namespace FlyingAcorn.Soil.Core.User
 
                 return result;
             }
+        }
+
+        public void Validate()
+        {
+            if (string.IsNullOrEmpty(this.uuid))
+                throw new Exception("uuid is required");
+            if (string.IsNullOrEmpty(this.username))
+                throw new Exception("username is required");
+            if (string.IsNullOrEmpty(this.name))
+                throw new Exception("name is required");
         }
     }
 }

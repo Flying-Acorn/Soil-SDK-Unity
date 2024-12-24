@@ -15,7 +15,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
     public class IOSAuthentication : IPlatformAuthentication
     {
         public ThirdPartySettings ThirdPartySettings { get; }
-        public Action<LinkAccountInfo> OnSignInSuccessCallback { get; set; }
+        public Action<LinkAccountInfo, ThirdPartySettings> OnSignInSuccessCallback { get; set; }
         public Action<string> OnSignInFailureCallback { get; set; }
         private static CancellationTokenSource _cancellationTokenSource;
         private AuthenticationSession _authenticationSession;
@@ -29,7 +29,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         {
             if (_authenticationSession == null)
             {
-                if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.Google)
+                if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.google)
                 {
                     _authenticationSession = null;
                 }
@@ -60,11 +60,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             {
                 var accessTokenResponse = await _authenticationSession.AuthenticateAsync();
                 var authenticatedUser = await GetUserInfoAsync();
-                OnSignInSuccessCallback?.Invoke(authenticatedUser);
-
-
-                MyDebug.Info(
-                    $"Access token response:\n {JsonConvert.SerializeObject(accessTokenResponse, Formatting.Indented)}");
+                OnSignInSuccessCallback?.Invoke(authenticatedUser, ThirdPartySettings);
             }
             catch (AuthorizationCodeRequestException ex)
             {

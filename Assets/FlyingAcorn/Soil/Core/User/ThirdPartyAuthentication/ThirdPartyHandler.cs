@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
@@ -9,18 +10,37 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
     public abstract class ThirdPartyHandler
     {
+        private static Task _thirdPartyInitializer;
         public const string AndroidSettingName = "AndroidGoogleAuthSetting";
         public const string IOSSettingName = "IOSGoogleAuthSetting";
+        public const string EditorSettingsName = "EditorGoogleAuthSetting";
 
-        public static string CurrentPlatformSettingName =>
-            Application.platform == RuntimePlatform.Android ? AndroidSettingName : IOSSettingName;
+        private static string CurrentPlatformSettingName
+        {
+            get
+            {
+                if (Application.isEditor)
+                    return EditorSettingsName;
+                if (Application.platform == RuntimePlatform.Android)
+                    return AndroidSettingName;
+                if (Application.platform == RuntimePlatform.IPhonePlayer)
+                    return IOSSettingName;
+                return null;
+            }
+        }
 
-        public static Action<LinkModel> OnLinkSuccessCallback { get; set; }
+        public static Action<LinkPostResponse> OnLinkSuccessCallback { get; set; }
+        public static Action<UnlinkResponse> OnUnlinkSuccessCallback { get; set; }
+        public static Action<LinkGetResponse> OnGetAllLinksSuccessCallback { get; set; }
         public static Action<string> OnLinkFailureCallback { get; set; }
+        public static Action<string> OnUnlinkFailureCallback { get; set; }
+        public static Action<string> OnGetAllLinksFailureCallback { get; set; }
 
         public static async Task Initialize()
         {
             await SoilServices.Initialize();
+            _thirdPartyInitializer ??= UserApiHandler.FetchPlayerInfo();
+            await _thirdPartyInitializer;
         }
 
         public static async void Link(Constants.ThirdParty party)
@@ -49,17 +69,47 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             authenticationHandler.OnSignInSuccessCallback += OnSigninSuccess;
             authenticationHandler.Authenticate();
         }
-
-        private static Task<LinkModel> LinkSoilUser(LinkAccountInfo thirdPartyUser)
-        {
-            throw new NotImplementedException();
-        }
-
-        private static async void OnSigninSuccess(LinkAccountInfo thirdPartyUser)
+        
+        public static async void Unlink(Constants.ThirdParty party)
         {
             try
             {
-                var authenticatedUser = await LinkSoilUser(thirdPartyUser);
+                await Initialize();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+                OnUnlinkFailureCallback?.Invoke(e.Message);
+                return;
+            }
+
+            var settings = GetConfigFile(party);
+            var unlinkResponse = await ThirdPartyAPIHandler.Unlink(settings);
+            OnUnlinkSuccessCallback?.Invoke(unlinkResponse);
+        }
+        
+        public static async void GetAllLinks()
+        {
+            try
+            {
+                await Initialize();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+                OnGetAllLinksFailureCallback?.Invoke(e.Message);
+                return;
+            }
+
+            var links = await ThirdPartyAPIHandler.GetLinks();
+            OnGetAllLinksSuccessCallback?.Invoke(links);
+        }
+
+        private static async void OnSigninSuccess(LinkAccountInfo thirdPartyUser, ThirdPartySettings settings)
+        {
+            try
+            {
+                var authenticatedUser = await ThirdPartyAPIHandler.Link(thirdPartyUser, settings);
                 OnLinkSuccessCallback?.Invoke(authenticatedUser);
             }
             catch (Exception e)
@@ -77,20 +127,12 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 throw new Exception("Third party settings not found");
             }
 
-            if (party != Constants.ThirdParty.Google)
+            if (party != Constants.ThirdParty.google)
             {
                 throw new NotSupportedException($"Third party {party} is not supported");
             }
 
             return configurations;
-        }
-
-        [Serializable]
-        public class LinkModel
-        {
-            [UsedImplicitly] public string ThirdParty { get; set; }
-            [UsedImplicitly] public LinkAccountInfo User { get; set; }
-            [UsedImplicitly] public string LinkStatus { get; set; }
         }
     }
 }

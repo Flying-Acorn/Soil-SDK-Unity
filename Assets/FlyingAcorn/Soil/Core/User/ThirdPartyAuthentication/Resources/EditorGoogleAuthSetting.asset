@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8813c43ffe13744f9b6fdce0425bda6d, type: 3}
+  m_Name: EditorGoogleAuthSetting
+  m_EditorClassIdentifier: 
+  platform: 0
+  thirdParty: 0
+  clientId: 447535973525-f202b4smp94glo12tfiqidd9l30hr7j0.apps.googleusercontent.com
+  clientSecret: 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
+  scope: email profile
+  redirectUri: http://localhost:8080/myauthapp/oauth2/

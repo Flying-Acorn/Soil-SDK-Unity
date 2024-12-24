@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
+using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -19,6 +21,11 @@ namespace FlyingAcorn.Soil.Core.User
         public static async Task<UserInfo> FetchPlayerInfo()
         {
             Debug.Log("Fetching player info...");
+            
+            if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
+            {
+                throw new Exception("Access token is missing. Abandoning the process.");
+            }
 
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access)) // Because Authenticate is dependent on this
             {
@@ -76,6 +83,14 @@ namespace FlyingAcorn.Soil.Core.User
             UserPlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
             Debug.Log($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
+        }
+
+        public static void ReplaceUser(UserInfo linkResponseAlternateUser, TokenData tokens)
+        {
+            linkResponseAlternateUser.Validate();
+            tokens.Validate();
+            UserPlayerPrefs.UserInfo = UserPlayerPrefs.UserInfo.ChangeUser(linkResponseAlternateUser);
+            UserPlayerPrefs.TokenData = UserPlayerPrefs.TokenData.ChangeTokenData(tokens);
         }
     }
 }

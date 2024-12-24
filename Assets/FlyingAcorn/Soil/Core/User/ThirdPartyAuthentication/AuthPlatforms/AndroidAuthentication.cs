@@ -9,7 +9,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
     public class AndroidAuthentication : IPlatformAuthentication
     {
         public ThirdPartySettings ThirdPartySettings { get; }
-        public Action<LinkAccountInfo> OnSignInSuccessCallback { get; set; }
+        public Action<LinkAccountInfo, ThirdPartySettings> OnSignInSuccessCallback { get; set; }
         public Action<string> OnSignInFailureCallback { get; set; }
 
         public AndroidAuthentication(ThirdPartySettings thirdPartySettings)
@@ -18,7 +18,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         }
         public void Authenticate()
         {
-            if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.Google)
+            if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.google)
             {
                 Debug.LogError("AndroidAuthentication only supports Google");
                 return;
@@ -26,7 +26,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 
             switch (ThirdPartySettings.ThirdParty)
             {
-                case Constants.ThirdParty.Google:
+                case Constants.ThirdParty.google:
                     CredentialManager.OnLoginSucess.RemoveListener(OnLoginSuccess);
                     CredentialManager.OnLoginFailed.RemoveListener(OnLoginFailed);
                     CredentialManager.OnLoginSucess.AddListener(OnLoginSuccess);
@@ -59,7 +59,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
                 profile_picture = arg0.profilePictureUri,
                 extra_data = extraData
             };
-            OnSignInSuccessCallback?.Invoke(user);
+            OnSignInSuccessCallback?.Invoke(user, ThirdPartySettings);
         }
     }
 }
