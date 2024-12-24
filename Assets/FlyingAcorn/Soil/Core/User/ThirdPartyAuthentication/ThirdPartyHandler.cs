@@ -12,7 +12,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public const string AndroidSettingName = "AndroidGoogleAuthSetting";
         public const string IOSSettingName = "IOSGoogleAuthSetting";
 
-        public static string CurrentPlatformSettingName => Application.platform == RuntimePlatform.Android ? AndroidSettingName : IOSSettingName;
+        public static string CurrentPlatformSettingName =>
+            Application.platform == RuntimePlatform.Android ? AndroidSettingName : IOSSettingName;
 
         public static Action<LinkModel> OnLinkSuccessCallback { get; set; }
         public static Action<string> OnLinkFailureCallback { get; set; }
@@ -34,6 +35,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 OnLinkFailureCallback?.Invoke(e.Message);
                 return;
             }
+
             var settings = GetConfigFile(party);
             IPlatformAuthentication authenticationHandler = Application.platform switch
             {
@@ -48,14 +50,23 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             authenticationHandler.Authenticate();
         }
 
-        private static void OnSigninSuccess(AuthenticatedUser obj)
+        private static Task<LinkModel> LinkSoilUser(LinkAccountInfo thirdPartyUser)
         {
-            OnLinkSuccessCallback?.Invoke(new LinkModel
+            throw new NotImplementedException();
+        }
+
+        private static async void OnSigninSuccess(LinkAccountInfo thirdPartyUser)
+        {
+            try
             {
-                ThirdParty = Constants.ThirdParty.Google,
-                User = obj,
-                Status = Constants.LinkStatus.LinkCreated
-            });
+                var authenticatedUser = await LinkSoilUser(thirdPartyUser);
+                OnLinkSuccessCallback?.Invoke(authenticatedUser);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning(e);
+                OnLinkFailureCallback?.Invoke(e.Message);
+            }
         }
 
         private static ThirdPartySettings GetConfigFile(Constants.ThirdParty party)
@@ -77,9 +88,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         [Serializable]
         public class LinkModel
         {
-            [UsedImplicitly] public Constants.ThirdParty ThirdParty { get; set; }
-            [UsedImplicitly] public AuthenticatedUser User { get; set; }
-            [UsedImplicitly] public Constants.LinkStatus Status { get; set; }
+            [UsedImplicitly] public string ThirdParty { get; set; }
+            [UsedImplicitly] public LinkAccountInfo User { get; set; }
+            [UsedImplicitly] public string LinkStatus { get; set; }
         }
     }
 }

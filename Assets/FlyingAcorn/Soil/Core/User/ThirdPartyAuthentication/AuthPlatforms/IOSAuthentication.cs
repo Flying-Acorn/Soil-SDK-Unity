@@ -15,7 +15,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
     public class IOSAuthentication : IPlatformAuthentication
     {
         public ThirdPartySettings ThirdPartySettings { get; }
-        public Action<AuthenticatedUser> OnSignInSuccessCallback { get; set; }
+        public Action<LinkAccountInfo> OnSignInSuccessCallback { get; set; }
         public Action<string> OnSignInFailureCallback { get; set; }
         private static CancellationTokenSource _cancellationTokenSource;
         private AuthenticationSession _authenticationSession;
@@ -108,7 +108,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             }
         }
 
-        private async Task<AuthenticatedUser> GetUserInfoAsync()
+        private async Task<LinkAccountInfo> GetUserInfoAsync()
         {
             if (_authenticationSession == null)
             {
@@ -121,22 +121,24 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             if (!_authenticationSession.SupportsUserInfo())
             {
                 MyDebug.LogWarning($"User info is not supported by {_authenticationSession.GetClientName()} client.");
-                return new AuthenticatedUser();
+                return new LinkAccountInfo();
             }
 
             var userInfo = await _authenticationSession.GetUserInfoAsync(_cancellationTokenSource.Token);
             MyDebug.Info($"User id: {userInfo.id}, name:{userInfo.name}, email: {userInfo.email}");
-            return new AuthenticatedUser()
+            var extraData = JsonConvert.SerializeObject(userInfo, Formatting.Indented);
+            return new LinkAccountInfo()
             {
-                Id = userInfo.id,
-                Email = userInfo.email,
-                DisplayName = userInfo.name,
-                Picture = userInfo.picture
+                social_account_id = userInfo.email,
+                email = userInfo.email,
+                display_name = userInfo.name,
+                profile_picture = userInfo.picture,
+                extra_data = extraData
             };
         }
 
 
-        public virtual IBrowser GetSuitableBrowsers()
+        protected virtual IBrowser GetSuitableBrowsers()
         {
             return new ASWebAuthenticationSessionBrowser();
         }

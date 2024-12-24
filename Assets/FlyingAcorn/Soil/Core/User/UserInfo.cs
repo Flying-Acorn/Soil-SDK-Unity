@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
@@ -51,6 +52,7 @@ namespace FlyingAcorn.Soil.Core.User
         [JsonProperty] internal Dictionary<string, object> custom_properties;
         [JsonProperty] internal string username;
         [JsonProperty] internal string uuid;
+        [JsonProperty] internal List<AppParty> linkable_parties;
 
         public UserInfo RecordCustomProperty(string key, object value)
         {

@@ -1,6 +1,7 @@
 using System;
 using CredentialBridge;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
@@ -8,7 +9,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
     public class AndroidAuthentication : IPlatformAuthentication
     {
         public ThirdPartySettings ThirdPartySettings { get; }
-        public Action<AuthenticatedUser> OnSignInSuccessCallback { get; set; }
+        public Action<LinkAccountInfo> OnSignInSuccessCallback { get; set; }
         public Action<string> OnSignInFailureCallback { get; set; }
 
         public AndroidAuthentication(ThirdPartySettings thirdPartySettings)
@@ -47,14 +48,16 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         private void OnLoginSuccess(CredentialUserData arg0)
         {
             Debug.Log($"OnLoginSuccess: {arg0}");
-            var user = new AuthenticatedUser
+            var extraData = JsonConvert.SerializeObject(arg0);
+            var user = new LinkAccountInfo
             {
-                Id = arg0.id,
-                Email = arg0.id,
-                Name = arg0.givenName,
-                LastName = arg0.familyName,
-                DisplayName = arg0.displayName,
-                Picture = arg0.profilePictureUri
+                social_account_id = arg0.id,
+                email = arg0.id,
+                name = arg0.givenName,
+                last_name = arg0.familyName,
+                display_name = arg0.displayName,
+                profile_picture = arg0.profilePictureUri,
+                extra_data = extraData
             };
             OnSignInSuccessCallback?.Invoke(user);
         }

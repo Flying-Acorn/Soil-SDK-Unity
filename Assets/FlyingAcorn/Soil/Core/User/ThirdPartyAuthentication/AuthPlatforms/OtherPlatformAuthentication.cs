@@ -9,7 +9,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         {
         }
 
-        public override IBrowser GetSuitableBrowsers()
+        protected override IBrowser GetSuitableBrowsers()
         {
             if (Application.platform == RuntimePlatform.Android || Application.platform == RuntimePlatform.IPhonePlayer)
             {

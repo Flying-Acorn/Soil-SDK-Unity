@@ -9,9 +9,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
         
         public enum LinkStatus
         {
-            SoilUserAlreadyLinked,
-            LinkCreated,
-            LinkFailed,
+            AlreadyLinked = 0,
+            LinkCreated = 1,
+            LinkFound = 2,
+            LinkDeleted = 3,
+            AnotherLinkExists = 4,
+            LinkNotFound = 5,
+            PartyNotFound = 6,
         }
     }
 }
