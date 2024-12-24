@@ -54,7 +54,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
             try
             {
-                var userScore = await Leaderboard.ReportScore(score.ToString(), "demo_dec_manual");
+                var userScore = await Leaderboard.ReportScore(score, "demo_dec_manual");
                 GetLeaderboard(userScore);
             }
             catch (Exception e)

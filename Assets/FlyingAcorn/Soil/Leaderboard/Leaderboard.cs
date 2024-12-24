@@ -25,9 +25,34 @@ namespace FlyingAcorn.Soil.Leaderboard
             await SoilServices.Initialize();
         }
 
+        [UsedImplicitly]
+        public static async Task<UserScore> ReportScore(double score, string leaderboardId)
+        {
+            var payload = new Dictionary<string, object>
+            {
+                { "score", score },
+                { "leaderboard_identifier", leaderboardId },
+                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
+            };
+            return await ReportScore(payload);
+        }
+
+        ///<summary>
+        ///Report a score to the leaderboard, preferably use ReportScore(double score, string leaderboardId) instead.
+        ///</summary>
+        [UsedImplicitly]
         public static async Task<UserScore> ReportScore(string score, string leaderboardId)
         {
-            await Initialize();
+            try
+            {
+                var doubleScore = double.Parse(score);
+                return await ReportScore(doubleScore, leaderboardId);
+            }
+            catch (Exception e)
+            {
+                if (e is not OverflowException)
+                    throw new Exception($"Soil ====> Failed to Report score. Error: {e.Message}");
+            }
 
             var payload = new Dictionary<string, object>
             {
@@ -35,6 +60,13 @@ namespace FlyingAcorn.Soil.Leaderboard
                 { "leaderboard_identifier", leaderboardId },
                 { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
             };
+            return await ReportScore(payload);
+        }
+
+        private static async Task<UserScore> ReportScore(Dictionary<string, object> payload)
+        {
+            await Initialize();
+
             var stringBody = JsonConvert.SerializeObject(payload);
 
             var client = new HttpClient();
