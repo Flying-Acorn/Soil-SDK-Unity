@@ -15,6 +15,6 @@ MonoBehaviour:
   platform: 11
   thirdParty: 0
   clientId: 447535973525-f202b4smp94glo12tfiqidd9l30hr7j0.apps.googleusercontent.com
-  clientSecret: 
+  clientSecret: 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
   scope: email profile
   redirectUri: 
