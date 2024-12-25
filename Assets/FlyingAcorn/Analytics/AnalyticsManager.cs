@@ -118,7 +118,7 @@ namespace FlyingAcorn.Analytics
             Instance.AnalyticServiceProvider.ErrorEvent(severity, message);
         }
 
-        public static void UserSegmentation(string name, string value)
+        public static void UserSegmentation(string name, string value, int dimension)
         {
             if (!Instance || Instance.AnalyticServiceProvider == null)
             {
@@ -126,7 +126,7 @@ namespace FlyingAcorn.Analytics
                 return;
             }
 
-            Instance.AnalyticServiceProvider.UserSegmentation(name, value);
+            Instance.AnalyticServiceProvider.UserSegmentation(name, value, dimension);
         }
 
         public static void Initialize()

@@ -13,7 +13,7 @@ namespace FlyingAcorn.Analytics
         string EventSeparator { get; }
         void Initialize();
         void ErrorEvent(FlyingAcornErrorSeverity severity, string message);
-        void UserSegmentation(string name, string property);
+        void UserSegmentation(string name, string property, int dimension = -1);
 
         void ResourceEvent(FlyingAcornResourceFlowType flowType, string currency, float amount, string itemType,
             string itemId);

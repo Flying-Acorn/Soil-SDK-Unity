@@ -59,7 +59,7 @@ namespace FlyingAcorn.Analytics
             }
         }
 
-        public void UserSegmentation(string name, string property)
+        public void UserSegmentation(string name, string property, int dimension)
         {
             MyDebug.Verbose(
                 $"Sending user segmentation to analytics: {name} with property: {property} for these services: {GetServiceNames()}");
