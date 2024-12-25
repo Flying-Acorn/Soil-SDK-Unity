@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Purchasing.Models;
 using Newtonsoft.Json;
@@ -16,16 +17,24 @@ namespace FlyingAcorn.Soil.Purchasing
             get
             {
                 var jsonString = PlayerPrefs.GetString(PrefsPrefix + "unverifiedPurchaseIds", "[]");
-                return JsonConvert.DeserializeObject<List<string>>(jsonString);
+                try
+                {
+                    return JsonConvert.DeserializeObject<List<string>>(jsonString);
+                }
+                catch (Exception e)
+                {
+                    MyDebug.LogWarning($"Soil ====> Failed to deserialize unverified purchase ids. Error: {e.Message}");
+                    PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", "[]");
+                    return new List<string>();
+                }
             }
-            private set =>
-                PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
+            private set => PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
         }
 
         public static void RemoveUnverifiedPurchaseId(string purchaseID)
         {
             var unverifiedPurchaseIds = UnverifiedPurchaseIds;
-            unverifiedPurchaseIds.Remove(purchaseID);
+            unverifiedPurchaseIds.RemoveAll(id => id == purchaseID);
             UnverifiedPurchaseIds = unverifiedPurchaseIds;
         }
 

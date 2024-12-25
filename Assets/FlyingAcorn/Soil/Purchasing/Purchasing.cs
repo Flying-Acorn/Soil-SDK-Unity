@@ -171,6 +171,8 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void OnVerificationResponse(VerifyResponse response)
         {
             var purchase = response.purchase;
+            if (!PurchasingPlayerPrefs.UnverifiedPurchaseIds.Contains(purchase.purchase_id))
+                return;
             if (purchase.paid || purchase.expired || !PurchasingPlayerPrefs.CachedItems.Exists(item => item.sku == purchase.sku))
                 PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchase.purchase_id);
             if (purchase.paid)
