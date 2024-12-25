@@ -40,7 +40,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
         {
             if (report.summary.platform != BuildTarget.Android)
                 return;
-            var configurations = Resources.Load<ThirdPartySettings>(ThirdPartyHandler.AndroidSettingName);
+            var configurations = Resources.Load<ThirdPartySettings>(SocialAuthentication.AndroidSettingName);
             if (!configurations || string.IsNullOrEmpty(configurations.RedirectUri))
             {
                 Debug.Log("[FABuildTools] Redirect URI not found in ThirdPartySettings");
