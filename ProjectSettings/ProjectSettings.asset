@@ -163,10 +163,10 @@ PlayerSettings:
     iPhone: com.FlyingAcorn.SoilSDK
   buildNumber:
     Standalone: 0
-    iPhone: 1
+    iPhone: 3
     tvOS: 0
   overrideDefaultApplicationIdentifier: 1
-  AndroidBundleVersionCode: 2
+  AndroidBundleVersionCode: 3
   AndroidMinSdkVersion: 28
   AndroidTargetSdkVersion: 34
   AndroidPreferredInstallLocation: 1
