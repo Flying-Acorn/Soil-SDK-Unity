@@ -138,7 +138,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             var request = new HttpRequestMessage(HttpMethod.Post, UnlinkUserUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = client.SendAsync(request).Result;
+            var response = await client.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
