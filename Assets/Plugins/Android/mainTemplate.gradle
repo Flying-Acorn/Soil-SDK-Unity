@@ -4,11 +4,11 @@ apply plugin: 'com.android.library'
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 // Android Resolver Dependencies Start
-    implementation 'androidx.appcompat:appcompat:1.4.0' // Assets/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:9
-    implementation 'androidx.credentials:credentials:1.3.0-beta02' // Assets/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:7
-    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0-beta02' // Assets/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:8
-    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.0' // Assets/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:10
-    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2' // Assets/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:11
+    implementation 'androidx.appcompat:appcompat:1.4.0' // Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:9
+    implementation 'androidx.credentials:credentials:1.3.0' // Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:7
+    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0' // Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:8
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1' // Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:10
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2' // Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/GoogleCredentialUnity/Source/Editor/MyDependencies.xml:11
 // Android Resolver Dependencies End
 **DEPS**}
 
