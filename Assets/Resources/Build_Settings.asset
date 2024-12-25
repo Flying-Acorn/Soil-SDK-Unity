@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: df22a131f7417413c989eb82bf0c02bd, type: 3}
   m_Name: Build_Settings
   m_EditorClassIdentifier: 
-  StoreName: 1
+  StoreName: 0
   BuildNumber: 1
-  LastBuildTime: 2024/12/24-19:40:16
+  LastBuildTime: 2024/12/24-20:39:15
   ScriptingBackend: IL2CPP

@@ -10,7 +10,7 @@ using Newtonsoft.Json;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
-    public static class ThirdPartyAPIHandler
+    internal static class ThirdPartyAPIHandler
     {
         private static readonly string SocialBaseUrl = $"{Authenticate.UserBaseUrl}/social";
 
@@ -32,7 +32,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         {
             if (SoilServices.UserInfo.linkable_parties == null)
                 throw new Exception("No parties to link to");
-            var party = SoilServices.UserInfo.linkable_parties.Find(p => p.party == settings.ThirdParty.ToString());
+            var party = SoilServices.UserInfo.linkable_parties.Find(p => p.party == settings.ThirdParty);
             if (party == null)
                 throw new Exception("Third party not found in linkable parties");
             return party;
@@ -66,15 +66,19 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             switch (linkResponse.detail.code)
             {
-                case (int)Constants.LinkStatus.LinkFound:
+                case Constants.LinkStatus.LinkFound:
                     if (linkResponse.alternate_user == null)
                         throw new Exception("Link found but alternate user is null");
                     var tokens = linkResponse.alternate_user.tokens;
                     UserApiHandler.ReplaceUser(linkResponse.alternate_user, tokens);
                     break;
-                case (int)Constants.LinkStatus.AlreadyLinked:
-                case (int)Constants.LinkStatus.LinkCreated:
+                case Constants.LinkStatus.AlreadyLinked:
+                case Constants.LinkStatus.LinkCreated:
                     break;
+                case Constants.LinkStatus.LinkDeleted:
+                case Constants.LinkStatus.AnotherLinkExists:
+                case Constants.LinkStatus.LinkNotFound:
+                case Constants.LinkStatus.PartyNotFound:
                 default:
                     throw new Exception(
                         $"Unaccepted link status: {linkResponse.detail.code} - {linkResponse.detail.message}");
@@ -102,7 +106,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 {
                     detail = new LinkStatusResponse
                     {
-                        code = (int)Constants.LinkStatus.LinkNotFound,
+                        code = Constants.LinkStatus.LinkNotFound,
                         message = Constants.LinkStatus.LinkNotFound.ToString()
                     },
                     linked_accounts = new List<LinkPostResponse>()
@@ -143,7 +147,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 {
                     detail = new LinkStatusResponse
                     {
-                        code = (int)Constants.LinkStatus.LinkNotFound,
+                        code = Constants.LinkStatus.LinkNotFound,
                         message = Constants.LinkStatus.LinkNotFound.ToString()
                     }
                 };

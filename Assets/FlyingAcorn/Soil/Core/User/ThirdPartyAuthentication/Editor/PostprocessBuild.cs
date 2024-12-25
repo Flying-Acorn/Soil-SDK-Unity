@@ -44,7 +44,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 
             var urlSchemes = urlTypeDict.CreateArray("CFBundleURLSchemes");
 
-            var configurations = Resources.Load<ThirdPartySettings>(ThirdPartyHandler.IOSSettingName);
+            var configurations = Resources.Load<ThirdPartySettings>(SocialAuthentication.IOSSettingName);
             if (configurations == null)
                 throw new BuildFailedException("Third party settings not found");
             urlSchemes.AddString(new Uri(configurations.RedirectUri).Scheme);

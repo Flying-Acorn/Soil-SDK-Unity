@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
@@ -8,12 +7,12 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
-    public abstract class ThirdPartyHandler
+    public abstract class SocialAuthentication
     {
         private static Task _thirdPartyInitializer;
-        public const string AndroidSettingName = "AndroidGoogleAuthSetting";
-        public const string IOSSettingName = "IOSGoogleAuthSetting";
-        public const string EditorSettingsName = "EditorGoogleAuthSetting";
+        [UsedImplicitly] public const string AndroidSettingName = "AndroidGoogleAuthSetting";
+        [UsedImplicitly] public const string IOSSettingName = "IOSGoogleAuthSetting";
+        private const string EditorSettingsName = "EditorGoogleAuthSetting";
 
         private static string CurrentPlatformSettingName
         {
@@ -69,7 +68,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             authenticationHandler.OnSignInSuccessCallback += OnSigninSuccess;
             authenticationHandler.Authenticate();
         }
-        
+
         public static async void Unlink(Constants.ThirdParty party)
         {
             try
@@ -87,8 +86,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             var unlinkResponse = await ThirdPartyAPIHandler.Unlink(settings);
             OnUnlinkSuccessCallback?.Invoke(unlinkResponse);
         }
-        
-        public static async void GetAllLinks()
+
+        public static async void GetLinks()
         {
             try
             {

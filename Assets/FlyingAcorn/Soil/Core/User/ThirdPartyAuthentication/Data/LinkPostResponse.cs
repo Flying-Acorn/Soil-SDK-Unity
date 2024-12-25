@@ -3,7 +3,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using Newtonsoft.Json;
-using UnityEngine.Serialization;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 {

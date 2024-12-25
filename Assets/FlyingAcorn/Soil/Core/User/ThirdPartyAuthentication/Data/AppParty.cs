@@ -7,6 +7,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
     public class AppParty
     {
         [JsonProperty] public string id;
-        [JsonProperty] public string party;
+        [JsonProperty] public Constants.ThirdParty party;
     }
 }

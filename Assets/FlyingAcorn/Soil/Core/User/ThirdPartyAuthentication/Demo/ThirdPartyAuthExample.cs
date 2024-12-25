@@ -22,35 +22,35 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         protected override void Awake()
         {
             base.Awake();
-            _ = ThirdPartyHandler.Initialize();
+            _ = SocialAuthentication.Initialize();
 
             statusText.text = "";
 
-            ThirdPartyHandler.OnLinkSuccessCallback += OnLinkSuccess;
-            ThirdPartyHandler.OnLinkFailureCallback += OnFailure;
-            ThirdPartyHandler.OnUnlinkSuccessCallback += OnUnlinkSuccess;
-            ThirdPartyHandler.OnUnlinkFailureCallback += OnFailure;
-            ThirdPartyHandler.OnGetAllLinksSuccessCallback += OnGetAllLinksSuccess;
-            ThirdPartyHandler.OnGetAllLinksFailureCallback += OnFailure;
+            SocialAuthentication.OnLinkSuccessCallback += OnLinkSuccess;
+            SocialAuthentication.OnLinkFailureCallback += OnFailure;
+            SocialAuthentication.OnUnlinkSuccessCallback += OnUnlinkSuccess;
+            SocialAuthentication.OnUnlinkFailureCallback += OnFailure;
+            SocialAuthentication.OnGetAllLinksSuccessCallback += OnGetAllLinksSuccess;
+            SocialAuthentication.OnGetAllLinksFailureCallback += OnFailure;
             linkGoogleButton.onClick.AddListener(LinkGoogle);
             unlinkGoogleButton.onClick.AddListener(UnlinkGoogle);
-            getAllLinksButton.onClick.AddListener(GetAllLinks);
+            getAllLinksButton.onClick.AddListener(GetLinks);
             UpdateButtons();
         }
 
-        private static void GetAllLinks()
+        private static void GetLinks()
         {
-            ThirdPartyHandler.GetAllLinks();
+            SocialAuthentication.GetLinks();
         }
 
         private static void UnlinkGoogle()
         {
-            ThirdPartyHandler.Unlink(Constants.ThirdParty.google);
+            SocialAuthentication.Unlink(Constants.ThirdParty.google);
         }
 
         private static void LinkGoogle()
         {
-            ThirdPartyHandler.Link(Constants.ThirdParty.google);
+            SocialAuthentication.Link(Constants.ThirdParty.google);
         }
 
         private void OnGetAllLinksSuccess(LinkGetResponse linkGetResponse)
@@ -79,7 +79,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         private void UpdateButtons()
         {
             var links = LinkingPlayerPrefs.Links;
-            unlinkGoogleButton.interactable = links.Any(l => l.detail.app_party.party == Constants.ThirdParty.google.ToString());
+            unlinkGoogleButton.interactable = links.Any(l => l.detail.app_party.party == Constants.ThirdParty.google);
             linkGoogleButton.interactable = !unlinkGoogleButton.interactable;
         }
     }

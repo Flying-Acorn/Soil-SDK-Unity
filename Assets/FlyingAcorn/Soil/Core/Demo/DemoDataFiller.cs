@@ -1,4 +1,3 @@
-using System;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using TMPro;

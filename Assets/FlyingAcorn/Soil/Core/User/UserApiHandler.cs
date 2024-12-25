@@ -1,11 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
-using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;

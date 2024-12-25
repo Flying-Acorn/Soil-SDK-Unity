@@ -16,28 +16,6 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User
 {
-    /* json schema:
-     {
-           "username": "username",
-           "uuid": "uuid",
-           "name": "DentalGuy53",
-           "app": "NumberChain",
-           "app_id": "uuid",
-           "bundle": "com.test1.sa",
-           "current_build": "4.0.3",
-           "created_at": "2024-09-17 09:41:28.697506+00:00",
-           "country": "FI",
-           "avatar_asset": "avatar_asset",
-           "properties": {
-               "flyingacorn_platform": "Android",
-               "flyingacorn_version": "4.0.3",
-               "flyingacorn_build": "164",
-               "flyingacorn_store_name": "AppStore",
-               "flyingacorn_package": "com.test1.sa"
-           }
-       }
-     */
-
     [UsedImplicitly]
     [Serializable]
     public class UserInfo

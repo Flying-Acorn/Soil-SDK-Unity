@@ -6,15 +6,13 @@ namespace FlyingAcorn.Soil.Demo
 {
     public class SceneSwitcher : MonoBehaviour
     {
-        private List<FeatureButton> _featureButtons = new List<FeatureButton>();
-        public static Scene DefaultScene;
-        public static Scene CurrentScene;
+        private List<FeatureButton> _featureButtons = new();
+        private static Scene _currentScene;
 
         private void Awake()
         {
             DontDestroyOnLoad(gameObject);
             _featureButtons = new List<FeatureButton>(GetComponentsInChildren<FeatureButton>());
-            DefaultScene = SceneManager.GetActiveScene();
         }
 
         private void Start()
@@ -28,8 +26,8 @@ namespace FlyingAcorn.Soil.Demo
         private static void SwitchScene(string sceneName)
         {
             if (sceneName == SceneManager.GetActiveScene().name) return;
-            if (CurrentScene.IsValid())
-                SceneManager.UnloadSceneAsync(CurrentScene);
+            if (_currentScene.IsValid())
+                SceneManager.UnloadSceneAsync(_currentScene);
             SceneManager.LoadScene(sceneName);
         }
     }
