@@ -11,9 +11,9 @@ namespace FlyingAcorn.Soil.Core.Data
             Unknown,
             BetaChannel,
             Postman,
-            Googleplay,
+            GooglePlay,
             AppStore,
-            Cafebazaar,
+            CafeBazaar,
             Myket
         }
     }

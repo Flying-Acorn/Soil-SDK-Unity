@@ -44,8 +44,8 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 #endif
             switch (buildSettings.StoreName)
             {
-                case Constants.Store.Googleplay:
-                case Constants.Store.Cafebazaar:
+                case Constants.Store.GooglePlay:
+                case Constants.Store.CafeBazaar:
                 case Constants.Store.Myket:
 #if !UNITY_ANDROID
                     throw new BuildFailedException(
