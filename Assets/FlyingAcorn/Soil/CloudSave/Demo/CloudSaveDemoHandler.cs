@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
-using FlyingAcorn.Soil.Core;
-using Newtonsoft.Json;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -32,7 +30,7 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
         {
             try
             {
-                await CloudSave.SaveAsync("USER", JsonConvert.SerializeObject(SoilServices.UserInfo));
+                await CloudSave.SaveAsync(keyInput.text, valueInput.text);
                 statusText.text = "";
             }
             catch (Exception e)
