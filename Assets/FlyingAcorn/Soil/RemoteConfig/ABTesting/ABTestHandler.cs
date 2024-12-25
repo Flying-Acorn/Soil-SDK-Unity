@@ -152,7 +152,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         private static void SendExperimentIdToAnalyze(string keyToSend)
         {
             Debug.Log("FA_ABTesting ====> Current experiment changed to " + keyToSend);
-            AnalyticsManager.UserSegmentation("ABTestingCohortID", keyToSend);
+            AnalyticsManager.UserSegmentation("ABTestingCohortID", keyToSend, 3);
         }
     }
 }
