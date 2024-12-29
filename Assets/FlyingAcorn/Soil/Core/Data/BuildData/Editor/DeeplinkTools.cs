@@ -9,7 +9,6 @@ using System;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using System.IO;
-using Unity.VisualScripting;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
