@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using JetBrains.Annotations;
@@ -10,7 +11,7 @@ namespace FlyingAcorn.Soil.Purchasing
     public static class DeeplinkHandler
     {
         private static readonly Uri PaymentDeeplink;
-        [UsedImplicitly] public static Action<Dictionary<string, string>> OnPaymentDeeplinkActivated;
+        [UsedImplicitly] internal static Action<Dictionary<string, string>> OnPaymentDeeplinkActivated;
 
         static DeeplinkHandler()
         {
@@ -26,11 +27,15 @@ namespace FlyingAcorn.Soil.Purchasing
             PaymentDeeplink = new Uri(PurchasingPlayerPrefs.GetPurchaseDeeplink());
         }
 
-        private static void OnDeepLinkActivated(string arg1, Dictionary<string, string> arg2)
+        private static void OnDeepLinkActivated(Uri invokedUri)
         {
-            if (arg1 != PaymentDeeplink.AbsolutePath) return;
-            MyDebug.Info("Payment deeplink activated");
-            OnPaymentDeeplinkActivated?.Invoke(arg2);
+            MyDebug.Info(
+                $"OnDeepLinkActivated {invokedUri.GetLeftPart(UriPartial.Authority)} {PaymentDeeplink.GetLeftPart(UriPartial.Authority)}");
+            if (invokedUri.GetLeftPart(UriPartial.Authority) !=
+                PaymentDeeplink.GetLeftPart(UriPartial.Authority)) return;
+            var parameters = invokedUri.Query.Replace("?", "");
+            var keyValuePairs = parameters.Split('&').Select(x => x.Split('=')).ToDictionary(x => x[0], x => x[1]);
+            OnPaymentDeeplinkActivated?.Invoke(keyValuePairs);
         }
     }
 }

@@ -56,7 +56,8 @@ namespace FlyingAcorn.Soil.Purchasing
                 return null;
             }
             var bundleId = Application.identifier.ToLower();
-            return $"{bundleId}://{settings.PaymentDeeplinkRoot}";
+            var uri = new Uri($"{bundleId}://{settings.PaymentDeeplinkRoot}");
+            return uri.ToString();
         }
 
         internal static List<Item> CachedItems

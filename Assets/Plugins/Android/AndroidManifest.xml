@@ -11,7 +11,7 @@
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="com.flyingacorn.soilsdk" android:host="paymentReturn" />
+        <data android:scheme="com.flyingacorn.soilsdk" android:host="paymentreturn" />
       </intent-filter>
     </activity>
   </application>

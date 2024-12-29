@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -10,6 +11,7 @@ using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Purchasing.Models;
 using FlyingAcorn.Soil.Purchasing.Models.Responses;
+using static FlyingAcorn.Soil.Purchasing.DeeplinkHandler;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -31,6 +33,7 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
         [UsedImplicitly] public static Action OnPurchasingInitialized;
+        [UsedImplicitly] public static Action<Dictionary<string, string>> OnDeeplinkActivated;
 
         [UsedImplicitly]
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
@@ -46,11 +49,20 @@ namespace FlyingAcorn.Soil.Purchasing
             if (_eventsSubscribed)
                 return;
             _eventsSubscribed = true;
+            OnPaymentDeeplinkActivated -= OpenInvoice;
+            OnPaymentDeeplinkActivated += OpenInvoice;
             OnPurchasingInitialized -= SafeVerifyAllPurchases;
             OnPurchasingInitialized += SafeVerifyAllPurchases;
             OnItemsReceived -= PurchasingInitialized;
             OnItemsReceived += PurchasingInitialized;
             _ = QueryItems();
+        }
+
+        private static void OpenInvoice(Dictionary<string, string> obj)
+        {
+            var parametersString = string.Join("&", obj.Select(pair => $"{pair.Key}={pair.Value}"));
+            MyDebug.Info($"User returned from payment. Parameters: {parametersString}");
+            OnDeeplinkActivated?.Invoke(obj);
         }
 
         private static void PurchasingInitialized(List<Item> items)

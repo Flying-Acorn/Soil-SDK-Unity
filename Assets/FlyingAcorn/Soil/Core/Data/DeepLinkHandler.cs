@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FlyingAcorn.Analytics;
 using JetBrains.Annotations;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace FlyingAcorn.Soil.Core.Data
     {
         private static DeepLinkHandler Instance { get; set; }
         public string deeplinkURL;
-        [UsedImplicitly] public static Action<string, Dictionary<string, string>> OnDeepLinkActivated;
+        [UsedImplicitly] public static Action<Uri> OnDeepLinkActivated;
 
         private void Awake()
         {
@@ -34,29 +35,14 @@ namespace FlyingAcorn.Soil.Core.Data
 
         private void DeepLinkActivated(string url)
         {
-            MyDebug.Info("Deep link activated: " + url);
             deeplinkURL = url;
 
-            var uir = new Uri(url);
-            var scheme = uir.AbsolutePath;
-            var deeplinkRightSide = uir.Query.TrimStart('?');
-            var equations = deeplinkRightSide.Split('&');
-            var keyValues = new Dictionary<string, string>();
-            foreach (var equation in equations)
-            {
-                try
-                {
-                    var key = equation.Split('=')[0];
-                    var value = equation.Split('=')[1];
-                    keyValues.Add(key, value);
-                }
-                catch (Exception e)
-                {
-                    MyDebug.LogWarning("Error parsing deep link: " + e.Message);
-                }
-            }
+            var uri = new Uri(url);
 
-            OnDeepLinkActivated?.Invoke(scheme, keyValues);
+            MyDebug.Verbose(
+                $"Deep link activated: {uri.GetLeftPart(UriPartial.Path)} with key values: " +
+                $"{string.Join(", ", uri.Query.Split('&').Select(x => x.Split('=')).Select(x => $"{x[0]}={x[1]}"))}");
+            OnDeepLinkActivated?.Invoke(uri);
         }
     }
 }
