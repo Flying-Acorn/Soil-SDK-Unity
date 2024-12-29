@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Purchasing.Models;
 using Newtonsoft.Json;
@@ -28,7 +29,8 @@ namespace FlyingAcorn.Soil.Purchasing
                     return new List<string>();
                 }
             }
-            private set => PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
+            private set =>
+                PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
         }
 
         public static void RemoveUnverifiedPurchaseId(string purchaseID)
@@ -43,6 +45,18 @@ namespace FlyingAcorn.Soil.Purchasing
             var unverifiedPurchaseIds = UnverifiedPurchaseIds;
             unverifiedPurchaseIds.Add(purchaseId);
             UnverifiedPurchaseIds = unverifiedPurchaseIds;
+        }
+
+        public static string GetPurchaseDeeplink()
+        {
+            var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
+            if (settings == null || string.IsNullOrEmpty(settings.PaymentDeeplinkRoot))
+            {
+                MyDebug.LogWarning("[Soil] Payment deeplink is not set in SDKSettings. Please set it.");
+                return null;
+            }
+            var bundleId = Application.identifier.ToLower();
+            return $"{bundleId}://{settings.PaymentDeeplinkRoot}";
         }
 
         internal static List<Item> CachedItems

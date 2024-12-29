@@ -9,6 +9,7 @@ using System;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using System.IO;
+using Unity.VisualScripting;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
@@ -22,12 +23,15 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             var fullPath = Path.Combine(Application.dataPath, androidManifestPath);
 
             var scheme = fullLink.Split(':')[0];
-            string subScheme = null;
-            if (fullLink.Contains('/'))
+            var subScheme = "";
+            if (fullLink.Contains("//"))
+                subScheme = fullLink.Split('/')[2];
+            else if (fullLink.Contains('/'))
             {
                 subScheme = fullLink.Split('/')[1];
-                subScheme = subScheme.Split('?')[0];
             }
+
+            subScheme = subScheme.Split('?')[0];
 
             var doc = new XmlDocument();
             doc.Load(fullPath);
@@ -43,11 +47,9 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                 var schemeAttr = data?.Attributes["android:scheme"];
                 if (schemeAttr == null)
                     continue;
-                if (schemeAttr.Value == scheme)
-                    return;
-                var hostAttr = data.Attributes["android:host"];
-                if (hostAttr == null)
+                if (schemeAttr.Value != scheme)
                     continue;
+                var hostAttr = data.Attributes["android:host"];
                 if (hostAttr.Value == subScheme)
                     return;
             }

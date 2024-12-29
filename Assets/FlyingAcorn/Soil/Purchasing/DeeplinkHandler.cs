@@ -23,7 +23,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             DeepLinkHandler.OnDeepLinkActivated -= OnDeepLinkActivated;
             DeepLinkHandler.OnDeepLinkActivated += OnDeepLinkActivated;
-            PaymentDeeplink = new Uri(sdkSettings.PaymentDeeplink);
+            PaymentDeeplink = new Uri(PurchasingPlayerPrefs.GetPurchaseDeeplink());
         }
 
         private static void OnDeepLinkActivated(string arg1, Dictionary<string, string> arg2)

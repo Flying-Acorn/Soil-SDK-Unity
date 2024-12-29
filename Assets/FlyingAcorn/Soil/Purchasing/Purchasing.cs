@@ -31,7 +31,9 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
         [UsedImplicitly] public static Action OnPurchasingInitialized;
-        [UsedImplicitly] public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
+
+        [UsedImplicitly]
+        public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
 
         private static Action<CreateResponse> _onCreatePurchaseResponse;
 
@@ -40,7 +42,7 @@ namespace FlyingAcorn.Soil.Purchasing
         public static async Task Initialize()
         {
             await SoilServices.Initialize();
-            
+
             if (_eventsSubscribed)
                 return;
             _eventsSubscribed = true;
@@ -91,11 +93,16 @@ namespace FlyingAcorn.Soil.Purchasing
         {
             await Initialize();
 
+            var extraData = new Dictionary<string, object>()
+            {
+                { "registered_deep_link", PurchasingPlayerPrefs.GetPurchaseDeeplink() }
+            };
             var payload = new Dictionary<string, object>
             {
                 { "sku", sku },
                 { "preferred_currency", null },
-                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
+                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() },
+                { "extra_data", extraData }
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
@@ -148,6 +155,7 @@ namespace FlyingAcorn.Soil.Purchasing
                     });
                     return;
                 }
+
                 throw new Exception($"FlyingAcorn ====> Failed to verify item. Error: {responseString}");
             }
 
@@ -174,7 +182,8 @@ namespace FlyingAcorn.Soil.Purchasing
             var purchase = response.purchase;
             if (!PurchasingPlayerPrefs.UnverifiedPurchaseIds.Contains(purchase.purchase_id))
                 return;
-            if (purchase.paid || purchase.expired || !PurchasingPlayerPrefs.CachedItems.Exists(item => item.sku == purchase.sku))
+            if (purchase.paid || purchase.expired ||
+                !PurchasingPlayerPrefs.CachedItems.Exists(item => item.sku == purchase.sku))
                 PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchase.purchase_id);
             if (purchase.paid)
                 OnPurchaseSuccessful?.Invoke(purchase);

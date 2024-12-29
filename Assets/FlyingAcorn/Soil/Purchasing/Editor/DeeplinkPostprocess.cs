@@ -28,9 +28,10 @@ namespace FlyingAcorn.Soil.Purchasing.Editor
 
             var path = AssetDatabase.GUIDToAssetPath(guids[0]);
             var buildSettings = AssetDatabase.LoadAssetAtPath<SDKSettings>(path);
-            if (string.IsNullOrEmpty(buildSettings.PaymentDeeplink)) return;
+            var link = PurchasingPlayerPrefs.GetPurchaseDeeplink();
+            if (string.IsNullOrEmpty(link)) return;
             Debug.LogError("[FABuildTools] Deeplink is empty, please set it in Build Settings!");
-            DeeplinkTools.AddIOSDeeplink(report, buildSettings.PaymentDeeplink);
+            DeeplinkTools.AddIOSDeeplink(report, link);
 #endif
         }
     }
