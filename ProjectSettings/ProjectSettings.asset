@@ -163,10 +163,10 @@ PlayerSettings:
     iPhone: com.FlyingAcorn.SoilSDK
   buildNumber:
     Standalone: 0
-    iPhone: 5
+    iPhone: 7
     tvOS: 0
   overrideDefaultApplicationIdentifier: 1
-  AndroidBundleVersionCode: 5
+  AndroidBundleVersionCode: 7
   AndroidMinSdkVersion: 28
   AndroidTargetSdkVersion: 34
   AndroidPreferredInstallLocation: 1
@@ -256,14 +256,14 @@ PlayerSettings:
   AndroidSplashScreenScale: 0
   androidSplashScreen: {fileID: 0}
   AndroidKeystoreName: '{inproject}: SoilSDK2.jks'
-  AndroidKeyaliasName: 
+  AndroidKeyaliasName: test
   AndroidBuildApkPerCpuArchitecture: 0
   AndroidTVCompatibility: 0
   AndroidIsGame: 1
   AndroidEnableTango: 0
   androidEnableBanner: 1
   androidUseLowAccuracyLocation: 0
-  androidUseCustomKeystore: 0
+  androidUseCustomKeystore: 1
   m_AndroidBanners:
   - width: 320
     height: 180
