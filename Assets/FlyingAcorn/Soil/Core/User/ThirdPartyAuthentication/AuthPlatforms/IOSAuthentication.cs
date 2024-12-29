@@ -5,6 +5,7 @@ using Cdm.Authentication.Browser;
 using Cdm.Authentication.Clients;
 using Cdm.Authentication.OAuth2;
 using FlyingAcorn.Analytics;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -16,7 +17,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
     {
         public ThirdPartySettings ThirdPartySettings { get; }
         public Action<LinkAccountInfo, ThirdPartySettings> OnSignInSuccessCallback { get; set; }
-        public Action<string> OnSignInFailureCallback { get; set; }
+        public Action<SoilException> OnSignInFailureCallback { get; set; }
         private static CancellationTokenSource _cancellationTokenSource;
         private AuthenticationSession _authenticationSession;
 
@@ -65,17 +66,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             catch (AuthorizationCodeRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                OnSignInFailureCallback?.Invoke(ex.error.description);
+                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description));
             }
             catch (AccessTokenRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                OnSignInFailureCallback?.Invoke(ex.error.description);
+                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description));
             }
             catch (Exception ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                OnSignInFailureCallback?.Invoke(ex.Message);
+                OnSignInFailureCallback?.Invoke(new SoilException(ex.Message));
             }
         }
 

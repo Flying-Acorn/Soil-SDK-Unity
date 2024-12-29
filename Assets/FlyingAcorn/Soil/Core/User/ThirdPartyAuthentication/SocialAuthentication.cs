@@ -1,9 +1,11 @@
 using System;
 using System.Threading.Tasks;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using JetBrains.Annotations;
 using UnityEngine;
+using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
@@ -31,15 +33,18 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public static Action<LinkPostResponse> OnLinkSuccessCallback { get; set; }
         public static Action<UnlinkResponse> OnUnlinkSuccessCallback { get; set; }
         public static Action<LinkGetResponse> OnGetAllLinksSuccessCallback { get; set; }
-        public static Action<string> OnLinkFailureCallback { get; set; }
-        public static Action<string> OnUnlinkFailureCallback { get; set; }
-        public static Action<string> OnGetAllLinksFailureCallback { get; set; }
+        public static Action<SoilException> OnLinkFailureCallback { get; set; }
+        public static Action<SoilException> OnUnlinkFailureCallback { get; set; }
+        public static Action<SoilException> OnGetAllLinksFailureCallback { get; set; }
 
         public static async Task Initialize()
         {
             await SoilServices.Initialize();
-            _thirdPartyInitializer ??= UserApiHandler.FetchPlayerInfo();
-            await _thirdPartyInitializer;
+            if (SoilServices.UserInfo.linkable_parties == null)
+            {
+                _thirdPartyInitializer ??= UserApiHandler.FetchPlayerInfo();
+                _thirdPartyInitializer.Wait();
+            }
         }
 
         public static async void Link(Constants.ThirdParty party)
@@ -51,7 +56,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             catch (Exception e)
             {
                 Debug.LogError(e);
-                OnLinkFailureCallback?.Invoke(e.Message);
+                var soilException = new SoilException(e.Message);
+                OnLinkFailureCallback?.Invoke(soilException);
                 return;
             }
 
@@ -78,7 +84,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             catch (Exception e)
             {
                 Debug.LogError(e);
-                OnUnlinkFailureCallback?.Invoke(e.Message);
+                var soilException = new SoilException(e.Message);
+                OnUnlinkFailureCallback?.Invoke(soilException);
                 return;
             }
 
@@ -96,7 +103,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             catch (Exception e)
             {
                 Debug.LogError(e);
-                OnGetAllLinksFailureCallback?.Invoke(e.Message);
+                var soilException = new SoilException(e.Message);
+                OnGetAllLinksFailureCallback?.Invoke(soilException);
                 return;
             }
 
@@ -114,7 +122,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             catch (Exception e)
             {
                 Debug.LogWarning(e);
-                OnLinkFailureCallback?.Invoke(e.Message);
+                var soilException = new SoilException(e.Message);
+                OnLinkFailureCallback?.Invoke(soilException);
             }
         }
 

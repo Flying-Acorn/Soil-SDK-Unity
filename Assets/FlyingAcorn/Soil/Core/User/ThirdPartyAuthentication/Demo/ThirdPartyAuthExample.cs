@@ -1,11 +1,13 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using Cdm.Authentication.Browser;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
 using TMPro;
 using UnityEngine.EventSystems;
 using Button = UnityEngine.UI.Button;
+using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
 {
@@ -65,9 +67,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             UpdateButtons();
         }
 
-        private void OnFailure(string obj)
+        private void OnFailure(SoilException soilException)
         {
-            statusText.text = $"Link failure: {obj}";
+            statusText.text = $"Link failure: {soilException.ErrorCode}";
         }
 
         private void OnLinkSuccess(LinkPostResponse linkPostResponse)

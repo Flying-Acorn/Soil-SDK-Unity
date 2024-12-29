@@ -14,7 +14,9 @@ namespace FlyingAcorn.Soil.Core.Data
             GooglePlay,
             AppStore,
             CafeBazaar,
-            Myket
+            Myket,
+            Github,
+            LandingPage
         }
     }
 }

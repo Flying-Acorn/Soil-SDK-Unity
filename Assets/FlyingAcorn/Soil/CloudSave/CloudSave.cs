@@ -6,11 +6,11 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.CloudSave.Data;
-using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.CloudSave
@@ -22,7 +22,7 @@ namespace FlyingAcorn.Soil.CloudSave
         [UsedImplicitly]
         public static async Task Initialize()
         {
-            await SocialAuthentication.Initialize();
+            await SoilServices.Initialize();
         }
 
         public static async Task SaveAsync(string key, object value)
@@ -88,7 +88,7 @@ namespace FlyingAcorn.Soil.CloudSave
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                throw new Exception($"Key {key} not found");
+                throw new KeyNotFoundException($"Key {key} not found");
             }
 
             if (!response.IsSuccessStatusCode)

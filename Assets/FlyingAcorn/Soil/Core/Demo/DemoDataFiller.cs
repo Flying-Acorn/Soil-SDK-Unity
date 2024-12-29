@@ -1,5 +1,6 @@
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.Core.User.Authentication;
 using TMPro;
 using UnityEngine;
 

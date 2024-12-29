@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Purchasing.Models;
 using FlyingAcorn.Soil.Purchasing.Models.Responses;
 using JetBrains.Annotations;

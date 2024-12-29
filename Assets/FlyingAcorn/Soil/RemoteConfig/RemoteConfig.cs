@@ -5,11 +5,11 @@ using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using UnityEngine;
 
 namespace FlyingAcorn.Soil.RemoteConfig
 {

@@ -1,8 +1,10 @@
 using System;
 using CredentialBridge;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
 using UnityEngine;
+using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
@@ -10,7 +12,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
     {
         public ThirdPartySettings ThirdPartySettings { get; }
         public Action<LinkAccountInfo, ThirdPartySettings> OnSignInSuccessCallback { get; set; }
-        public Action<string> OnSignInFailureCallback { get; set; }
+        public Action<SoilException> OnSignInFailureCallback { get; set; }
 
         public AndroidAuthentication(ThirdPartySettings thirdPartySettings)
         {
@@ -21,6 +23,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.google)
             {
                 Debug.LogError("AndroidAuthentication only supports Google");
+                OnLoginFailed(new CredentialExceptionData());
                 return;
             }
 
@@ -42,7 +45,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         private void OnLoginFailed(CredentialExceptionData arg0)
         {
             Debug.LogError($"OnLoginFailed: {arg0.message}");
-            OnSignInFailureCallback?.Invoke(arg0.message);
+            OnSignInFailureCallback?.Invoke(new SoilException(arg0.message));
         }
 
         private void OnLoginSuccess(CredentialUserData arg0)

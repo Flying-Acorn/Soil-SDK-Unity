@@ -10,7 +10,7 @@ using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
 
-namespace FlyingAcorn.Soil.Core.User
+namespace FlyingAcorn.Soil.Core.User.Authentication
 {
     public static class Authenticate
     {

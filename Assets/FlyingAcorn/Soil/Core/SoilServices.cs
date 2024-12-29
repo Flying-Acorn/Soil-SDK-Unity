@@ -4,6 +4,7 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
 using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using UnityEngine;
 using Constants = FlyingAcorn.Soil.Core.Data.Constants;
