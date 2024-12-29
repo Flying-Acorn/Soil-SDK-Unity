@@ -9,7 +9,6 @@ using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
-using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -127,10 +126,10 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}graphics_device_id", SystemInfo.graphicsDeviceID },
                     { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
                     { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion },
-                    { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() },
                     { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode },
                     { $"{KeysPrefix}installation_version", AnalyticsPlayerPrefs.InstallationVersion },
-                    { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild }
+                    { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild },
+                    // { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() } Uncomment where A/B testing is used
                 };
             }
 
