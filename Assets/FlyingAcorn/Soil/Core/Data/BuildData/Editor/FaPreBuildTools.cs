@@ -59,6 +59,8 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                     break;
                 case Constants.Store.BetaChannel:
                 case Constants.Store.Postman:
+                case Constants.Store.Github:
+                case Constants.Store.LandingPage:
                     break;
                 case Constants.Store.Unknown:
                 default:

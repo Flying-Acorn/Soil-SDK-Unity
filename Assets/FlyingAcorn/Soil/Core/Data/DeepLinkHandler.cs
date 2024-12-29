@@ -10,7 +10,7 @@ namespace FlyingAcorn.Soil.Core.Data
     {
         private static DeepLinkHandler Instance { get; set; }
         public string deeplinkURL;
-        [UsedImplicitly] public Action<string, Dictionary<string, string>> OnDeepLinkActivated;
+        [UsedImplicitly] public static Action<string, Dictionary<string, string>> OnDeepLinkActivated;
 
         private void Awake()
         {
@@ -37,10 +37,9 @@ namespace FlyingAcorn.Soil.Core.Data
             MyDebug.Info("Deep link activated: " + url);
             deeplinkURL = url;
 
-            var deeplinkRightSide = url.Split('?')[1];
-            if (string.IsNullOrEmpty(deeplinkRightSide))
-                return;
-            var path = deeplinkRightSide.Split('/')[2];
+            var uir = new Uri(url);
+            var scheme = uir.AbsolutePath;
+            var deeplinkRightSide = uir.Query.TrimStart('?');
             var equations = deeplinkRightSide.Split('&');
             var keyValues = new Dictionary<string, string>();
             foreach (var equation in equations)
@@ -57,7 +56,7 @@ namespace FlyingAcorn.Soil.Core.Data
                 }
             }
 
-            OnDeepLinkActivated?.Invoke(path, keyValues);
+            OnDeepLinkActivated?.Invoke(scheme, keyValues);
         }
     }
 }

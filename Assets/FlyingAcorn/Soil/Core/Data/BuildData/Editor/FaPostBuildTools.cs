@@ -28,7 +28,7 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             var path = AssetDatabase.GUIDToAssetPath(guids[0]);
             var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
             buildSettings.StoreName = Constants.Store.Unknown;
-
+            
             EditorUtility.SetDirty(buildSettings);
             Debug.LogFormat("[FABuildTools] Cleaned build settings \"{0}\".", path);
         }
