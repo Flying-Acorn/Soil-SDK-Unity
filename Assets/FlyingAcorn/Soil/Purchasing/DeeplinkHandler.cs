@@ -25,10 +25,12 @@ namespace FlyingAcorn.Soil.Purchasing
             DeepLinkHandler.OnDeepLinkActivated -= OnDeepLinkActivated;
             DeepLinkHandler.OnDeepLinkActivated += OnDeepLinkActivated;
             PaymentDeeplink = new Uri(PurchasingPlayerPrefs.GetPurchaseDeeplink());
+            OnDeepLinkActivated(DeepLinkHandler.LastDeeplinkURL);
         }
 
         private static void OnDeepLinkActivated(Uri invokedUri)
         {
+            if (invokedUri == null) return;
             MyDebug.Info(
                 $"OnDeepLinkActivated {invokedUri.GetLeftPart(UriPartial.Authority)} {PaymentDeeplink.GetLeftPart(UriPartial.Authority)}");
             if (invokedUri.GetLeftPart(UriPartial.Authority) !=

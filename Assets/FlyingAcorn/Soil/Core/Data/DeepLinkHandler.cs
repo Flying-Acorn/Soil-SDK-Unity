@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using FlyingAcorn.Analytics;
 using JetBrains.Annotations;
@@ -10,7 +9,7 @@ namespace FlyingAcorn.Soil.Core.Data
     public class DeepLinkHandler : MonoBehaviour
     {
         private static DeepLinkHandler Instance { get; set; }
-        public string deeplinkURL;
+        public static Uri LastDeeplinkURL;
         [UsedImplicitly] public static Action<Uri> OnDeepLinkActivated;
 
         private void Awake()
@@ -23,21 +22,18 @@ namespace FlyingAcorn.Soil.Core.Data
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            Application.deepLinkActivated -= DeepLinkActivated;
             Application.deepLinkActivated += DeepLinkActivated;
-            if (!string.IsNullOrEmpty(Application.absoluteURL))
-                DeepLinkActivated(Application.absoluteURL);
-            else
-            {
-                MyDebug.Info("Absolute URL is empty");
-                deeplinkURL = "[none]";
-            }
+            DeepLinkActivated(Application.absoluteURL);
         }
 
-        private void DeepLinkActivated(string url)
+        private static void DeepLinkActivated(string url)
         {
-            deeplinkURL = url;
+            if (string.IsNullOrEmpty(url))
+                return;
 
             var uri = new Uri(url);
+            LastDeeplinkURL = uri;
 
             MyDebug.Verbose(
                 $"Deep link activated: {uri.GetLeftPart(UriPartial.Path)} with key values: " +
