@@ -8,7 +8,6 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.CloudSave.Data;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User.Authentication;
-using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using Constants = FlyingAcorn.Soil.Core.Data.Constants;
@@ -25,7 +24,7 @@ namespace FlyingAcorn.Soil.CloudSave
             await SoilServices.Initialize();
         }
 
-        public static async Task SaveAsync(string key, object value)
+        public static async Task SaveAsync(string key, object value, bool isPublic = false)
         {
             if (string.IsNullOrEmpty(key))
             {
@@ -38,10 +37,11 @@ namespace FlyingAcorn.Soil.CloudSave
             }
             
 
-            var payload = new SaveModel
+            var payload = new Dictionary<string, object>()
             {
-                key = key,
-                value = value
+                {"key", key},
+                {"value", value},
+                {"is_public", isPublic}
             };
             
             await Initialize();
@@ -70,7 +70,7 @@ namespace FlyingAcorn.Soil.CloudSave
             MyDebug.Info($"{key} saved in cloud");
         }
 
-        public static async Task<object> LoadAsync(string key)
+        public static async Task<object> LoadAsync(string key, string otherUserID = null)
         {
             if (string.IsNullOrEmpty(key))
             {
@@ -82,7 +82,10 @@ namespace FlyingAcorn.Soil.CloudSave
             var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Get, $"{CloudSaveUrl}?key={key}");
+            var query = $"?key={key}";
+            if (!string.IsNullOrEmpty(otherUserID))
+                query += $"&user={otherUserID}";
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{CloudSaveUrl}{query}");
             var response = await client.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
@@ -101,8 +104,9 @@ namespace FlyingAcorn.Soil.CloudSave
             {
                 throw new Exception("Failed to load data");
             }
-
-            CloudSavePlayerPrefs.Save(saveResponse);
+            
+            if (string.IsNullOrEmpty(otherUserID) || otherUserID == SoilServices.UserInfo.uuid)
+                CloudSavePlayerPrefs.Save(saveResponse);
             MyDebug.Info($"{key} loaded from cloud");
             return saveResponse.value;
         }
