@@ -104,11 +104,11 @@ namespace FlyingAcorn.Soil.CloudSave
             {
                 throw new Exception("Failed to load data");
             }
-            
+
             if (string.IsNullOrEmpty(otherUserID) || otherUserID == SoilServices.UserInfo.uuid)
                 CloudSavePlayerPrefs.Save(saveResponse);
-            MyDebug.Info($"{key} loaded from cloud");
-            return saveResponse.value;
+            MyDebug.Verbose($"{key} loaded from cloud");
+            return saveResponse;
         }
     }
 }

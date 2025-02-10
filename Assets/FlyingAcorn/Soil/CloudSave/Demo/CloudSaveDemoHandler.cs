@@ -46,7 +46,7 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
             try
             {
                 var value = await CloudSave.LoadAsync(keyInput.text);
-                MyDebug.Info($"Loaded {keyInput.text}: {value}");
+                MyDebug.Info($"Loaded {value.key}: {value.value}");
                 statusText.text = "";
             }
             catch (Exception e)

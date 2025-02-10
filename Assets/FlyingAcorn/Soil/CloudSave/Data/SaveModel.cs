@@ -1,6 +1,7 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
+using FlyingAcorn.Soil.Core.User;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace FlyingAcorn.Soil.CloudSave.Data
 {
@@ -9,5 +10,6 @@ namespace FlyingAcorn.Soil.CloudSave.Data
     {
         [JsonProperty] public string key;
         [JsonProperty] public object value;
+        [JsonProperty][AllowNull] public UserInfo publicPlayerInfo;
     }
 }
