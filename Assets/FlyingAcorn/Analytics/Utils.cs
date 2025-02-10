@@ -1,9 +1,40 @@
 using System.Collections.Generic;
+using JetBrains.Annotations;
+using UnityEngine;
 
 namespace FlyingAcorn.Analytics
 {
     public static class Utils
     {
+        [UsedImplicitly]
+        public static void StartAndroidActivity(string uri, Constants.Intent action, string package)
+        {
+            if (string.IsNullOrEmpty(package))
+                package = Application.identifier;
+            if (!Constants.IntentActions.ContainsKey(action))
+            {
+                MyDebug.LogError($"Intent action {action} is not supported");
+                return;
+            }
+
+#if UNITY_ANDROID || UNITY_EDITOR
+            var intentClass = new AndroidJavaClass("android.content.Intent");
+            var intentObject = new AndroidJavaObject("android.content.Intent");
+
+            var uriClass = new AndroidJavaClass("android.net.Uri");
+
+            intentObject.Call<AndroidJavaObject>("setAction",
+                intentClass.GetStatic<string>(Constants.IntentActions[action]));
+            intentObject.Call<AndroidJavaObject>("setData",
+                uriClass.CallStatic<AndroidJavaObject>("parse", uri));
+            intentObject.Call<AndroidJavaObject>("setPackage", package);
+
+            var unity = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+            var currentActivity = unity.GetStatic<AndroidJavaObject>("currentActivity");
+            currentActivity.Call("startActivity", intentObject);
+#endif
+        }
+
         public static string GetEventName(this IAnalytics service, params string[] eventSteps)
         {
             var validatedEventSteps = eventSteps.Clone() as string[];

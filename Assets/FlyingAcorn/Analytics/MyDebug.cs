@@ -12,7 +12,6 @@ namespace FlyingAcorn.Analytics
 
         public static void SetLogLevel(FlyingAcornErrorSeverity logLevel)
         {
-            logLevel = AnalyticsPlayerPrefs.UserDebugMode ? FlyingAcornErrorSeverity.DebugSeverity : logLevel;
             AnalyticsPlayerPrefs.SavedLogLevel = logLevel;
         }
 

@@ -53,15 +53,9 @@ namespace FlyingAcorn.Analytics
         {
             if (!Instance._started)
                 return;
-
-            if (pauseStatus)
-            {
-                AnalyticServiceProvider?.DesignEvent("FA_session", "pause");
-            }
-            else
-            {
-                AnalyticServiceProvider?.DesignEvent("FA_session", "unpause");
-            }
+            
+            var eventName = pauseStatus ? "pause" : "unpause";
+            AnalyticServiceProvider?.DesignEvent("FA_session", eventName);
         }
 
         private void OnDestroy()

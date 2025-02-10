@@ -1,8 +1,9 @@
+using System.Collections.Generic;
+
 namespace FlyingAcorn.Analytics
 {
     public abstract class Constants
     {
-
         public abstract class ErrorSeverity
         {
             public enum FlyingAcornErrorSeverity
@@ -22,14 +23,17 @@ namespace FlyingAcorn.Analytics
             {
                 //Undefined progression
                 UndefinedLevel = 0,
+
                 // User started progression
                 StartLevel = 1,
+
                 // User succesfully ended a progression
                 CompleteLevel = 2,
+
                 // User failed a progression
                 FailLevel = 3
             }
-            
+
             public enum FlyingAcornNonLevelStatus
             {
                 Undefined = 0,
@@ -45,11 +49,25 @@ namespace FlyingAcorn.Analytics
             {
                 //Undefined progression
                 UndefinedFlow = 0,
+
                 // Source: Used when adding resource to a user
                 SourceFlow = 1,
+
                 // Sink: Used when removing a resource from a user
                 SinkFlow = 2
             }
+        }
+        public static readonly Dictionary<Intent, string> IntentActions = new()
+        {
+            { Intent.ActionView, "ACTION_VIEW" },
+            { Intent.ActionEdit, "ACTION_EDIT" }
+        };
+
+        
+        public enum Intent
+        {
+            ActionView,
+            ActionEdit,
         }
 
         public const string FlyingAcorn = "FlyingAcorn";

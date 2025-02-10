@@ -1,5 +1,3 @@
-using System;
-using FlyingAcorn.Soil.Core.Data;
 using UnityEngine;
 
 namespace FlyingAcorn.Analytics
