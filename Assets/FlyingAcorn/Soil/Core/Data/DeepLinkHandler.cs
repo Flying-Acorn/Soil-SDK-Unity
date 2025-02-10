@@ -9,7 +9,18 @@ namespace FlyingAcorn.Soil.Core.Data
     public class DeepLinkHandler : MonoBehaviour
     {
         private static DeepLinkHandler Instance { get; set; }
-        public static Uri LastDeeplinkURL;
+
+        public static Uri LastDeeplinkURL
+        {
+            get
+            {
+                if (Instance == null)
+                    MyDebug.LogWarning("DeepLinkHandler is not active");
+                return _lastDeepLinkURL;
+            }
+        }
+
+        private static Uri _lastDeepLinkURL;
         [UsedImplicitly] public static Action<Uri> OnDeepLinkActivated;
 
         private void Awake()
@@ -25,19 +36,36 @@ namespace FlyingAcorn.Soil.Core.Data
             Application.deepLinkActivated -= DeepLinkActivated;
             Application.deepLinkActivated += DeepLinkActivated;
             DeepLinkActivated(Application.absoluteURL);
+            MyDebug.Info("DeepLinkHandler is active");
         }
 
         private static void DeepLinkActivated(string url)
         {
             if (string.IsNullOrEmpty(url))
                 return;
+            Uri uri;
 
-            var uri = new Uri(url);
-            LastDeeplinkURL = uri;
+            try
+            {
+                uri = new Uri(url);
+            }
+            catch (Exception e)
+            {
+                MyDebug.LogError($"Failed to parse deep link: {url} with error: {e.Message}");
+                return;
+            }
 
-            MyDebug.Verbose(
-                $"Deep link activated: {uri.GetLeftPart(UriPartial.Path)} with key values: " +
-                $"{string.Join(", ", uri.Query.Split('&').Select(x => x.Split('=')).Select(x => $"{x[0]}={x[1]}"))}");
+            var queryDictionary = uri.Query.Split('&').Select(parameter => parameter.Split('=')).Where(pair => pair.Length == 2)
+                .ToDictionary(pair => pair[0], pair => pair[1]);
+
+            uri = new UriBuilder(uri) { Query = "" }.Uri;
+            uri = queryDictionary.Aggregate(uri,
+                (current, pair) => new UriBuilder(current) { Query = $"{current.Query}{pair.Key}={pair.Value}&" }.Uri);
+
+            _lastDeepLinkURL = uri;
+
+            MyDebug.Verbose($"Deep link activated: {uri.GetLeftPart(UriPartial.Path)} with key values: " +
+                            queryDictionary.Aggregate("", (current, pair) => current + $"{pair.Key}={pair.Value}&"));
             OnDeepLinkActivated?.Invoke(uri);
         }
     }

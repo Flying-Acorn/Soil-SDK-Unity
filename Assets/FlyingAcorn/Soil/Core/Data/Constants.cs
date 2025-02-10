@@ -18,5 +18,10 @@ namespace FlyingAcorn.Soil.Core.Data
             Github,
             LandingPage
         }
+        
+        public enum DataScopes
+        {
+            SoilPublicUserInfo,
+        }
     }
 }

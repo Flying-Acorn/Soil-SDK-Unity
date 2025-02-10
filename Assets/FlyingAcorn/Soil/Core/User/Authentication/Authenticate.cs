@@ -14,6 +14,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
 {
     public static class Authenticate
     {
+        private static HttpClient _refreshClient;
         internal static readonly string UserBaseUrl = $"{Constants.ApiUrl}/users";
 
         private static readonly string RegisterPlayerUrl = $"{UserBaseUrl}/register/";
@@ -113,7 +114,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Refresh))
             {
                 // TODO: Check user lifetime and re-register
-                throw new Exception("Refresh token is invalid. Re-register player."); 
+                throw new Exception("Refresh token is invalid. Re-register player.");
             }
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, string>
@@ -121,13 +122,13 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 { "refresh", UserPlayerPrefs.TokenData.Refresh }
             });
 
-
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            _refreshClient?.Dispose();
+            _refreshClient = new HttpClient();
+            _refreshClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             var request = new HttpRequestMessage(HttpMethod.Post, RefreshTokenUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            var response = await client.SendAsync(request);
+            var response = await _refreshClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (!response.IsSuccessStatusCode)

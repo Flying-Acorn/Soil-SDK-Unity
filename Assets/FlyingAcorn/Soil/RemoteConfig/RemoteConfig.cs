@@ -25,6 +25,8 @@ namespace FlyingAcorn.Soil.RemoteConfig
         [UsedImplicitly]
         public static JObject ExchangeRates =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?["exchange_rates"] as JObject;
+        
+        public static JObject RemoteConfigUserInfo => RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserInfoKey] as JObject;
 
         private static bool _fetchSuccessState;
 
@@ -32,6 +34,8 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static bool _fetching;
 
         private static readonly string FetchUrl = $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
+
+        private static HttpClient _fetchClient;
 
 
         private static async Task Initialize()
@@ -75,8 +79,10 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
                 { { "properties", GetPlayerProperties() } });
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+
+            _fetchClient?.Dispose();
+            _fetchClient = new HttpClient();
+            _fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
@@ -84,7 +90,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
             string responseString;
             try
             {
-                response = await client.SendAsync(request);
+                response = await _fetchClient.SendAsync(request);
                 responseString = response.Content.ReadAsStringAsync().Result;
             }
             catch (Exception e)

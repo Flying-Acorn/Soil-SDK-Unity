@@ -67,7 +67,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         {
             try
             {
-                var leaderboard = await Leaderboard.FetchLeaderboard("demo_dec_manual", resultCount, _relativeMode);
+                var leaderboard = await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount, _relativeMode);
                 GetLeaderboardSuccess(leaderboard);
             }
             catch (Exception e)

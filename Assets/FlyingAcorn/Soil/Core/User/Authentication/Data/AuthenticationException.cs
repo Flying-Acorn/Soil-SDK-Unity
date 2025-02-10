@@ -5,9 +5,10 @@ namespace FlyingAcorn.Soil.Core.User.Authentication.Data
 {
     public abstract class AuthenticationException : SoilException
     {
-        protected AuthenticationException(string message, List<Notification> notifications, AuthenticationErrorCode errorCode) : base(message)
+        protected AuthenticationException(string message, List<Notification> notifications = null,
+            AuthenticationErrorCode errorCode = 0) : base(message)
         {
-            Notifications = notifications;
+            Notifications = notifications ?? new List<Notification>();
             ErrorCode = errorCode;
         }
 
@@ -15,7 +16,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication.Data
         public new AuthenticationErrorCode ErrorCode { get; set; }
         public const int MinValue = 100;
     }
-    
+
     public enum AuthenticationErrorCode
     {
         ClientInvalidUserState = 100,

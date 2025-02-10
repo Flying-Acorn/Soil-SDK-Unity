@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Cdm.Authentication.Browser;
@@ -66,12 +67,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             catch (AuthorizationCodeRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description));
+                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidRequest));
             }
             catch (AccessTokenRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description));
+                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidToken));
+            }
+            catch (HttpListenerException ex)
+            {
+                MyDebug.LogWarning(ex.Message);
+                OnSignInFailureCallback(new SoilException(ex.Message, SoilExceptionErrorCode.AnotherOngoingInstance));
             }
             catch (Exception ex)
             {
@@ -109,7 +115,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         {
             if (_authenticationSession == null)
             {
-                throw new InvalidOperationException("Authentication session is not initialized.");
+                throw new SoilException("Authentication session is not initialized.", SoilExceptionErrorCode.InvalidRequest);
             }
 
             _cancellationTokenSource?.Dispose();

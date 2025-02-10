@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
+using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -30,6 +31,14 @@ namespace FlyingAcorn.Soil.Core.User
         [JsonProperty] internal string username;
         [JsonProperty] internal string uuid;
         [JsonProperty] internal List<AppParty> linkable_parties;
+
+        [CanBeNull]
+        public string RealtimeCountry()
+        {
+            return properties is { flyingacorn_country_realtime: not null }
+                ? properties.flyingacorn_country_realtime
+                : null;
+        }
 
         public UserInfo ChangeUser(UserInfo newUser)
         {
@@ -72,7 +81,8 @@ namespace FlyingAcorn.Soil.Core.User
                 if (isNullOrEmpty)
                     continue;
 
-                if (!propertyInfo.GetValue(this).Equals(value))
+                var objectValue = propertyInfo.GetValue(this);
+                if (objectValue == null || !objectValue.Equals(value))
                     changedFields.Add(propertyInfo.Name, value);
             }
 
@@ -103,6 +113,7 @@ namespace FlyingAcorn.Soil.Core.User
             public string flyingacorn_unity_version;
             public string flyingacorn_version;
             public string flyingacorn_cohort_id;
+            public string flyingacorn_country_realtime;
 
             public static Dictionary<string, object> GeneratePropertiesDynamicPlayerProperties()
             {
@@ -129,7 +140,7 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode },
                     { $"{KeysPrefix}installation_version", AnalyticsPlayerPrefs.InstallationVersion },
                     { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild },
-                    // { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() } Uncomment where A/B testing is used
+                    { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() } // Comment if not using AB Testing
                 };
             }
 

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Leaderboard.Models;
@@ -18,6 +20,9 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
+        private static HttpClient _reportScoreClient;
+        private static HttpClient _fetchLeaderboardClient;
+        private static HttpClient _deleteScoreClient;
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
         public static async Task Initialize()
@@ -38,7 +43,7 @@ namespace FlyingAcorn.Soil.Leaderboard
         }
 
         ///<summary>
-        ///Report a score to the leaderboard, preferably use ReportScore(double score, string leaderboardId) instead.
+        ///Report a score to the leaderboard, when your scores are too big to be parsed as a double.
         ///</summary>
         [UsedImplicitly]
         public static async Task<UserScore> ReportScore(string score, string leaderboardId)
@@ -51,7 +56,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             catch (Exception e)
             {
                 if (e is not OverflowException)
-                    throw new Exception($"Soil ====> Failed to Report score. Error: {e.Message}");
+                    throw new SoilException($"Soil ====> Failed to Report score. Error: {e.Message}");
             }
 
             var payload = new Dictionary<string, object>
@@ -66,11 +71,11 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static async Task<UserScore> ReportScore(Dictionary<string, object> payload)
         {
             await Initialize();
-
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _reportScoreClient?.Dispose();
+            _reportScoreClient = new HttpClient();
+            _reportScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, ReportScoreUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
@@ -78,7 +83,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             string responseString;
             try
             {
-                response = await client.SendAsync(request);
+                response = await _reportScoreClient.SendAsync(request);
                 responseString = response.Content.ReadAsStringAsync().Result;
             }
             catch (Exception e)
@@ -95,17 +100,44 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
         }
 
-        public static async Task<List<UserScore>> FetchLeaderboard(string leaderboardId, int count = 10,
-            bool relative = false)
+        public static async Task DeleteScore(string leaderboardId)
         {
+            await Initialize();
+            var payload = new Dictionary<string, object>
+            {
+                { "leaderboard_identifier", leaderboardId },
+            };
+            var stringBody = JsonConvert.SerializeObject(payload);
+
+            _deleteScoreClient?.Dispose();
+            _deleteScoreClient = new HttpClient();
+            _deleteScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            var request = new HttpRequestMessage(HttpMethod.Delete, ReportScoreUrl);
+            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            HttpResponseMessage response;
             try
             {
-                await Initialize();
+                response = await _deleteScoreClient.SendAsync(request);
             }
             catch (Exception e)
             {
-                throw new Exception(e.Message);
+                var fullMessage = $"Soil ====> Failed to delete score. Error: {e.Message}";
+                throw new SoilException(fullMessage, SoilExceptionErrorCode.InvalidRequest);
             }
+
+            if (response is not { StatusCode: HttpStatusCode.NoContent or HttpStatusCode.NotFound })
+            {
+                var responseString = response.Content.ReadAsStringAsync().Result;
+                var fullMessage = $"Soil ====> Failed to delete score. Error: {responseString}";
+                throw new SoilException(fullMessage);
+            }
+        }
+
+        public static async Task<List<UserScore>> FetchLeaderboardAsync(string leaderboardId, int count = 10,
+            bool relative = false)
+        {
+            await Initialize();
 
             var payload = new Dictionary<string, object>
             {
@@ -116,8 +148,9 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            // _fetchLeaderboardClient?.Dispose(); // support async
+            _fetchLeaderboardClient = new HttpClient();
+            _fetchLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchLeaderboardUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
@@ -125,19 +158,19 @@ namespace FlyingAcorn.Soil.Leaderboard
             string responseString;
             try
             {
-                response = await client.SendAsync(request);
+                response = await _fetchLeaderboardClient.SendAsync(request);
                 responseString = response.Content.ReadAsStringAsync().Result;
             }
             catch (Exception e)
             {
                 var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {e.Message}";
-                throw new Exception(fullMessage);
+                throw new SoilException(fullMessage, SoilExceptionErrorCode.InvalidRequest);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
                 var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {responseString}";
-                throw new Exception(fullMessage);
+                throw new SoilException(fullMessage, SoilExceptionErrorCode.TransportError);
             }
 
             var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);

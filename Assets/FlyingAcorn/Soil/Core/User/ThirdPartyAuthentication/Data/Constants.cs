@@ -6,6 +6,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
         public enum ThirdParty
         {
             google,
+            facebook,
+            unity,
+            apple
         }
         
         public enum LinkStatus

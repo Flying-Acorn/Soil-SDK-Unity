@@ -27,8 +27,11 @@ namespace FlyingAcorn.Soil.Purchasing.Editor
             }
 
             var link = PurchasingPlayerPrefs.GetPurchaseDeeplink();
-            if (string.IsNullOrEmpty(link)) return;
-            Debug.LogError("[FABuildTools] Deeplink is empty, please set it in Build Settings!");
+            if (string.IsNullOrEmpty(link))
+            {
+                Debug.LogError("[FABuildTools] Deeplink is empty, please set it in Build Settings!");
+                return;
+            }
             DeeplinkTools.AddAndroidDeeplink(link);
 #endif
         }

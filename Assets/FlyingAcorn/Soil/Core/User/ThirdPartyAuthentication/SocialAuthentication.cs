@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
@@ -11,7 +12,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
     public abstract class SocialAuthentication
     {
-        private static Task _thirdPartyInitializer;
+        private static UserInfo _thirdPartyInitializer;
         [UsedImplicitly] public const string AndroidSettingName = "AndroidGoogleAuthSetting";
         [UsedImplicitly] public const string IOSSettingName = "IOSGoogleAuthSetting";
         private const string EditorSettingsName = "EditorGoogleAuthSetting";
@@ -42,8 +43,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             await SoilServices.Initialize();
             if (SoilServices.UserInfo.linkable_parties == null)
             {
-                _thirdPartyInitializer ??= UserApiHandler.FetchPlayerInfo();
-                _thirdPartyInitializer.Wait();
+                _thirdPartyInitializer ??= await UserApiHandler.FetchPlayerInfo();
             }
         }
 
@@ -53,10 +53,16 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             {
                 await Initialize();
             }
+            catch (SoilException e)
+            {
+                MyDebug.LogWarning(e);
+                OnLinkFailureCallback?.Invoke(e);
+                return;
+            }
             catch (Exception e)
             {
-                Debug.LogError(e);
-                var soilException = new SoilException(e.Message);
+                MyDebug.LogWarning(e);
+                var soilException = new SoilException(e.Message, SoilExceptionErrorCode.ServiceUnavailable);
                 OnLinkFailureCallback?.Invoke(soilException);
                 return;
             }
@@ -81,9 +87,15 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             {
                 await Initialize();
             }
+            catch (SoilException e)
+            {
+                MyDebug.LogWarning(e);
+                OnUnlinkFailureCallback?.Invoke(e);
+                return;
+            }
             catch (Exception e)
             {
-                Debug.LogError(e);
+                MyDebug.LogWarning(e);
                 var soilException = new SoilException(e.Message);
                 OnUnlinkFailureCallback?.Invoke(soilException);
                 return;
@@ -100,9 +112,15 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             {
                 await Initialize();
             }
+            catch (SoilException e)
+            {
+                MyDebug.LogWarning(e);
+                OnGetAllLinksFailureCallback?.Invoke(e);
+                return;
+            }
             catch (Exception e)
             {
-                Debug.LogError(e);
+                MyDebug.LogWarning(e);
                 var soilException = new SoilException(e.Message);
                 OnGetAllLinksFailureCallback?.Invoke(soilException);
                 return;
@@ -119,9 +137,14 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 var authenticatedUser = await ThirdPartyAPIHandler.Link(thirdPartyUser, settings);
                 OnLinkSuccessCallback?.Invoke(authenticatedUser);
             }
+            catch (SoilException e)
+            {
+                MyDebug.LogWarning(e);
+                OnLinkFailureCallback?.Invoke(e);
+            }
             catch (Exception e)
             {
-                Debug.LogWarning(e);
+                MyDebug.LogWarning(e);
                 var soilException = new SoilException(e.Message);
                 OnLinkFailureCallback?.Invoke(soilException);
             }
@@ -132,12 +155,12 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             var configurations = Resources.Load<ThirdPartySettings>(CurrentPlatformSettingName);
             if (!configurations)
             {
-                throw new Exception("Third party settings not found");
+                throw new SoilException("Third party settings not found", SoilExceptionErrorCode.MisConfiguration);
             }
 
             if (party != Constants.ThirdParty.google)
             {
-                throw new NotSupportedException($"Third party {party} is not supported");
+                throw new SoilException($"Third party {party} is not supported", SoilExceptionErrorCode.InvalidRequest);
             }
 
             return configurations;

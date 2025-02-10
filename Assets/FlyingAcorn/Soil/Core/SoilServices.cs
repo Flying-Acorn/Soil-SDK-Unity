@@ -13,6 +13,7 @@ namespace FlyingAcorn.Soil.Core
 {
     public static class SoilServices
     {
+        private static bool _exisingDeeplinkBroadcasted;
         private static bool _deepLinkWarningBroadcasted;
         private static DeepLinkHandler _deepLinkComponent;
         private static bool _readyBroadcasted;
@@ -20,6 +21,16 @@ namespace FlyingAcorn.Soil.Core
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
         [UsedImplicitly] public static bool Ready => _initTask is { IsCompleted: true };
+
+        static SoilServices()
+        {
+            UserApiHandler.OnUserFilled += userChanged =>
+            {
+                if (!userChanged) return;
+                _readyBroadcasted = false;
+                _ = Initialize();
+            };
+        }
 
         public static async Task Initialize(GameObject persistantObjectToAttachDependencies = null)
         {
@@ -40,6 +51,7 @@ namespace FlyingAcorn.Soil.Core
 
                     break;
                 case true:
+                    BroadcastReady();
                     return;
             }
 
@@ -60,6 +72,11 @@ namespace FlyingAcorn.Soil.Core
                 throw;
             }
 
+            BroadcastReady();
+        }
+
+        private static void BroadcastReady()
+        {
             if (_readyBroadcasted) return;
             MyDebug.Info("Soil-Core: Services are ready");
 
@@ -73,7 +90,9 @@ namespace FlyingAcorn.Soil.Core
             if (!UserPlayerPrefs.DeepLinkActivated) return;
             if (_deepLinkComponent)
             {
+                if (_exisingDeeplinkBroadcasted) return;
                 MyDebug.Verbose("Soil-Core: DeepLinkHandler already attached to an object.");
+                _exisingDeeplinkBroadcasted = true;
                 return;
             }
 
@@ -81,12 +100,10 @@ namespace FlyingAcorn.Soil.Core
                 _deepLinkComponent = persistantObjectToAttachDependencies.AddComponent<DeepLinkHandler>();
             else
             {
-                if (!_deepLinkWarningBroadcasted)
-                {
-                    _deepLinkWarningBroadcasted = true;
-                    MyDebug.LogWarning(
-                        "Soil-Core: DeepLinkHandler was not attached to any object. DeepLinkActivated will not work.");
-                }
+                if (_deepLinkWarningBroadcasted) return;
+                _deepLinkWarningBroadcasted = true;
+                MyDebug.Info(
+                    "Soil-Core: DeepLinkHandler was not attached to any object. DeepLinkActivated will not work.");
             }
         }
     }

@@ -31,12 +31,13 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void OnDeepLinkActivated(Uri invokedUri)
         {
             if (invokedUri == null) return;
-            MyDebug.Info(
-                $"OnDeepLinkActivated {invokedUri.GetLeftPart(UriPartial.Authority)} {PaymentDeeplink.GetLeftPart(UriPartial.Authority)}");
             if (invokedUri.GetLeftPart(UriPartial.Authority) !=
                 PaymentDeeplink.GetLeftPart(UriPartial.Authority)) return;
-            var parameters = invokedUri.Query.Replace("?", "");
-            var keyValuePairs = parameters.Split('&').Select(x => x.Split('=')).ToDictionary(x => x[0], x => x[1]);
+            MyDebug.Info(
+                $"OnDeepLinkActivated {invokedUri.GetLeftPart(UriPartial.Authority)} {PaymentDeeplink.GetLeftPart(UriPartial.Authority)}");
+            var parameters = invokedUri.Query.TrimStart('?').Split('&');
+            var keyValuePairs = parameters.Select(parameter => parameter.Split('=')).Where(pair => pair.Length == 2)
+                .ToDictionary(pair => pair[0], pair => pair[1]);
             OnPaymentDeeplinkActivated?.Invoke(keyValuePairs);
         }
     }

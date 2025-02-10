@@ -14,13 +14,16 @@ namespace FlyingAcorn.Soil.Core.User
     public static class UserApiHandler
     {
         private static readonly string GetPlayerInfoUrl = $"{Authenticate.UserBaseUrl}/";
+        private static HttpClient _fetchClient;
+        private static HttpClient _updateClient;
+        internal static Action<bool> OnUserFilled; // True means user is changed
 
         [ItemNotNull]
         [UsedImplicitly]
         public static async Task<UserInfo> FetchPlayerInfo()
         {
             Debug.Log("Fetching player info...");
-            
+
             if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
             {
                 throw new Exception("Access token is missing. Abandoning the process.");
@@ -32,27 +35,30 @@ namespace FlyingAcorn.Soil.Core.User
                 await Authenticate.RefreshTokenIfNeeded(true);
             }
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            _fetchClient?.Dispose();
+            _fetchClient = new HttpClient();
+            _fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _fetchClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
 
-            var response = await client.SendAsync(request);
+            var response = await _fetchClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Network error while fetching player info. Response: {responseString}");
+                throw new SoilException($"Network error while fetching player info. Response: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
-
-            UserPlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            
+            var fetchedUser = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            ReplaceUser(fetchedUser, UserPlayerPrefs.TokenData);
             Debug.Log($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
         [ItemNotNull]
         [UsedImplicitly]
-        public static async Task<UserInfo> UpdatePlayerInfo(UserInfo userInfo)
+        public static async Task<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
         {
             await SoilServices.Initialize();
 
@@ -65,31 +71,41 @@ namespace FlyingAcorn.Soil.Core.User
 
             var stringBody = JsonConvert.SerializeObject(legalFields);
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            // _updateClient?.Dispose(); // Uncomment to prevent async
+            _updateClient = new HttpClient();
+            _updateClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _updateClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, GetPlayerInfoUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await client.SendAsync(request);
+            var response = await _updateClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Network error while updating player info. Response: {responseString}");
+                throw new SoilException($"Network error while updating player info. Response: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
-            UserPlayerPrefs.UserInfo = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            var updatedUser = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            ReplaceUser(updatedUser, UserPlayerPrefs.TokenData);
             Debug.Log($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
         public static void ReplaceUser(UserInfo linkResponseAlternateUser, TokenData tokens)
         {
+            if (linkResponseAlternateUser == null)
+            {
+                throw new SoilException("Link response alternate user is null", SoilExceptionErrorCode.InvalidResponse);
+            }
+            var userIsDifferent = UserPlayerPrefs.UserInfo.uuid != linkResponseAlternateUser.uuid;
+            
             linkResponseAlternateUser.Validate();
             tokens.Validate();
-            UserPlayerPrefs.UserInfo = UserPlayerPrefs.UserInfo.ChangeUser(linkResponseAlternateUser);
+            UserPlayerPrefs.UserInfo = userIsDifferent ? UserPlayerPrefs.UserInfo.ChangeUser(linkResponseAlternateUser) : linkResponseAlternateUser;
             UserPlayerPrefs.TokenData = UserPlayerPrefs.TokenData.ChangeTokenData(tokens);
+            OnUserFilled?.Invoke(userIsDifferent);
         }
     }
 }

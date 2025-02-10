@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Purchasing.Models;
@@ -27,6 +28,7 @@ namespace FlyingAcorn.Soil.Purchasing
         private static readonly string ItemsUrl = $"{PurchasingBaseUrl}/items/";
         private static readonly string CreatePurchaseUrl = $"{PurchaseBaseUrl}/";
         private static readonly string VerifyPurchaseUrl = $"{PurchaseBaseUrl}/verify/";
+        private static readonly string BatchVerifyPurchaseUrl = $"{PurchaseBaseUrl}/batchverify/";
         private static readonly string PurchaseInvoiceUrl = PurchaseBaseUrl + "{purchase_id}/invoice/";
 
         [UsedImplicitly] public static Action<Item> OnPurchaseStart;
@@ -39,10 +41,13 @@ namespace FlyingAcorn.Soil.Purchasing
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
 
         private static Action<CreateResponse> _onCreatePurchaseResponse;
+        private static HttpClient _buyClient;
+        private static HttpClient _verifyClient;
+        private static HttpClient _queryItemsClient;
 
         public static bool Ready { get; private set; }
 
-        public static async Task Initialize()
+        public static async Task Initialize(bool verifyOnInitialize = true)
         {
             await SoilServices.Initialize();
 
@@ -51,11 +56,22 @@ namespace FlyingAcorn.Soil.Purchasing
             _eventsSubscribed = true;
             OnPaymentDeeplinkActivated -= OpenInvoice;
             OnPaymentDeeplinkActivated += OpenInvoice;
-            OnPurchasingInitialized -= SafeVerifyAllPurchases;
-            OnPurchasingInitialized += SafeVerifyAllPurchases;
+            if (verifyOnInitialize)
+            {
+                OnPurchasingInitialized -= SafeVerifyAllPurchases;
+                OnPurchasingInitialized += SafeVerifyAllPurchases;
+            }
             OnItemsReceived -= PurchasingInitialized;
             OnItemsReceived += PurchasingInitialized;
             _ = QueryItems();
+        }
+        
+        public static void DeInitialize()
+        {
+            _eventsSubscribed = false;
+            OnPaymentDeeplinkActivated = null;
+            OnPurchasingInitialized = null;
+            OnItemsReceived = null;
         }
 
         private static void OpenInvoice(Dictionary<string, string> obj)
@@ -76,12 +92,13 @@ namespace FlyingAcorn.Soil.Purchasing
         {
             await Initialize();
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            _queryItemsClient?.Dispose();
+            _queryItemsClient = new HttpClient();
+            _queryItemsClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _queryItemsClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, ItemsUrl);
 
-            var response = await client.SendAsync(request);
+            var response = await _queryItemsClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response is not { IsSuccessStatusCode: true })
@@ -118,12 +135,13 @@ namespace FlyingAcorn.Soil.Purchasing
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _buyClient?.Dispose();
+            _buyClient = new HttpClient();
+            _buyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, CreatePurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = await client.SendAsync(request);
+            var response = await _buyClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response is not { IsSuccessStatusCode: true })
@@ -133,24 +151,24 @@ namespace FlyingAcorn.Soil.Purchasing
             OnPurchaseCreated(createResponse);
         }
 
-        private static async Task VerifyPurchase(string purchaseId)
+        public static async Task VerifyPurchase(string purchaseId)
         {
             await Initialize();
 
             var payload = new Dictionary<string, object>
             {
                 { "purchase_id", purchaseId },
-                { "preferred_currency", null },
                 { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _verifyClient?.Dispose();
+            _verifyClient = new HttpClient();
+            _verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, VerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = await client.SendAsync(request);
+            var response = await _verifyClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response is not { IsSuccessStatusCode: true })
@@ -173,6 +191,44 @@ namespace FlyingAcorn.Soil.Purchasing
 
             var verifyResponse = JsonConvert.DeserializeObject<VerifyResponse>(responseString);
             OnVerificationResponse(verifyResponse);
+        }
+
+        public static async Task BatchVerifyPurchases(List<string> purchaseIds)
+        {
+            if (purchaseIds.Count == 0)
+                return;
+            await Initialize();
+
+            var payload = new Dictionary<string, object>
+            {
+                { "purchase_ids", purchaseIds },
+                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
+            };
+            var stringBody = JsonConvert.SerializeObject(payload);
+
+            _verifyClient?.Dispose();
+            _verifyClient = new HttpClient();
+            _verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            var request = new HttpRequestMessage(HttpMethod.Post, BatchVerifyPurchaseUrl);
+            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            var response = await _verifyClient.SendAsync(request);
+            var responseString = response.Content.ReadAsStringAsync().Result;
+
+            if (response is not { IsSuccessStatusCode: true })
+            {
+                throw new SoilException($"FlyingAcorn ====> Failed to batch verify items. Error: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
+            }
+
+            var batchVerifyResponse = JsonConvert.DeserializeObject<BatchVerifyResponse>(responseString);
+            foreach (var purchase in batchVerifyResponse.purchases)
+            {
+                OnVerificationResponse(new VerifyResponse
+                {
+                    purchase = purchase
+                });
+            }
         }
 
         private static void OnPurchaseCreated(CreateResponse response)
@@ -204,17 +260,14 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly]
         public static async void SafeVerifyAllPurchases()
         {
-            foreach (var purchaseId in PurchasingPlayerPrefs.UnverifiedPurchaseIds)
+            try
             {
-                try
-                {
-                    await VerifyPurchase(purchaseId);
-                }
-                catch (Exception e)
-                {
-                    var message = $"Failed to verify {purchaseId} - {e} - {e.StackTrace}";
-                    MyDebug.LogWarning(message);
-                }
+                await BatchVerifyPurchases(PurchasingPlayerPrefs.UnverifiedPurchaseIds);
+            }
+            catch (Exception e)
+            {
+                var message = $"Failed to batch verify purchases - {e} - {e.StackTrace}";
+                MyDebug.LogWarning(message);
             }
         }
     }

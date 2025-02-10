@@ -4,16 +4,17 @@ namespace FlyingAcorn.Soil.Core.Data
 {
     public class SoilException : Exception
     {
-        public int ErrorCode { get; set; }
-        
-        public SoilException(string message) : base(message)
+        public SoilExceptionErrorCode ErrorCode { get; set; }
+
+        public SoilException(string message, SoilExceptionErrorCode errorCode = SoilExceptionErrorCode.Unknown) :
+            base(message)
         {
+            ErrorCode = errorCode;
         }
     }
 
     public enum SoilExceptionErrorCode
     {
-        MinValue = 0,
         Unknown = 0,
         TransportError = 1,
         Timeout = 2,
@@ -29,5 +30,8 @@ namespace FlyingAcorn.Soil.Core.Data
         ProjectPolicyAccessDenied = 56,
         PlayerPolicyAccessDenied = 57,
         Conflict = 58,
+        AnotherOngoingInstance = 59,
+        InvalidResponse = 60,
+        MisConfiguration = 61,
     }
 }

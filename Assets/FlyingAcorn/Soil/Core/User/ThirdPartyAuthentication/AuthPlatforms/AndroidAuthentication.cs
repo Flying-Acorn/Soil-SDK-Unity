@@ -38,7 +38,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
                     CredentialManager.StartCredentialProcess();
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    throw new SoilException("Unsupported third party", SoilExceptionErrorCode.ServiceUnavailable);
             }
         }
 
