@@ -18,6 +18,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
         [UsedImplicitly] public static Action<JObject> OnSuccessfulFetch;
         [UsedImplicitly] public static Action<bool> OnServerAnswer;
 
+
         [UsedImplicitly]
         public static JObject UserDefinedConfigs =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserDefinedParentKey] as JObject;
@@ -25,8 +26,12 @@ namespace FlyingAcorn.Soil.RemoteConfig
         [UsedImplicitly]
         public static JObject ExchangeRates =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?["exchange_rates"] as JObject;
-        
-        public static JObject RemoteConfigUserInfo => RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserInfoKey] as JObject;
+
+        [UsedImplicitly]
+        internal static JObject UserInfo =>
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserInfoKey] as JObject;
+
+        internal static UserInfo RemoteConfigUserInfo;
 
         private static bool _fetchSuccessState;
 
@@ -68,7 +73,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static Dictionary<string, object> GetPlayerProperties()
         {
             var properties = _sessionExtraProperties;
-            foreach (var property in UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties())
+            foreach (var property in Soil.Core.User.UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties())
                 properties[property.Key] = property.Value;
             return properties;
         }

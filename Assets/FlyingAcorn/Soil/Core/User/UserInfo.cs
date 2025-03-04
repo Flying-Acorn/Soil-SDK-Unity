@@ -140,7 +140,9 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode },
                     { $"{KeysPrefix}installation_version", AnalyticsPlayerPrefs.InstallationVersion },
                     { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild },
-                    { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() } // Comment if not using AB Testing
+                    {
+                        $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId()
+                    } // Uncomment where A/B testing is used
                 };
             }
 

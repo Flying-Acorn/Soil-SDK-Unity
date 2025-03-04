@@ -1,6 +1,6 @@
 namespace FlyingAcorn.Soil.Core.User.Authentication.Data
 {
-    public abstract class Notification
+    public class Notification
     {
         public string Message { get; set; }
         public string CaseId { get; set; }
