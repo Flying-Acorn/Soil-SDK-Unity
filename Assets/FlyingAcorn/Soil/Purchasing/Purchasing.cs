@@ -22,7 +22,7 @@ namespace FlyingAcorn.Soil.Purchasing
     public static class Purchasing
     {
         private static bool _eventsSubscribed;
-        private static readonly string PurchasingBaseUrl = $"{Core.Data.Constants.ApiUrl}/iap";
+        private static readonly string PurchasingBaseUrl = $"{Constants.ApiUrl}/iap";
         private static readonly string PurchaseBaseUrl = $"{PurchasingBaseUrl}/purchase";
 
         private static readonly string ItemsUrl = $"{PurchasingBaseUrl}/items/";
