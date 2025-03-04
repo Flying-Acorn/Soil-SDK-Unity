@@ -47,6 +47,16 @@ namespace FlyingAcorn.Soil.Core.User
             return RecordAvatarAsset(newUser.avatar_asset).RecordName(newUser.name).RecordUsername(newUser.username);
         }
 
+        public UserInfo ChangeRegionInfo(UserInfo comingUser)
+        {
+            if (comingUser.country != null)
+                country = comingUser.country;
+            var newRealtimeCountry = comingUser.RealtimeCountry();
+            if (newRealtimeCountry != null)
+                properties.flyingacorn_country_realtime = newRealtimeCountry;
+            return this;
+        }
+
         public UserInfo RecordCustomProperty(string key, object value)
         {
             this.custom_properties[key] = value;

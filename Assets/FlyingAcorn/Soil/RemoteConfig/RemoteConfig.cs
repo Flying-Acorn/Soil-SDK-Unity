@@ -114,6 +114,11 @@ namespace FlyingAcorn.Soil.RemoteConfig
             {
                 RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
                 ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
+                RemoteConfigUserInfo = null;
+                if (RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(Constants.UserInfoKey))
+                    RemoteConfigUserInfo = JsonConvert.DeserializeObject<UserInfo>(RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.UserInfoKey]!.ToString());
+                RemoteConfigUserInfo ??= SoilServices.UserInfo;
+                UserApiHandler.ReplaceRegionInfo(RemoteConfigUserInfo);
                 _fetchSuccessState = true;
             }
             catch (Exception)

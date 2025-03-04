@@ -109,5 +109,16 @@ namespace FlyingAcorn.Soil.Core.User
             UserPlayerPrefs.TokenData = UserPlayerPrefs.TokenData.ChangeTokenData(tokens);
             OnUserFilled?.Invoke(userIsDifferent);
         }
+
+        public static void ReplaceRegionInfo(UserInfo comingUser)
+        {
+            if (comingUser == null)
+            {
+                throw new SoilException("Coming user is null", SoilExceptionErrorCode.InvalidResponse);
+            }
+            comingUser.Validate();
+            
+            UserPlayerPrefs.UserInfo = UserPlayerPrefs.UserInfo.ChangeRegionInfo(comingUser);
+        }
     }
 }
