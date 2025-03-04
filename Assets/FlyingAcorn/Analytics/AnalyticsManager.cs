@@ -112,7 +112,7 @@ namespace FlyingAcorn.Analytics
             Instance.AnalyticServiceProvider.ErrorEvent(severity, message);
         }
 
-        public static void UserSegmentation(string name, string value, int dimension)
+        public static void UserSegmentation(string name, string value, int dimension=-1)
         {
             if (!Instance || Instance.AnalyticServiceProvider == null)
             {
