@@ -20,7 +20,7 @@ namespace FlyingAcorn.Soil.Core
         private static Task _initTask;
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
-        [UsedImplicitly] public static bool Ready => _initTask is { IsCompleted: true };
+        [UsedImplicitly] public static bool Ready => _initTask is { IsCompletedSuccessfully: true };
 
         static SoilServices()
         {
@@ -35,6 +35,9 @@ namespace FlyingAcorn.Soil.Core
         public static async Task Initialize(GameObject persistantObjectToAttachDependencies = null)
         {
             SetupDeeplink(persistantObjectToAttachDependencies);
+            
+            if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
+                _initTask = null;
 
             switch (Ready)
             {
