@@ -61,11 +61,20 @@ namespace FlyingAcorn.Soil.Purchasing
                 OnPurchasingInitialized -= SafeVerifyAllPurchases;
                 OnPurchasingInitialized += SafeVerifyAllPurchases;
             }
+
             OnItemsReceived -= PurchasingInitialized;
             OnItemsReceived += PurchasingInitialized;
-            _ = QueryItems();
+            try
+            {
+                await QueryItems();
+            }
+            catch (Exception e)
+            {
+                _eventsSubscribed = false;
+                throw new Exception($"FlyingAcorn ====> Failed to initialize purchasing: {e.Message}");
+            }
         }
-        
+
         public static void DeInitialize()
         {
             _eventsSubscribed = false;
@@ -198,10 +207,10 @@ namespace FlyingAcorn.Soil.Purchasing
 
         public static async Task BatchVerifyPurchases(List<string> purchaseIds)
         {
-            if (purchaseIds.Count == 0)
-                return;
             await Initialize();
 
+            if (purchaseIds.Count == 0)
+                return;
             var payload = new Dictionary<string, object>
             {
                 { "purchase_ids", purchaseIds },
