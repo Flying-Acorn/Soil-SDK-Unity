@@ -243,6 +243,7 @@ MonoBehaviour:
   shopContainer: {fileID: 1638038807}
   resultText: {fileID: 697394598}
   verifyButton: {fileID: 2000211152}
+  enableWithRemote: 1
 --- !u!1 &697394595
 GameObject:
   m_ObjectHideFlags: 0
