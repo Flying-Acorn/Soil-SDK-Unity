@@ -65,7 +65,7 @@ namespace FlyingAcorn.Soil.Core
 
             try
             {
-                _initTask ??= Authenticate.AuthenticateUser();
+                _initTask ??= Authenticate.AuthenticateUser(forceFetchPlayerInfo:true);
                 await _initTask;
             }
             catch (Exception e)
