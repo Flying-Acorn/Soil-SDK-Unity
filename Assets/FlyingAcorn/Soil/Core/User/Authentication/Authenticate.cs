@@ -85,6 +85,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             var body = UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties();
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", body } });
             var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -124,6 +125,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
 
             _refreshClient?.Dispose();
             _refreshClient = new HttpClient();
+            _refreshClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _refreshClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             var request = new HttpRequestMessage(HttpMethod.Post, RefreshTokenUrl);

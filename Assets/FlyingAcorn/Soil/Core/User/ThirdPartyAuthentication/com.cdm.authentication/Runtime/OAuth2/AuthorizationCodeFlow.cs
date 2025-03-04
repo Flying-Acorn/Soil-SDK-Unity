@@ -53,6 +53,7 @@ namespace Cdm.Authentication.OAuth2
             this.configuration = configuration;
 
             httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
             httpClient.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue()
             {
                 NoCache = true,

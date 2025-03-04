@@ -67,6 +67,15 @@ namespace FlyingAcorn.Soil.Core.User
                 return settings && settings.DeepLinkEnabled;
             }
         }
+        
+        public static int RequestTimeout
+        {
+            get
+            {
+                var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
+                return settings ? settings.RequestTimeout : Constants.DefaultTimeout;
+            }
+        }
 
 
         internal static string GetKeysPrefix()

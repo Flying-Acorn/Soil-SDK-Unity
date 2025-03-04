@@ -94,6 +94,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             _queryItemsClient?.Dispose();
             _queryItemsClient = new HttpClient();
+            _queryItemsClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _queryItemsClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _queryItemsClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, ItemsUrl);
@@ -137,6 +138,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             _buyClient?.Dispose();
             _buyClient = new HttpClient();
+            _buyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _buyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, CreatePurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
@@ -164,6 +166,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             _verifyClient?.Dispose();
             _verifyClient = new HttpClient();
+            _verifyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, VerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
@@ -208,6 +211,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             _verifyClient?.Dispose();
             _verifyClient = new HttpClient();
+            _verifyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, BatchVerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");

@@ -9,6 +9,7 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.CloudSave.Data;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
@@ -54,6 +55,7 @@ namespace FlyingAcorn.Soil.CloudSave
             
             // _saveClient?.Dispose(); // support async
             _saveClient = new HttpClient();
+            _saveClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _saveClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _saveClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, CloudSaveUrl);
@@ -101,6 +103,7 @@ namespace FlyingAcorn.Soil.CloudSave
 
             // _loadClient?.Dispose(); // support async
             _loadClient = new HttpClient();
+            _loadClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _loadClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _loadClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var query = $"?key={key}";

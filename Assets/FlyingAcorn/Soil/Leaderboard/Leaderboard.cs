@@ -22,7 +22,6 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
         private static HttpClient _reportScoreClient;
         private static HttpClient _fetchLeaderboardClient;
-        private static HttpClient _deleteScoreClient;
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
         public static async Task Initialize()
@@ -75,6 +74,7 @@ namespace FlyingAcorn.Soil.Leaderboard
 
             _reportScoreClient?.Dispose();
             _reportScoreClient = new HttpClient();
+            _reportScoreClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _reportScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, ReportScoreUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
@@ -109,16 +109,17 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _deleteScoreClient?.Dispose();
-            _deleteScoreClient = new HttpClient();
-            _deleteScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            _fetchLeaderboardClient?.Dispose();
+            _fetchLeaderboardClient = new HttpClient();
+            _fetchLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            _fetchLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Delete, ReportScoreUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
             HttpResponseMessage response;
             try
             {
-                response = await _deleteScoreClient.SendAsync(request);
+                response = await _fetchLeaderboardClient.SendAsync(request);
             }
             catch (Exception e)
             {
@@ -150,6 +151,7 @@ namespace FlyingAcorn.Soil.Leaderboard
 
             // _fetchLeaderboardClient?.Dispose(); // support async
             _fetchLeaderboardClient = new HttpClient();
+            _fetchLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _fetchLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchLeaderboardUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");

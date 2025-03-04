@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
@@ -52,6 +53,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             _linkClient?.Dispose();
             _linkClient = new HttpClient();
+            _linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, LinkUserUrl);
@@ -104,6 +106,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         {
             _linkClient?.Dispose();
             _linkClient = new HttpClient();
+            _linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, LinkUserUrl);
@@ -146,6 +149,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             var stringBody = JsonConvert.SerializeObject(body);
             _linkClient?.Dispose();
             _linkClient = new HttpClient();
+            _linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, UnlinkUserUrl);

@@ -82,6 +82,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
             _fetchClient?.Dispose();
             _fetchClient = new HttpClient();
+            _fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");

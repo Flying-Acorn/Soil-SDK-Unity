@@ -20,6 +20,7 @@ namespace FlyingAcorn.Soil.Core.Data
             }
         }
 
+        internal const int DefaultTimeout = 6;
         internal const string FallBackApiUrl = "https://wwsoil.flyingacorn.studio/api";
 
         private static readonly Dictionary<string, string> APIPerRegion = new Dictionary<string, string>

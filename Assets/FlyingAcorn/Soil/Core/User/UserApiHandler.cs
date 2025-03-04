@@ -37,6 +37,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             _fetchClient?.Dispose();
             _fetchClient = new HttpClient();
+            _fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _fetchClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
@@ -73,6 +74,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             // _updateClient?.Dispose(); // Uncomment to prevent async
             _updateClient = new HttpClient();
+            _updateClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             _updateClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             _updateClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, GetPlayerInfoUrl);
