@@ -36,6 +36,7 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
         [UsedImplicitly] public static Action OnPurchasingInitialized;
         [UsedImplicitly] public static Action<Dictionary<string, string>> OnDeeplinkActivated;
+        private static Task _verifyTask;
 
         [UsedImplicitly]
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
@@ -99,8 +100,6 @@ namespace FlyingAcorn.Soil.Purchasing
 
         private static async Task QueryItems()
         {
-            await Initialize();
-
             _queryItemsClient?.Dispose();
             _queryItemsClient = new HttpClient();
             _queryItemsClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
@@ -128,9 +127,14 @@ namespace FlyingAcorn.Soil.Purchasing
             OnItemsReceived?.Invoke(AvailableItems);
         }
 
+        [UsedImplicitly]
         public static async Task BuyItem(string sku)
         {
-            await Initialize();
+            if (!Ready)
+            {
+                MyDebug.Info("FlyingAcorn ====> Purchasing not ready yet");
+                return;
+            }
 
             var extraData = new Dictionary<string, object>()
             {
@@ -162,9 +166,14 @@ namespace FlyingAcorn.Soil.Purchasing
             OnPurchaseCreated(createResponse);
         }
 
+        [UsedImplicitly]
         public static async Task VerifyPurchase(string purchaseId)
         {
-            await Initialize();
+            if (!Ready)
+            {
+                MyDebug.Info("FlyingAcorn ====> Purchasing not ready yet");
+                return;
+            }
 
             var payload = new Dictionary<string, object>
             {
@@ -205,9 +214,14 @@ namespace FlyingAcorn.Soil.Purchasing
             OnVerificationResponse(verifyResponse);
         }
 
+        [UsedImplicitly]
         public static async Task BatchVerifyPurchases(List<string> purchaseIds)
         {
-            await Initialize();
+            if (!Ready)
+            {
+                MyDebug.Info("FlyingAcorn ====> Purchasing not ready yet");
+                return;
+            }
 
             if (purchaseIds.Count == 0)
                 return;
@@ -262,10 +276,20 @@ namespace FlyingAcorn.Soil.Purchasing
         {
             var purchase = response.purchase;
             if (!PurchasingPlayerPrefs.UnverifiedPurchaseIds.Contains(purchase.purchase_id))
+            {
+                MyDebug.Info($"FlyingAcorn ====> Purchase {purchase.purchase_id} already verified");
                 return;
-            if (purchase.paid || purchase.expired ||
-                !PurchasingPlayerPrefs.CachedItems.Exists(item => item.sku == purchase.sku))
+            }
+            if (purchase.paid || purchase.expired)
+            {
+                MyDebug.Info($"FlyingAcorn ====> Removing purchase {purchase.purchase_id} cause it's paid or expired");
                 PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchase.purchase_id);
+            }
+            if (!PurchasingPlayerPrefs.CachedItems.Exists(item => item.sku == purchase.sku))
+            {
+                MyDebug.Info($"FlyingAcorn ====> Removing purchase {purchase.purchase_id} cause item {purchase.sku} not found");
+                PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchase.purchase_id);
+            }
             if (purchase.paid)
                 OnPurchaseSuccessful?.Invoke(purchase);
         }
@@ -275,13 +299,24 @@ namespace FlyingAcorn.Soil.Purchasing
         {
             try
             {
-                await BatchVerifyPurchases(PurchasingPlayerPrefs.UnverifiedPurchaseIds);
+                if (_verifyTask is { IsCompleted: false })
+                {
+                    MyDebug.Info("FlyingAcorn ====> Verify task is already running");
+                    return;
+                }
+
+                var idsToVerify = PurchasingPlayerPrefs.UnverifiedPurchaseIds;
+                _verifyTask = idsToVerify.Count == 1
+                    ? VerifyPurchase(idsToVerify[0])
+                    : BatchVerifyPurchases(PurchasingPlayerPrefs.UnverifiedPurchaseIds);
+                await _verifyTask;
             }
             catch (Exception e)
             {
                 var message = $"Failed to batch verify purchases - {e} - {e.StackTrace}";
                 MyDebug.LogWarning(message);
             }
+            _verifyTask = null;
         }
     }
 }

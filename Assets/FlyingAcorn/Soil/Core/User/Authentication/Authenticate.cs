@@ -9,7 +9,7 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using UnityEngine;
+using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.Authentication
 {

@@ -12,58 +12,16 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
         [SerializeField] private VerticalLayoutGroup shopContainer;
         [SerializeField] private TextMeshProUGUI resultText;
         [SerializeField] private Button verifyButton;
-        [SerializeField] private bool enableWithRemote;
         private List<ItemRow> _rows = new();
-        private const string ConfigEnableKey = "purchasing_enabled";
 
         private void Start()
         {
+            Failed("Getting items...");
             Purchasing.OnItemsReceived += FillItems;
             Purchasing.OnPurchaseSuccessful += OnPurchaseSuccessful;
             Purchasing.OnPurchaseStart += OnPurchaseStart;
             verifyButton.onClick.AddListener(VerifyAllPurchases);
-            if (!enableWithRemote)
-            {
-                Log("Purchasing is enabled. Getting items...");
-                _ = Purchasing.Initialize();
-                return;
-            }
-            RemoteConfig.RemoteConfig.OnServerAnswer += OnServerAnswer;
-            OnServerAnswer(false);
-            Log("Fetching remote config...");
-            RemoteConfig.RemoteConfig.FetchConfig();
-        }
-
-        private void OnServerAnswer(bool obj)
-        {
-            if (RemoteConfig.RemoteConfig.UserDefinedConfigs == null)
-            {
-                return;
-            }
-
-            if (RemoteConfig.RemoteConfig.UserDefinedConfigs.TryGetValue(ConfigEnableKey, out var value))
-            {
-                if (bool.TryParse(value.ToString(), out var isShopEnabled))
-                {
-                    if (isShopEnabled)
-                    {
-                        Log("Purchasing is enabled. Getting items...");
-                        _ = Purchasing.Initialize();
-                    }
-                    else
-                    {
-                        Log("Purchasing is disabled.");
-                    }
-                }
-                else
-                {
-                    Log("Failed to parse remote config value.");
-                }
-            }
-            else
-            {
-                Log("Failed to find remote config key.");
-            }
+            _ = Purchasing.Initialize();
         }
 
         private void OnApplicationFocus(bool focusStatus)
@@ -74,17 +32,17 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
 
         private void OnPurchaseStart(Item obj)
         {
-            Log($"Purchasing {obj.sku}...");
+            Failed($"Purchasing {obj.sku}...");
         }
 
         private void OnPurchaseSuccessful(Purchase obj)
         {
-            Log($"Purchased {obj.sku} successfully!");
+            Failed($"Purchased {obj.sku} successfully!");
         }
 
         private void FillItems(List<Item> items)
         {
-            Log($"Received {items.Count} items.");
+            Failed($"Received {items.Count} items.");
             foreach (var row in _rows)
             {
                 row.OnClick -= BuyItem;
@@ -107,19 +65,17 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             _ = Purchasing.BuyItem(sku);
         }
 
-        private void Log(string error)
+        private void Failed(string error)
         {
             resultText.text = error;
         }
 
         private void VerifyAllPurchases()
         {
-            if (!Purchasing.Ready)
-                return;
-            Log("Verifying all purchases...");
+            Failed("Verifying all purchases...");
             if (PurchasingPlayerPrefs.UnverifiedPurchaseIds.Count == 0)
             {
-                Log("No unverified purchases.");
+                Failed("No unverified purchases.");
                 return;
             }
 

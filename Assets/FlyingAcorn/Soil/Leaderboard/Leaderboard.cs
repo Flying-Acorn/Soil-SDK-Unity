@@ -21,7 +21,6 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
         private static HttpClient _reportScoreClient;
-        private static HttpClient _fetchLeaderboardClient;
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
         public static async Task Initialize()
@@ -109,17 +108,16 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _fetchLeaderboardClient?.Dispose();
-            _fetchLeaderboardClient = new HttpClient();
-            _fetchLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _fetchLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            var deleteLeaderboardClient = new HttpClient();
+            deleteLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            deleteLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Delete, ReportScoreUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
             HttpResponseMessage response;
             try
             {
-                response = await _fetchLeaderboardClient.SendAsync(request);
+                response = await deleteLeaderboardClient.SendAsync(request);
             }
             catch (Exception e)
             {
@@ -149,10 +147,9 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            // _fetchLeaderboardClient?.Dispose(); // support async
-            _fetchLeaderboardClient = new HttpClient();
-            _fetchLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _fetchLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            var fetchClient = new HttpClient();
+            fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchLeaderboardUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
@@ -160,7 +157,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             string responseString;
             try
             {
-                response = await _fetchLeaderboardClient.SendAsync(request);
+                response = await fetchClient.SendAsync(request);
                 responseString = response.Content.ReadAsStringAsync().Result;
             }
             catch (Exception e)
