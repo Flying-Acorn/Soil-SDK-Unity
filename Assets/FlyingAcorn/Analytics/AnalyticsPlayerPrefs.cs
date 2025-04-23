@@ -18,13 +18,13 @@ namespace FlyingAcorn.Analytics
                 $"{Prefix}SavedLogLevel", (int)Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity);
             set => PlayerPrefs.SetInt($"{Prefix}SavedLogLevel", (int)value);
         }
-        
+
         public static string InstallationVersion
         {
             get => PlayerPrefs.GetString($"{Prefix}InstallationVersion");
             set => PlayerPrefs.SetString($"{Prefix}InstallationVersion", value);
         }
-        
+
         public static string InstallationBuild
         {
             get => PlayerPrefs.GetString($"{Prefix}InstallationBuild");
@@ -35,6 +35,18 @@ namespace FlyingAcorn.Analytics
         {
             get => PlayerPrefs.GetInt($"{Prefix}UserDebugMode", 0) == 1;
             internal set => PlayerPrefs.SetInt($"{Prefix}UserDebugMode", value ? 1 : 0);
+        }
+
+        public static string CustomUserId
+        {
+            get
+            {
+                var id = PlayerPrefs.GetString($"{Prefix}CustomUserId");
+                if (string.IsNullOrEmpty(id))
+                    id = SystemInfo.deviceUniqueIdentifier;
+                return id;
+            }
+            set => PlayerPrefs.SetString($"{Prefix}CustomUserId", value);
         }
     }
 }

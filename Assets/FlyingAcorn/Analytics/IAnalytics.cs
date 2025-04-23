@@ -18,7 +18,7 @@ namespace FlyingAcorn.Analytics
         void ResourceEvent(FlyingAcornResourceFlowType flowType, string currency, float amount, string itemType,
             string itemId);
 
-        void SetUserIdentifier(string userId);
+        void SetUserIdentifier();
         void SetConsents();
 
         void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,

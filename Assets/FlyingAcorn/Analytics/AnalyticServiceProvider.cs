@@ -46,6 +46,11 @@ namespace FlyingAcorn.Analytics
             IsInitialized = true;
         }
 
+        public List<IAnalytics> GetServices()
+        {
+            return _services;
+        }
+
         // ATTENTION: DO NOT USE MYDEBUG HERE
         public void ErrorEvent(FlyingAcornErrorSeverity severity, string message)
         {
@@ -81,15 +86,9 @@ namespace FlyingAcorn.Analytics
             }
         }
 
-        public void SetUserIdentifier(string userId)
+        public void SetUserIdentifier()
         {
-            MyDebug.Verbose($"Sending user to analytics: {userId} for services");
-            if (string.IsNullOrEmpty(userId))
-                return;
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.SetUserIdentifier(userId);
-            }
+            // Call on each adapter manually
         }
 
         public void SetConsents()
