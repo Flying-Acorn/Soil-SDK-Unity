@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
 using JetBrains.Annotations;
@@ -66,7 +67,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 {
                     if (playerInfoIsMissing)
                         throw new Exception($"Failed to fetch player info: {e.Message}, abandoning the process.");
-                    Debug.LogError($"Failed to fetch player info: {e.Message}, continuing with the existing info.");
+                    MyDebug.Info($"Failed to fetch player info: {e.Message}, continuing with the existing info.");
                 }
             }
 
@@ -75,7 +76,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
 
         private static async Task RegisterPlayer()
         {
-            Debug.Log("Registering player...");
+            MyDebug.Verbose("Registering player...");
             var appID = UserPlayerPrefs.AppID;
             var sdkToken = UserPlayerPrefs.SDKToken;
 
@@ -103,7 +104,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             }
 
             UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
-            Debug.Log($"Player registered successfully. Response: {responseString}");
+            MyDebug.Info($"Player registered successfully. Response: {responseString}");
             OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
         }
 
@@ -141,7 +142,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             }
 
             UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
-            Debug.Log($"Tokens refreshed successfully. Response: {responseString}");
+            MyDebug.Info($"Tokens refreshed successfully. Response: {responseString}");
             OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);
         }
 

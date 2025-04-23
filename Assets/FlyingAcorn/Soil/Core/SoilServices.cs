@@ -70,7 +70,7 @@ namespace FlyingAcorn.Soil.Core
             }
             catch (Exception e)
             {
-                MyDebug.LogWarning("Soil: " + $"Failed to authenticate user " + e.Message + " " +
+                MyDebug.Info("Soil: " + $"Failed to authenticate user " + e.Message + " " +
                                    e.StackTrace);
                 throw;
             }
