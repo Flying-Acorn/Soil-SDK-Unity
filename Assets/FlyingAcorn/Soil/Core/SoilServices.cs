@@ -8,6 +8,7 @@ using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using UnityEngine;
 using Constants = FlyingAcorn.Soil.Core.Data.Constants;
+using Object = UnityEngine.Object;
 
 namespace FlyingAcorn.Soil.Core
 {
@@ -18,6 +19,7 @@ namespace FlyingAcorn.Soil.Core
         private static DeepLinkHandler _deepLinkComponent;
         private static bool _readyBroadcasted;
         private static Task _initTask;
+        private static GameObject _soilCoreGameObject;
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
         [UsedImplicitly] public static bool Ready => _initTask is { IsCompletedSuccessfully: true };
@@ -32,10 +34,15 @@ namespace FlyingAcorn.Soil.Core
             };
         }
 
-        public static async Task Initialize(GameObject persistantObjectToAttachDependencies = null)
+        public static async Task Initialize()
         {
-            SetupDeeplink(persistantObjectToAttachDependencies);
-            
+            if (!_soilCoreGameObject)
+            {
+                _soilCoreGameObject = new GameObject("SoilCore");
+                Object.DontDestroyOnLoad(_soilCoreGameObject);
+            }
+            SetupDeeplink();
+
             if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
                 _initTask = null;
 
@@ -65,7 +72,7 @@ namespace FlyingAcorn.Soil.Core
 
             try
             {
-                _initTask ??= Authenticate.AuthenticateUser(forceFetchPlayerInfo:true);
+                _initTask ??= Authenticate.AuthenticateUser(forceFetchPlayerInfo: true);
                 await _initTask;
             }
             catch (Exception e)
@@ -88,26 +95,13 @@ namespace FlyingAcorn.Soil.Core
         }
 
         [UsedImplicitly]
-        public static void SetupDeeplink(GameObject persistantObjectToAttachDependencies)
+        public static void SetupDeeplink()
         {
             if (!UserPlayerPrefs.DeepLinkActivated) return;
             if (_deepLinkComponent)
-            {
-                if (_exisingDeeplinkBroadcasted) return;
-                MyDebug.Verbose("Soil-Core: DeepLinkHandler already attached to an object.");
-                _exisingDeeplinkBroadcasted = true;
                 return;
-            }
 
-            if (persistantObjectToAttachDependencies)
-                _deepLinkComponent = persistantObjectToAttachDependencies.AddComponent<DeepLinkHandler>();
-            else
-            {
-                if (_deepLinkWarningBroadcasted) return;
-                _deepLinkWarningBroadcasted = true;
-                MyDebug.Info(
-                    "Soil-Core: DeepLinkHandler was not attached to any object. DeepLinkActivated will not work.");
-            }
+            _deepLinkComponent = _soilCoreGameObject.AddComponent<DeepLinkHandler>();
         }
     }
 }

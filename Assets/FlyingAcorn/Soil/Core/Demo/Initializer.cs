@@ -30,7 +30,7 @@ namespace FlyingAcorn.Soil.Core.Demo
         {
             if (!Instance)
                 throw new Exception("Initializer instance is null");
-            await SoilServices.Initialize(Instance.gameObject);
+            await SoilServices.Initialize();
         }
     }
 }
