@@ -1,3 +1,5 @@
+using System.Linq;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data.BuildData.Editor;
 using UnityEditor;
 using UnityEditor.Build;
@@ -39,13 +41,19 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
         {
             if (report.summary.platform != BuildTarget.Android)
                 return;
-            var configurations = Resources.Load<ThirdPartySettings>(SocialAuthentication.AndroidSettingName);
-            if (!configurations || string.IsNullOrEmpty(configurations.RedirectUri))
+            var configurations = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();
+            var googleAndroid = configurations.Find(settings =>
+                settings.ThirdParty == Data.Constants.ThirdParty.google &&
+                settings.Platform == RuntimePlatform.Android);
+            if (googleAndroid == null)
+                throw new BuildFailedException("Third party settings not found");
+
+            if (!googleAndroid || string.IsNullOrEmpty(googleAndroid.RedirectUri))
             {
                 Debug.Log("[FABuildTools] Redirect URI not found in ThirdPartySettings");
                 return;
             }
-            DeeplinkTools.AddAndroidDeeplink(configurations.RedirectUri);
+            DeeplinkTools.AddAndroidDeeplink(googleAndroid.RedirectUri);
         }
 #endif
     }

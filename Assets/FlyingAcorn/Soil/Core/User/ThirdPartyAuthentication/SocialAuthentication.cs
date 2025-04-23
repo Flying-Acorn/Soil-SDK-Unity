@@ -1,10 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
-using JetBrains.Annotations;
 using UnityEngine;
 using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
@@ -13,23 +13,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
     public abstract class SocialAuthentication
     {
         private static UserInfo _thirdPartyInitializer;
-        [UsedImplicitly] public const string AndroidSettingName = "AndroidGoogleAuthSetting";
-        [UsedImplicitly] public const string IOSSettingName = "IOSGoogleAuthSetting";
-        private const string EditorSettingsName = "EditorGoogleAuthSetting";
-
-        private static string CurrentPlatformSettingName
-        {
-            get
-            {
-                if (Application.isEditor)
-                    return EditorSettingsName;
-                if (Application.platform == RuntimePlatform.Android)
-                    return AndroidSettingName;
-                if (Application.platform == RuntimePlatform.IPhonePlayer)
-                    return IOSSettingName;
-                return null;
-            }
-        }
+        private static List<ThirdPartySettings> _thirdPartySettings;
 
         public static Action<LinkPostResponse> OnLinkSuccessCallback { get; set; }
         public static Action<UnlinkResponse> OnUnlinkSuccessCallback { get; set; }
@@ -38,36 +22,33 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public static Action<SoilException> OnUnlinkFailureCallback { get; set; }
         public static Action<SoilException> OnGetAllLinksFailureCallback { get; set; }
 
-        public static async Task Initialize()
+        public static async Task Initialize(List<ThirdPartySettings> thirdPartySettings)
         {
             await SoilServices.Initialize();
+            _thirdPartySettings = thirdPartySettings;
             if (SoilServices.UserInfo.linkable_parties == null)
             {
                 _thirdPartyInitializer ??= await UserApiHandler.FetchPlayerInfo();
             }
+
         }
 
         public static async void Link(Constants.ThirdParty party)
         {
-            try
+            if (_thirdPartySettings == null)
             {
-                await Initialize();
-            }
-            catch (SoilException e)
-            {
-                MyDebug.LogWarning(e);
-                OnLinkFailureCallback?.Invoke(e);
-                return;
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning(e);
-                var soilException = new SoilException(e.Message, SoilExceptionErrorCode.ServiceUnavailable);
-                OnLinkFailureCallback?.Invoke(soilException);
+                MyDebug.LogWarning("Settings not found");
+                OnLinkFailureCallback?.Invoke(new SoilException("Settings not found", SoilExceptionErrorCode.MisConfiguration));
                 return;
             }
 
             var settings = GetConfigFile(party);
+            if (!settings)
+            {
+                MyDebug.LogWarning("Settings not found");
+                OnLinkFailureCallback?.Invoke(new SoilException("Settings not found", SoilExceptionErrorCode.MisConfiguration));
+                return;
+            }
             IPlatformAuthentication authenticationHandler = Application.platform switch
             {
                 RuntimePlatform.Android => new AndroidAuthentication(settings),
@@ -83,21 +64,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
         public static async void Unlink(Constants.ThirdParty party)
         {
-            try
+            if (_thirdPartySettings == null)
             {
-                await Initialize();
-            }
-            catch (SoilException e)
-            {
-                MyDebug.LogWarning(e);
-                OnUnlinkFailureCallback?.Invoke(e);
-                return;
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning(e);
-                var soilException = new SoilException(e.Message);
-                OnUnlinkFailureCallback?.Invoke(soilException);
+                MyDebug.LogWarning("Settings not found");
+                OnUnlinkFailureCallback?.Invoke(new SoilException("Settings not found", SoilExceptionErrorCode.MisConfiguration));
                 return;
             }
 
@@ -108,21 +78,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
         public static async void GetLinks()
         {
-            try
+            if (_thirdPartySettings == null)
             {
-                await Initialize();
-            }
-            catch (SoilException e)
-            {
-                MyDebug.LogWarning(e);
-                OnGetAllLinksFailureCallback?.Invoke(e);
-                return;
-            }
-            catch (Exception e)
-            {
-                MyDebug.LogWarning(e);
-                var soilException = new SoilException(e.Message);
-                OnGetAllLinksFailureCallback?.Invoke(soilException);
+                MyDebug.LogWarning("Settings not found");
+                OnGetAllLinksFailureCallback?.Invoke(new SoilException("Settings not found", SoilExceptionErrorCode.MisConfiguration));
                 return;
             }
 
@@ -152,18 +111,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
         private static ThirdPartySettings GetConfigFile(Constants.ThirdParty party)
         {
-            var configurations = Resources.Load<ThirdPartySettings>(CurrentPlatformSettingName);
-            if (!configurations)
-            {
-                throw new SoilException("Third party settings not found", SoilExceptionErrorCode.MisConfiguration);
-            }
-
-            if (party != Constants.ThirdParty.google)
-            {
-                throw new SoilException($"Third party {party} is not supported", SoilExceptionErrorCode.InvalidRequest);
-            }
-
-            return configurations;
+            return _thirdPartySettings.Find(settings =>
+                settings.ThirdParty == party && settings.Platform == Application.platform);
         }
     }
 }

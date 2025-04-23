@@ -1,10 +1,7 @@
-﻿using System;
-using System.IO;
+﻿using System.Linq;
 using FlyingAcorn.Soil.Core.Data.BuildData.Editor;
-using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using UnityEditor.iOS.Xcode;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
@@ -20,14 +17,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
                 Debug.LogWarning("[FABuildTools] Ignoring deep link since it is disabled");
                 return;
             }
-            var configurations = Resources.Load<ThirdPartySettings>(SocialAuthentication.IOSSettingName);
-            if (configurations == null)
-                throw new BuildFailedException("Third party settings not found");
 
+            var configurations = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();
+            var googleIOS = configurations.Find(settings =>
+                settings.ThirdParty == Data.Constants.ThirdParty.google &&
+                settings.Platform == RuntimePlatform.IPhonePlayer);
+            if (!googleIOS)
+                throw new BuildFailedException("Third party settings not found");
+            
 #if UNITY_IOS
-            DeeplinkTools.AddIOSDeeplink(report, configurations.RedirectUri);
+            DeeplinkTools.AddIOSDeeplink(report, googleIOS.RedirectUri);
 #endif
         }
-
     }
 }

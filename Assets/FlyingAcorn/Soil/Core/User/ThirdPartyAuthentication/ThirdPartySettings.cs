@@ -13,6 +13,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         [SerializeField] private string scope = "email profile";
         [SerializeField] private string redirectUri;
 
+        public RuntimePlatform Platform => platform;
         public string ClientId => clientId;
         public string Scope => scope;
         public string RedirectUri => redirectUri;
