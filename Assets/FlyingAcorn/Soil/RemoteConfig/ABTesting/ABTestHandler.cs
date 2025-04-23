@@ -21,8 +21,8 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         {
             if (!AnalyticsManager.InitCalled)
             {
-                Debug.LogWarning("AnalyticsManager.InitCalled is false. Calling Initialize manually.");
-                AnalyticsManager.Initialize();
+                Debug.LogException(new Exception("FA_ABTesting ====> AnalyticsManager is not initialized, AbTesting can't be initialized"));
+                return;
             }
 
             try
