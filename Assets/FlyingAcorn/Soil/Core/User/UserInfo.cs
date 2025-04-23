@@ -13,6 +13,7 @@ using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
+using TimeZoneInfo = FlyingAcorn.Soil.Core.Data.TimeZoneInfo;
 
 namespace FlyingAcorn.Soil.Core.User
 {
@@ -127,6 +128,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             public static Dictionary<string, object> GeneratePropertiesDynamicPlayerProperties()
             {
+                var timezone = JsonConvert.DeserializeObject<TimeZoneInfo>(JsonConvert.SerializeObject(System.TimeZoneInfo.Local));
                 return new Dictionary<string, object>
                 {
                     { $"{KeysPrefix}platform", Application.platform.ToString() },
@@ -150,6 +152,7 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode },
                     { $"{KeysPrefix}installation_version", AnalyticsPlayerPrefs.InstallationVersion },
                     { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild },
+                    { $"{KeysPrefix}timezone", timezone },
                     {
                         $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId()
                     } // Uncomment where A/B testing is used
