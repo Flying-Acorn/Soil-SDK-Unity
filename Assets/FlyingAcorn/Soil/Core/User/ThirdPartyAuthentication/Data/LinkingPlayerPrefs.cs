@@ -28,7 +28,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 
         internal static void RemoveLink(UnlinkResponse unlinkResponse)
         {
-            MyDebug.Info($"Removing link for {unlinkResponse.detail.app_party.party}");
             RemoveLink(unlinkResponse.detail.app_party);
         }
         
