@@ -121,7 +121,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                     detail = new LinkStatusResponse
                     {
                         code = Constants.LinkStatus.LinkNotFound,
-                        message = Constants.LinkStatus.LinkNotFound.ToString()
+                        message = nameof(Constants.LinkStatus.LinkNotFound)
                     },
                     linked_accounts = new List<LinkPostResponse>()
                 };
@@ -165,7 +165,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                     detail = new LinkStatusResponse
                     {
                         code = Constants.LinkStatus.LinkNotFound,
-                        message = Constants.LinkStatus.LinkNotFound.ToString()
+                        message = nameof(Constants.LinkStatus.LinkNotFound)
                     }
                 };
             }

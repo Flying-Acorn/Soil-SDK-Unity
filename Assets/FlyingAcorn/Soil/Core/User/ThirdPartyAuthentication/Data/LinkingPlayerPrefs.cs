@@ -29,8 +29,14 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
         internal static void RemoveLink(UnlinkResponse unlinkResponse)
         {
             MyDebug.Info($"Removing link for {unlinkResponse.detail.app_party.party}");
+            RemoveLink(unlinkResponse.detail.app_party);
+        }
+        
+        internal static void RemoveLink(AppParty appParty)
+        {
+            MyDebug.Info($"Removing link for {appParty.party}");
             var links = Links;
-            links.RemoveAll(l => l.detail.app_party.party == unlinkResponse.detail.app_party.party);
+            links.RemoveAll(l => l.detail.app_party.party == appParty.party);
             Links = links;
         }
 
@@ -64,5 +70,18 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
                 }
             }
         }
+
+        private static string ThirdPartyPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}thirdparty_";
+        
+        internal static string GetUserId(Constants.ThirdParty thirdParty)
+        {
+            return PlayerPrefs.GetString(ThirdPartyPrefix + thirdParty, "");
+        }
+        
+        internal static void SetUserId(Constants.ThirdParty thirdParty, string userId)
+        {
+            PlayerPrefs.SetString(ThirdPartyPrefix + thirdParty, userId);
+        }
+
     }
 }

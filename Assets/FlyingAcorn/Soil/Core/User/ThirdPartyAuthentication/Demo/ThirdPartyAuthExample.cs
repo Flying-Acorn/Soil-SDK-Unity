@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Cdm.Authentication.Browser;
 using FlyingAcorn.Soil.Core.Data;
@@ -37,6 +38,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             SocialAuthentication.OnUnlinkFailureCallback += OnFailure;
             SocialAuthentication.OnGetAllLinksSuccessCallback += OnGetAllLinksSuccess;
             SocialAuthentication.OnGetAllLinksFailureCallback += OnFailure;
+            SocialAuthentication.OnAccessRevoked += OnAccessRevoked;
             linkGoogleButton.onClick.AddListener(LinkGoogle);
             linkAppleButton.onClick.AddListener(LinkApple);
             unlinkButton.onClick.AddListener(Unlink);
@@ -44,21 +46,33 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             UpdateButtons();
         }
 
+        private void OnAccessRevoked(Constants.ThirdParty obj)
+        {
+            statusText.text = $"Access revoked for {obj}";
+            UpdateButtons();
+        }
+
+        private void Update()
+        {
+            SocialAuthentication.Update();
+        }
+
         private static void GetLinks()
         {
             SocialAuthentication.GetLinks();
         }
 
-        private static void Unlink()
+        private static async void Unlink()
         {
-            var link = LinkingPlayerPrefs.Links.First();
+            var link = LinkingPlayerPrefs.Links.FirstOrDefault();
             if (link == null)
             {
                 Debug.LogError("No link found to unlink");
                 return;
             }
 
-            SocialAuthentication.Unlink(link.detail.app_party.party);
+            await SocialAuthentication.Unlink(link.detail.app_party.party);
+            
         }
 
         private static void LinkGoogle()
@@ -97,7 +111,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         private void UpdateButtons()
         {
             var links = LinkingPlayerPrefs.Links;
-            unlinkButton.interactable = links.Any();
+            unlinkButton.interactable = links != null && links.Any();
             linkGoogleButton.interactable = !unlinkButton.interactable;
             linkAppleButton.interactable = !unlinkButton.interactable;
         }

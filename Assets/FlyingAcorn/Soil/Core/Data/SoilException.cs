@@ -33,5 +33,6 @@ namespace FlyingAcorn.Soil.Core.Data
         AnotherOngoingInstance = 59,
         InvalidResponse = 60,
         MisConfiguration = 61,
+        Canceled = 62,
     }
 }

@@ -3,9 +3,9 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
-    public class OtherPlatformAuthentication : IOSAuthentication
+    public class GoogleOtherPlatformAuthentication : GoogleIOSAuthentication
     {
-        public OtherPlatformAuthentication(ThirdPartySettings thirdPartySettings) : base(thirdPartySettings)
+        public GoogleOtherPlatformAuthentication(ThirdPartySettings thirdPartySettings) : base(thirdPartySettings)
         {
         }
 

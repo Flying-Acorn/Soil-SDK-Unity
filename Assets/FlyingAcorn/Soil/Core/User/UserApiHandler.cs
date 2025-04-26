@@ -13,7 +13,7 @@ namespace FlyingAcorn.Soil.Core.User
 {
     public static class UserApiHandler
     {
-        private static readonly string GetPlayerInfoUrl = $"{Authenticate.UserBaseUrl}/";
+        private static string GetPlayerInfoUrl => $"{Authenticate.UserBaseUrl}/";
         private static HttpClient _fetchClient;
         private static HttpClient _updateClient;
         internal static Action<bool> OnUserFilled; // True means user is changed

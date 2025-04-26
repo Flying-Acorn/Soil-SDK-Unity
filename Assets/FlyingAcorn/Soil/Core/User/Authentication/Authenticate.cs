@@ -16,10 +16,10 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
     public static class Authenticate
     {
         private static HttpClient _refreshClient;
-        internal static readonly string UserBaseUrl = $"{Constants.ApiUrl}/users";
+        internal static string UserBaseUrl => $"{Constants.ApiUrl}/users";
 
-        private static readonly string RegisterPlayerUrl = $"{UserBaseUrl}/register/";
-        private static readonly string RefreshTokenUrl = $"{UserBaseUrl}/refreshtoken/";
+        private static string RegisterPlayerUrl => $"{UserBaseUrl}/register/";
+        private static string RefreshTokenUrl => $"{UserBaseUrl}/refreshtoken/";
 
         [UsedImplicitly] public static Action<TokenData> OnTokenRefreshed;
         [UsedImplicitly] public static Action<TokenData> OnUserRegistered;

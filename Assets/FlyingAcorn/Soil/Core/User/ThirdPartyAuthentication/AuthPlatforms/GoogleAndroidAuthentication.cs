@@ -8,13 +8,11 @@ using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Const
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
-    public class AndroidAuthentication : IPlatformAuthentication
+    public class GoogleAndroidAuthentication : IPlatformAuthentication
     {
         public ThirdPartySettings ThirdPartySettings { get; }
-        public Action<LinkAccountInfo, ThirdPartySettings> OnSignInSuccessCallback { get; set; }
-        public Action<SoilException> OnSignInFailureCallback { get; set; }
 
-        public AndroidAuthentication(ThirdPartySettings thirdPartySettings)
+        public GoogleAndroidAuthentication(ThirdPartySettings thirdPartySettings)
         {
             ThirdPartySettings = thirdPartySettings;
         }
@@ -42,10 +40,14 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             }
         }
 
+        public void Update()
+        {
+        }
+
         private void OnLoginFailed(CredentialExceptionData arg0)
         {
             Debug.LogError($"OnLoginFailed: {arg0.message}");
-            OnSignInFailureCallback?.Invoke(new SoilException(arg0.message));
+            IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(arg0.message));
         }
 
         private void OnLoginSuccess(CredentialUserData arg0)
@@ -62,7 +64,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
                 profile_picture = arg0.profilePictureUri,
                 extra_data = extraData
             };
-            OnSignInSuccessCallback?.Invoke(user, ThirdPartySettings);
+            IPlatformAuthentication.OnSignInSuccessCallback?.Invoke(user, ThirdPartySettings);
         }
     }
 }

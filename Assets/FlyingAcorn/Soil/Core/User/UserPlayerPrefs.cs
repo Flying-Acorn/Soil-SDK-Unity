@@ -77,7 +77,6 @@ namespace FlyingAcorn.Soil.Core.User
             }
         }
 
-
         internal static string GetKeysPrefix()
         {
             return $"FA_soil_{AppID}_";

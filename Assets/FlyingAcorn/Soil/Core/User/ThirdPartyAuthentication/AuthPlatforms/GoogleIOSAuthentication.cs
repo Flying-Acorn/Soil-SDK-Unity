@@ -14,15 +14,13 @@ using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Const
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
-    public class IOSAuthentication : IPlatformAuthentication
+    public class GoogleIOSAuthentication : IPlatformAuthentication
     {
         public ThirdPartySettings ThirdPartySettings { get; }
-        public Action<LinkAccountInfo, ThirdPartySettings> OnSignInSuccessCallback { get; set; }
-        public Action<SoilException> OnSignInFailureCallback { get; set; }
         private static CancellationTokenSource _cancellationTokenSource;
         private AuthenticationSession _authenticationSession;
 
-        public IOSAuthentication(ThirdPartySettings thirdPartySettings)
+        public GoogleIOSAuthentication(ThirdPartySettings thirdPartySettings)
         {
             ThirdPartySettings = thirdPartySettings;
         }
@@ -62,28 +60,32 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             {
                 var accessTokenResponse = await _authenticationSession.AuthenticateAsync();
                 var authenticatedUser = await GetUserInfoAsync();
-                OnSignInSuccessCallback?.Invoke(authenticatedUser, ThirdPartySettings);
+                IPlatformAuthentication.OnSignInSuccessCallback?.Invoke(authenticatedUser, ThirdPartySettings);
             }
             catch (AuthorizationCodeRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidRequest));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidRequest));
             }
             catch (AccessTokenRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidToken));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidToken));
             }
             catch (HttpListenerException ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                OnSignInFailureCallback(new SoilException(ex.Message, SoilExceptionErrorCode.AnotherOngoingInstance));
+                IPlatformAuthentication.OnSignInFailureCallback(new SoilException(ex.Message, SoilExceptionErrorCode.AnotherOngoingInstance));
             }
             catch (Exception ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                OnSignInFailureCallback?.Invoke(new SoilException(ex.Message));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(ex.Message));
             }
+        }
+
+        public void Update()
+        {
         }
 
         private async void RefreshTokenAsync()
