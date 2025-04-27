@@ -5,11 +5,9 @@
 using AppleAuth.Editor;
 using UnityEditor;
 using UnityEditor.Callbacks;
-#if UNITY_XCODE_EXTENSIONS_AVAILABLE
 using UnityEditor.iOS.Xcode;
-#endif
 
-namespace AppleAuthSample.Editor
+namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 {
     public static class SignInWithApplePostprocessor
     {
@@ -18,7 +16,7 @@ namespace AppleAuthSample.Editor
         [PostProcessBuild(CallOrder)]
         public static void OnPostProcessBuild(BuildTarget target, string path)
         {
-            if (target == BuildTarget.iOS || target == BuildTarget.tvOS)
+            if (target is BuildTarget.iOS or BuildTarget.tvOS)
             {
                 #if UNITY_XCODE_EXTENSIONS_AVAILABLE
                     var projectPath = PBXProject.GetPBXProjectPath(path);

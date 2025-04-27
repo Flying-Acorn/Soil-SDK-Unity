@@ -12,6 +12,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 
         public void OnPostprocessBuild(BuildReport report)
         {
+            HandleDeepLink(report);
+        }
+
+        private static void HandleDeepLink(BuildReport report)
+        {
             if (!UserPlayerPrefs.DeepLinkActivated)
             {
                 Debug.LogWarning("[FABuildTools] Ignoring deep link since it is disabled");
@@ -24,7 +29,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
                 settings.Platform == RuntimePlatform.IPhonePlayer);
             if (!googleIOS)
                 throw new BuildFailedException("Third party settings not found");
-            
+
 #if UNITY_IOS
             DeeplinkTools.AddIOSDeeplink(report, googleIOS.RedirectUri);
 #endif
