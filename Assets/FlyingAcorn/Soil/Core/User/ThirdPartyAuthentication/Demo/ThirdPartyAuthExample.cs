@@ -32,6 +32,16 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
 
             statusText.text = "";
 
+            linkGoogleButton.onClick.AddListener(LinkGoogle);
+            linkAppleButton.onClick.AddListener(LinkApple);
+            unlinkButton.onClick.AddListener(Unlink);
+            getAllLinksButton.onClick.AddListener(GetLinks);
+            UpdateButtons();
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
             SocialAuthentication.OnLinkSuccessCallback += OnLinkSuccess;
             SocialAuthentication.OnLinkFailureCallback += OnFailure;
             SocialAuthentication.OnUnlinkSuccessCallback += OnUnlinkSuccess;
@@ -39,11 +49,18 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             SocialAuthentication.OnGetAllLinksSuccessCallback += OnGetAllLinksSuccess;
             SocialAuthentication.OnGetAllLinksFailureCallback += OnFailure;
             SocialAuthentication.OnAccessRevoked += OnAccessRevoked;
-            linkGoogleButton.onClick.AddListener(LinkGoogle);
-            linkAppleButton.onClick.AddListener(LinkApple);
-            unlinkButton.onClick.AddListener(Unlink);
-            getAllLinksButton.onClick.AddListener(GetLinks);
-            UpdateButtons();
+        }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
+            SocialAuthentication.OnLinkSuccessCallback -= OnLinkSuccess;
+            SocialAuthentication.OnLinkFailureCallback -= OnFailure;
+            SocialAuthentication.OnUnlinkSuccessCallback -= OnUnlinkSuccess;
+            SocialAuthentication.OnUnlinkFailureCallback -= OnFailure;
+            SocialAuthentication.OnGetAllLinksSuccessCallback -= OnGetAllLinksSuccess;
+            SocialAuthentication.OnGetAllLinksFailureCallback -= OnFailure;
+            SocialAuthentication.OnAccessRevoked -= OnAccessRevoked;
         }
 
         private void OnAccessRevoked(Constants.ThirdParty obj)
