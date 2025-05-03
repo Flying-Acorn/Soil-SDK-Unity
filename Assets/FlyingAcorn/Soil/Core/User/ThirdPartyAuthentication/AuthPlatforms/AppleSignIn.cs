@@ -69,7 +69,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
                 {
                     var authorizationErrorCode = error.GetAuthorizationErrorCode();
                     MyDebug.LogWarning("Error while trying to get credential state " + authorizationErrorCode + " " +
-                                     error);
+                                       error);
                 });
         }
 
@@ -93,24 +93,24 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             switch (authorizationErrorCode)
             {
                 case AuthorizationErrorCode.Unknown:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException("Unknown error",
-                        SoilExceptionErrorCode.Unknown));
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                        new SoilException("Unknown error", SoilExceptionErrorCode.Unknown));
                     break;
                 case AuthorizationErrorCode.Canceled:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException("User canceled",
-                        SoilExceptionErrorCode.Canceled));
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                        new SoilException("User canceled", SoilExceptionErrorCode.Canceled));
                     break;
                 case AuthorizationErrorCode.InvalidResponse:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException("Invalid response",
-                        SoilExceptionErrorCode.InvalidResponse));
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                        new SoilException("Invalid response", SoilExceptionErrorCode.InvalidResponse));
                     break;
                 case AuthorizationErrorCode.NotHandled:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException("Not handled",
-                        SoilExceptionErrorCode.Unknown));
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                        new SoilException("Not handled", SoilExceptionErrorCode.Unknown));
                     break;
                 case AuthorizationErrorCode.Failed:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException("Failed",
-                        SoilExceptionErrorCode.Unknown));
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                        new SoilException("Failed", SoilExceptionErrorCode.Unknown));
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -123,12 +123,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             if (credential is not IAppleIDCredential appleIdCredential)
             {
                 MyDebug.LogError("Sign in with Apple failed, credential is null");
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException("Credential is null",
-                    SoilExceptionErrorCode.InvalidResponse));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                    new SoilException("Credential is null", SoilExceptionErrorCode.InvalidResponse));
                 return;
             }
-            
-            MyDebug.Info($"Sign in with Apple succeeded, user id: {appleIdCredential.User}, email: {appleIdCredential.Email}");
+
+            MyDebug.Info(
+                $"Sign in with Apple succeeded, user id: {appleIdCredential.User}, email: {appleIdCredential.Email}");
             IPlatformAuthentication.OnSignInSuccessCallback?.Invoke(new LinkAccountInfo
             {
                 social_account_id = appleIdCredential.User,

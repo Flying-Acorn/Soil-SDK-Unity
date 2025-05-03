@@ -20,8 +20,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         private static readonly string LinkUserUrl = $"{SocialBaseUrl}/link/";
         private static readonly string UnlinkUserUrl = $"{SocialBaseUrl}/unlink/";
 
-        private static HttpClient _linkClient;
-
         private static Dictionary<string, object> GetLinkUserPayload(LinkAccountInfo thirdPartyUser,
             ThirdPartySettings settings)
         {
@@ -51,15 +49,14 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             var payload = GetLinkUserPayload(thirdPartyUser, settings);
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _linkClient?.Dispose();
-            _linkClient = new HttpClient();
-            _linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var linkClient = new HttpClient();
+            linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, LinkUserUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await _linkClient.SendAsync(request);
+            var response = await linkClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (!response.IsSuccessStatusCode)
@@ -104,13 +101,12 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         [UsedImplicitly]
         internal static async Task<LinkGetResponse> GetLinks()
         {
-            _linkClient?.Dispose();
-            _linkClient = new HttpClient();
-            _linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var linkClient = new HttpClient();
+            linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, LinkUserUrl);
-            var response = await _linkClient.SendAsync(request);
+            var response = await linkClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -147,35 +143,19 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             };
 
             var stringBody = JsonConvert.SerializeObject(body);
-            _linkClient?.Dispose();
-            _linkClient = new HttpClient();
-            _linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var linkClient = new HttpClient();
+            linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, UnlinkUserUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await _linkClient.SendAsync(request);
+            var response = await linkClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
-            if (response.StatusCode == HttpStatusCode.NotFound)
-            {
-                return new UnlinkResponse
-                {
-                    detail = new LinkStatusResponse
-                    {
-                        code = Constants.LinkStatus.LinkNotFound,
-                        message = nameof(Constants.LinkStatus.LinkNotFound)
-                    }
-                };
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
+            if (response.StatusCode != HttpStatusCode.NotFound && !response.IsSuccessStatusCode)
                 throw new SoilException($"Network error while updating player info. Response: {responseString}",
                     SoilExceptionErrorCode.TransportError);
-            }
-
             var unlinkResponse = JsonConvert.DeserializeObject<UnlinkResponse>(responseString);
             LinkingPlayerPrefs.RemoveLink(unlinkResponse);
             return unlinkResponse;

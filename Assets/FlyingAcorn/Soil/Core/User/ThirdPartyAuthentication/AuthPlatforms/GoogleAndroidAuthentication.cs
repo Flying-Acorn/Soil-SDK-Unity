@@ -16,6 +16,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         {
             ThirdPartySettings = thirdPartySettings;
         }
+
         public void Authenticate()
         {
             if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.google)
@@ -47,7 +48,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         private void OnLoginFailed(CredentialExceptionData arg0)
         {
             Debug.LogError($"OnLoginFailed: {arg0.message}");
-            IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(arg0.message));
+            IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                new SoilException(arg0.message));
         }
 
         private void OnLoginSuccess(CredentialUserData arg0)

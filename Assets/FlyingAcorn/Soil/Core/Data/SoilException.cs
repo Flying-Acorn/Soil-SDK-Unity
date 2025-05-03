@@ -34,5 +34,6 @@ namespace FlyingAcorn.Soil.Core.Data
         InvalidResponse = 60,
         MisConfiguration = 61,
         Canceled = 62,
+        NotReady = 63,
     }
 }

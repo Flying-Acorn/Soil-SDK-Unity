@@ -6,51 +6,54 @@ using AppleAuth.Editor;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.iOS.Xcode;
+using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 {
     public static class SignInWithApplePostprocessor
     {
-        private const int CallOrder = 1;
-
-        [PostProcessBuild(CallOrder)]
+        [PostProcessBuild(1001)]
         public static void OnPostProcessBuild(BuildTarget target, string path)
         {
+            var identifier = Application.identifier;
+            var productName = identifier.Substring(identifier.LastIndexOf(".") + 1);
             if (target is BuildTarget.iOS or BuildTarget.tvOS)
             {
-                #if UNITY_XCODE_EXTENSIONS_AVAILABLE
-                    var projectPath = PBXProject.GetPBXProjectPath(path);
-                    var project = new PBXProject();
-                    project.ReadFromString(System.IO.File.ReadAllText(projectPath));
-                    var manager = new ProjectCapabilityManager(projectPath, "Entitlements.entitlements", null, project.GetUnityMainTargetGuid());
-                    manager.AddSignInWithAppleWithCompatibility();
-                    manager.WriteToFile();
-                #endif
+#if UNITY_XCODE_EXTENSIONS_AVAILABLE
+                var projectPath = PBXProject.GetPBXProjectPath(path);
+                var project = new PBXProject();
+                project.ReadFromString(System.IO.File.ReadAllText(projectPath));
+                var manager =
+                    new ProjectCapabilityManager(projectPath, productName + ".entitlements", "Unity-iPhone");
+                manager.AddSignInWithAppleWithCompatibility();
+                manager.WriteToFile();
+#endif
             }
             else if (target == BuildTarget.StandaloneOSX)
             {
                 AppleAuthMacosPostprocessorHelper.FixManagerBundleIdentifier(target, path);
             }
 
-           #if UNITY_2022_3_OR_NEWER
-                if (target == BuildTarget.VisionOS) 
-                {
-                    #if UNITY_XCODE_EXTENSIONS_AVAILABLE
-                    var projectPath = PBXProject.GetPBXProjectPath(path);
+#if UNITY_2022_3_OR_NEWER
+            if (target == BuildTarget.VisionOS)
+            {
+#if UNITY_XCODE_EXTENSIONS_AVAILABLE
+                var projectPath = PBXProject.GetPBXProjectPath(path);
 
-                    // This is a temporary fix for the Unity Editor's bug:
-                    // After switch to VisionOS platform the projectPath is still "xx/Unity-iPhone.xcodeproj/project.pbxproj",
-                    // while the expected path is "xx/Unity-VisionOS.xcodeproj/project.pbxproj",
-                    projectPath = projectPath.Replace("Unity-iPhone.xcodeproj", "Unity-VisionOS.xcodeproj");
+                // This is a temporary fix for the Unity Editor's bug:
+                // After switch to VisionOS platform the projectPath is still "xx/Unity-iPhone.xcodeproj/project.pbxproj",
+                // while the expected path is "xx/Unity-VisionOS.xcodeproj/project.pbxproj",
+                projectPath = projectPath.Replace("Unity-iPhone.xcodeproj", "Unity-VisionOS.xcodeproj");
 
-                    var project = new PBXProject();
-                    project.ReadFromString(System.IO.File.ReadAllText(projectPath));
-                    var manager = new ProjectCapabilityManager(projectPath, "Entitlements.entitlements", null, project.GetUnityMainTargetGuid());
-                    manager.AddSignInWithAppleWithCompatibility();
-                    manager.WriteToFile();
-                    #endif
-                }
-            #endif
+                var project = new PBXProject();
+                project.ReadFromString(System.IO.File.ReadAllText(projectPath));
+                var manager =
+                    new ProjectCapabilityManager(projectPath, productName + ".entitlements", "Unity-VisionOS");
+                manager.AddSignInWithAppleWithCompatibility();
+                manager.WriteToFile();
+#endif
+            }
+#endif
         }
     }
 }

@@ -9,7 +9,7 @@ namespace FlyingAcorn.Soil.Core.Data
         [SerializeField] private string sdkToken;
         [SerializeField] private bool deepLinkEnabled;
         [SerializeField] private string paymentDeeplinkRoot;
-        [SerializeField] private int requestTimeout = 10;
+        [SerializeField] private int requestTimeout = 6;
 
         public string AppID => appID;
         public string SdkToken => sdkToken;

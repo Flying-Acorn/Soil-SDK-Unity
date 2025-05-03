@@ -177,7 +177,7 @@ namespace FlyingAcorn.Analytics
             AnalyticsPlayerPrefs.UserDebugMode = debugMode;
         }
 
-        public static void ProgressionEvent(Constants.ProgressionStatus.FlyingAcornProgressionStatus failLevel,
+        public static void ProgressionEvent(Constants.ProgressionStatus.FlyingAcornProgressionStatus progressionStatus,
             string levelType, string levelNumber)
         {
             if (Instance?.AnalyticServiceProvider == null)
@@ -186,7 +186,7 @@ namespace FlyingAcorn.Analytics
                 return;
             }
 
-            Instance.AnalyticServiceProvider.ProgressionEvent(failLevel, levelType, levelNumber);
+            Instance.AnalyticServiceProvider.ProgressionEvent(progressionStatus, levelType, levelNumber);
         }
 
         public static void DesignEvent(string customFields, string levelType, string eventStep, string levelNumber)
@@ -200,7 +200,7 @@ namespace FlyingAcorn.Analytics
             Instance.AnalyticServiceProvider.DesignEvent(customFields, levelType, eventStep, levelNumber);
         }
 
-        public static void ProgressionEvent(Constants.ProgressionStatus.FlyingAcornProgressionStatus completeLevel,
+        public static void ProgressionEvent(Constants.ProgressionStatus.FlyingAcornProgressionStatus progressionStatus,
             string levelType, string levelNumber, int score)
         {
             if (Instance?.AnalyticServiceProvider == null)
@@ -209,7 +209,7 @@ namespace FlyingAcorn.Analytics
                 return;
             }
 
-            Instance.AnalyticServiceProvider.ProgressionEvent(completeLevel, levelType, levelNumber, score);
+            Instance.AnalyticServiceProvider.ProgressionEvent(progressionStatus, levelType, levelNumber, score);
         }
 
 

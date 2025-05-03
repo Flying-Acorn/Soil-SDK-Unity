@@ -65,22 +65,26 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             catch (AuthorizationCodeRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidRequest));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                    new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidRequest));
             }
             catch (AccessTokenRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidToken));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                    new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidToken));
             }
             catch (HttpListenerException ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                IPlatformAuthentication.OnSignInFailureCallback(new SoilException(ex.Message, SoilExceptionErrorCode.AnotherOngoingInstance));
+                IPlatformAuthentication.OnSignInFailureCallback(Constants.ThirdParty.google,
+                    new SoilException(ex.Message, SoilExceptionErrorCode.AnotherOngoingInstance));
             }
             catch (Exception ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(new SoilException(ex.Message));
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                    new SoilException(ex.Message));
             }
         }
 
@@ -117,7 +121,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         {
             if (_authenticationSession == null)
             {
-                throw new SoilException("Authentication session is not initialized.", SoilExceptionErrorCode.InvalidRequest);
+                throw new SoilException("Authentication session is not initialized.",
+                    SoilExceptionErrorCode.InvalidRequest);
             }
 
             _cancellationTokenSource?.Dispose();

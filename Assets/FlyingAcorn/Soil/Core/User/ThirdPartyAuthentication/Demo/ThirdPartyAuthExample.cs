@@ -62,7 +62,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             SocialAuthentication.GetLinks();
         }
 
-        private static async void Unlink()
+        private static void Unlink()
         {
             var link = LinkingPlayerPrefs.Links.FirstOrDefault();
             if (link == null)
@@ -71,7 +71,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
                 return;
             }
 
-            await SocialAuthentication.Unlink(link.detail.app_party.party);
+            SocialAuthentication.Unlink(link.detail.app_party.party);
             
         }
 
@@ -97,9 +97,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             UpdateButtons();
         }
 
-        private void OnFailure(SoilException soilException)
+        private void OnFailure(Constants.ThirdParty thirdParty, SoilException soilException)
         {
-            statusText.text = $"Link failure: {soilException.ErrorCode}";
+            statusText.text = $"Link failure: {thirdParty} - {soilException}";
         }
 
         private void OnLinkSuccess(LinkPostResponse linkPostResponse)

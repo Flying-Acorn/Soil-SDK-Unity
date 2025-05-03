@@ -28,15 +28,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 
         internal static void RemoveLink(UnlinkResponse unlinkResponse)
         {
-            RemoveLink(unlinkResponse.detail.app_party);
+            RemoveLink(unlinkResponse.detail.app_party.party);
         }
-        
-        internal static void RemoveLink(AppParty appParty)
+
+        internal static void RemoveLink(Constants.ThirdParty party)
         {
-            MyDebug.Info($"Removing link for {appParty.party}");
+            MyDebug.Info($"Removing link for {party}");
             var links = Links;
-            links.RemoveAll(l => l.detail.app_party.party == appParty.party);
+            links?.RemoveAll(l => l.detail.app_party.party == party);
             Links = links;
+            DequeueSilentUnlink(party);
+            MyDebug.Verbose($"Link removed for {party}");
         }
 
         public static List<LinkPostResponse> Links
@@ -70,17 +72,68 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
             }
         }
 
+        public static List<Constants.ThirdParty> SilentUnlinkQueue
+        {
+            get
+            {
+                var silentUnlinksString =
+                    PlayerPrefs.GetString($"{UserPlayerPrefs.GetKeysPrefix()}silent_unlink", string.Empty);
+                try
+                {
+                    return string.IsNullOrEmpty(silentUnlinksString)
+                        ? new List<Constants.ThirdParty>()
+                        : JsonConvert.DeserializeObject<List<Constants.ThirdParty>>(silentUnlinksString);
+                }
+                catch (Exception e)
+                {
+                    MyDebug.LogWarning(
+                        $"Failed to parse silent unlinks from PlayerPrefs: {e.Message} - {silentUnlinksString}");
+                    return new List<Constants.ThirdParty>();
+                }
+            }
+
+            private set
+            {
+                try
+                {
+                    PlayerPrefs.SetString($"{UserPlayerPrefs.GetKeysPrefix()}silent_unlink",
+                        JsonConvert.SerializeObject(value));
+                }
+                catch (Exception e)
+                {
+                    MyDebug.LogWarning($"Failed to save silent unlinks to PlayerPrefs: {e.Message}");
+                }
+            }
+        }
+
         private static string ThirdPartyPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}thirdparty_";
-        
+
         internal static string GetUserId(Constants.ThirdParty thirdParty)
         {
             return PlayerPrefs.GetString(ThirdPartyPrefix + thirdParty, "");
         }
-        
+
         internal static void SetUserId(Constants.ThirdParty thirdParty, string userId)
         {
             PlayerPrefs.SetString(ThirdPartyPrefix + thirdParty, userId);
         }
 
+        public static void EnqueueSilentUnlink(Constants.ThirdParty party)
+        {
+            var silentUnlinks = SilentUnlinkQueue;
+            if (silentUnlinks.Contains(party)) return;
+            MyDebug.Info($"Silent unlink tracked for {party}");
+            silentUnlinks.Add(party);
+            SilentUnlinkQueue = silentUnlinks;
+        }
+
+        private static void DequeueSilentUnlink(Constants.ThirdParty party)
+        {
+            var silentUnlinks = SilentUnlinkQueue;
+            if (!silentUnlinks.Contains(party)) return;
+            MyDebug.Info($"Silent unlink removed for {party}");
+            silentUnlinks.Remove(party);
+            SilentUnlinkQueue = silentUnlinks;
+        }
     }
 }
