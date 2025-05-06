@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -39,29 +38,22 @@ namespace FlyingAcorn.Soil.Socialization
             var response = await friendshipClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
-            if (response.StatusCode == HttpStatusCode.NotFound)
+            FriendsResponse firendshipResponse;
+            try
             {
-                SocializationPlayerPrefs.Friends = new List<UserInfo>();
-                return new FriendsResponse()
-                {
-                    detail = new FriendshipStatusResponse()
-                    {
-                        code = Constants.FriendshipStatus.FriendNotFound,
-                        message = nameof(Constants.FriendshipStatus.FriendNotFound)
-                    },
-                    friends = new List<UserInfo>()
-                };
+                firendshipResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
             }
-
-            if (!response.IsSuccessStatusCode)
+            catch (Exception)
             {
-                throw new SoilException($"Network error while fetching player info. Response: {responseString}",
+                throw new SoilException($"Network error while getting friends. Response: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
-            var getLinksResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
-            SocializationPlayerPrefs.Friends = getLinksResponse.friends;
-            return getLinksResponse;
+            if (firendshipResponse.detail.code == Constants.FriendshipStatus.FriendshipExists &&
+                (firendshipResponse.friends == null || firendshipResponse.friends.Count == 0))
+                throw new SoilException("Problem with getting friends. No friends found", SoilExceptionErrorCode.InvalidResponse);
+
+            return firendshipResponse;
         }
 
         public static async Task<FriendsResponse> AddFriendWithUUID(string uuid)
@@ -83,14 +75,18 @@ namespace FlyingAcorn.Soil.Socialization
             var response = await friendshipClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
-            if (!response.IsSuccessStatusCode)
+            FriendsResponse firendshipResponse;
+            try
+            {
+                firendshipResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
+            }
+            catch (Exception)
             {
                 throw new SoilException($"Network error while adding friend. Response: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
-            var addFriendResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
-            return addFriendResponse;
+            return firendshipResponse;
         }
 
         public static async Task<FriendsResponse> RemoveFriendWithUUID(string uuid)
@@ -112,21 +108,26 @@ namespace FlyingAcorn.Soil.Socialization
             var response = await friendshipClient.SendAsync(request);
             var responseString = response.Content.ReadAsStringAsync().Result;
 
-            if (!response.IsSuccessStatusCode)
+            FriendsResponse firendshipResponse;
+            try
+            {
+                firendshipResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
+            }
+            catch (Exception e)
             {
                 throw new SoilException($"Network error while removing friend. Response: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
-            var removeFriendResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
-            return removeFriendResponse;
+            return firendshipResponse;
         }
 
         public static async Task<List<UserScore>> GetFriendsLeaderboard(string leaderboardId, int count = 10,
             bool relative = false)
         {
             if (string.IsNullOrEmpty(leaderboardId))
-                throw new SoilException("Leaderboard ID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
+                throw new SoilException("Leaderboard ID cannot be null or empty",
+                    SoilExceptionErrorCode.InvalidRequest);
             await Initialize();
             var payload = new Dictionary<string, object>
             {

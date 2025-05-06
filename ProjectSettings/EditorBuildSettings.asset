@@ -26,4 +26,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/FlyingAcorn/Soil/RemoteConfig/Demo/SoilRemoteConfigExample.unity
     guid: 410c04b094fa44110ab3d4da1bea1062
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity
+    guid: d589a334ebbc14f79be8db6db0aeb576
   m_configObjects: {}

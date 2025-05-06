@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Leaderboard.Demo;
 using FlyingAcorn.Soil.Leaderboard.Models;
+using FlyingAcorn.Soil.Socialization.Models;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,6 +21,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         [SerializeField] private Button friendsButton;
         [SerializeField] private Button getLeaderboardButton;
         [SerializeField] private Button setRelativeButton;
+        [SerializeField] private TextMeshProUGUI headerText;
         [SerializeField] private TextMeshProUGUI statusText;
         [SerializeField] private long score = 100;
         [SerializeField] private int resultCount = 100;
@@ -32,7 +33,8 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         private void Start()
         {
             SetRelativeText();
-            statusText.text = "Press something";
+            headerText.text = "Press something";
+            Reset();
 
             _ = Socialization.Initialize();
             addButton.onClick.AddListener(AddFriend);
@@ -51,56 +53,52 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             getLeaderboardButton.onClick.RemoveListener(ReportScore);
         }
 
-        private void SetYourScore()
-        {
-            if (SoilServices.UserInfo == null)
-            {
-                return;
-            }
-
-            yourScore.text = "score" + ":" + score;
-        }
-
         private async void ReportScore()
         {
-
+            statusText.text = "Working...";
             try
             {
                 var userScore = await Leaderboard.Leaderboard.ReportScore(score, "demo_dec_manual");
                 GetLeaderboard(userScore);
-                SetYourScore();
+                yourScore.text = "score" + ":" + userScore.score;
             }
             catch (Exception e)
             {
                 statusText.text = e.Message;
-                return;
+                Reset();
             }
         }
 
-        private async void GetLeaderboard(UserScore userScore)
+        private void Reset()
         {
+            headerText.text = "";
             foreach (var row in _leaderboardRows)
                 Destroy(row.gameObject);
             _leaderboardRows = new List<LeaderboardRow>();
             foreach (var row in _friendRows)
                 Destroy(row.gameObject);
             _friendRows = new List<FriendRow>();
-            
+        }
+
+        private async void GetLeaderboard(UserScore userScore)
+        {
+            Reset();
+            statusText.text = "Working...";
             try
             {
-                var leaderboard = await Socialization.GetFriendsLeaderboard("demo_dec_manual", resultCount, _relativeMode);
+                var leaderboard =
+                    await Socialization.GetFriendsLeaderboard("demo_dec_manual", resultCount, _relativeMode);
                 GetLeaderboardSuccess(leaderboard);
             }
             catch (Exception e)
             {
                 statusText.text = e.Message;
-                return;
             }
         }
 
         private void GetLeaderboardSuccess(List<UserScore> rows)
         {
-            _leaderboardRows = new List<LeaderboardRow>();
+            headerText.text = "Leaderboard";
 
             foreach (var userScore in rows)
             {
@@ -108,37 +106,58 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 row.SetData(userScore);
                 _leaderboardRows.Add(row);
             }
-            
+
             statusText.text = rows.Count == 0 ? "No Scores" : "";
         }
 
         private async void AddFriend()
         {
+            statusText.text = "Working...";
+            FriendsResponse response;
             try
             {
-                await Socialization.AddFriendWithUUID(idInput.text);
-                statusText.text = "";
+                response = await Socialization.AddFriendWithUUID(idInput.text);
             }
             catch (Exception e)
             {
                 statusText.text = e.Message;
+                Reset();
                 return;
             }
+
+            if (response.detail.code != Constants.FriendshipStatus.FriendshipCreated)
+            {
+                statusText.text = response.detail.message;
+                return;
+            }
+
+            statusText.text = "";
 
             LoadFriends();
         }
 
         private async void RemoveFriend()
         {
+            statusText.text = "Working...";
+            FriendsResponse response;
             try
             {
-                var value = await Socialization.RemoveFriendWithUUID(idInput.text);
+                response = await Socialization.RemoveFriendWithUUID(idInput.text);
             }
             catch (Exception e)
             {
                 statusText.text = e.Message;
+                Reset();
                 return;
             }
+
+            if (response.detail.code != Constants.FriendshipStatus.FriendshipDeleted)
+            {
+                statusText.text = response.detail.message;
+                return;
+            }
+
+            statusText.text = "";
 
             LoadFriends();
         }
@@ -157,29 +176,32 @@ namespace FlyingAcorn.Soil.Socialization.Demo
 
         private async void LoadFriends()
         {
-            foreach (var row in _leaderboardRows)
-                Destroy(row.gameObject);
-            _leaderboardRows = new List<LeaderboardRow>();
-            foreach (var row in _friendRows)
-                Destroy(row.gameObject);
-
-            _friendRows = new List<FriendRow>();
-            var friends = new List<UserInfo>();
+            statusText.text = "Working...";
+            Reset();
+            FriendsResponse response;
             try
             {
-                friends = (await Socialization.GetFriends()).friends;
+                response = await Socialization.GetFriends();
             }
             catch (Exception e)
             {
                 statusText.text = e.Message;
                 return;
             }
-            
-            GetFriendsSuccess(friends);
+
+            if (response.detail.code != Constants.FriendshipStatus.FriendshipExists)
+            {
+                statusText.text = response.detail.message;
+                return;
+            }
+
+            statusText.text = "";
+            GetFriendsSuccess(response.friends);
         }
 
         private void GetFriendsSuccess(List<UserInfo> friends)
         {
+            headerText.text = "Friends";
             foreach (var friend in friends)
             {
                 var row = Instantiate(friendRowPrefab, rowsContainer.transform);
