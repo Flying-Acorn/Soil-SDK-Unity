@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Leaderboard.Demo;
 using FlyingAcorn.Soil.Leaderboard.Models;
 using FlyingAcorn.Soil.Socialization.Models;
@@ -199,7 +198,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             GetFriendsSuccess(response.friends);
         }
 
-        private void GetFriendsSuccess(List<UserInfo> friends)
+        private void GetFriendsSuccess(List<FriendInfo> friends)
         {
             headerText.text = "Friends";
             foreach (var friend in friends)
