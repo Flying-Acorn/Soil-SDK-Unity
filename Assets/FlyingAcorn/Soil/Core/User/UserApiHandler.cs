@@ -14,8 +14,6 @@ namespace FlyingAcorn.Soil.Core.User
     public static class UserApiHandler
     {
         private static string GetPlayerInfoUrl => $"{Authenticate.UserBaseUrl}/";
-        private static HttpClient _fetchClient;
-        private static HttpClient _updateClient;
         internal static Action<bool> OnUserFilled; // True means user is changed
 
         [ItemNotNull]
@@ -35,19 +33,39 @@ namespace FlyingAcorn.Soil.Core.User
                 await Authenticate.RefreshTokenIfNeeded(true);
             }
 
-            _fetchClient?.Dispose();
-            _fetchClient = new HttpClient();
-            _fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _fetchClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var fetchClient = new HttpClient();
+            fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            fetchClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
 
-            var response = await _fetchClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await fetchClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while fetching player info", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while fetching player info: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while fetching player info: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Network error while fetching player info. Response: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
             
@@ -72,20 +90,40 @@ namespace FlyingAcorn.Soil.Core.User
 
             var stringBody = JsonConvert.SerializeObject(legalFields);
 
-            // _updateClient?.Dispose(); // Uncomment to prevent async
-            _updateClient = new HttpClient();
-            _updateClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _updateClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _updateClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var updateClient = new HttpClient();
+            updateClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            updateClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            updateClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, GetPlayerInfoUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await _updateClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await updateClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while updating player info", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while updating player info: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while updating player info: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Network error while updating player info. Response: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 

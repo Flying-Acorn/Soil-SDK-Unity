@@ -20,7 +20,6 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
-        private static HttpClient _reportScoreClient;
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
         public static async Task Initialize()
@@ -54,7 +53,8 @@ namespace FlyingAcorn.Soil.Leaderboard
             catch (Exception e)
             {
                 if (e is not OverflowException)
-                    throw new SoilException($"Soil ====> Failed to Report score. Error: {e.Message}");
+                    throw new SoilException($"Failed to report score. Error: {e.Message}", 
+                        SoilExceptionErrorCode.InvalidRequest);
             }
 
             var payload = new Dictionary<string, object>
@@ -71,31 +71,43 @@ namespace FlyingAcorn.Soil.Leaderboard
             await Initialize();
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _reportScoreClient?.Dispose();
-            _reportScoreClient = new HttpClient();
-            _reportScoreClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _reportScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            using var reportScoreClient = new HttpClient();
+            reportScoreClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            reportScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, ReportScoreUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            
             HttpResponseMessage response;
             string responseString;
+            
             try
             {
-                response = await _reportScoreClient.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
+                response = await reportScoreClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (Exception e)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                var fullMessage = $"Soil ====> Failed to Report score. Error: {e.Message}";
-                throw new Exception(fullMessage);
+                throw new SoilException("Request timed out while reporting score", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while reporting score: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while reporting score: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
             }
 
             if (response is { IsSuccessStatusCode: true })
                 return JsonConvert.DeserializeObject<UserScore>(responseString);
+            else
             {
-                var fullMessage = $"Soil ====> Failed to Report score. Error: {responseString}";
-                throw new Exception(fullMessage);
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
         }
 
@@ -108,28 +120,40 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var deleteLeaderboardClient = new HttpClient();
+            using var deleteLeaderboardClient = new HttpClient();
             deleteLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             deleteLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Delete, ReportScoreUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            
             HttpResponseMessage response;
+            
             try
             {
                 response = await deleteLeaderboardClient.SendAsync(request);
             }
-            catch (Exception e)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                var fullMessage = $"Soil ====> Failed to delete score. Error: {e.Message}";
-                throw new SoilException(fullMessage, SoilExceptionErrorCode.InvalidRequest);
+                throw new SoilException("Request timed out while deleting score", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while deleting score: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while deleting score: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
             }
 
             if (response is not { StatusCode: HttpStatusCode.NoContent or HttpStatusCode.NotFound })
             {
-                var responseString = response.Content.ReadAsStringAsync().Result;
-                var fullMessage = $"Soil ====> Failed to delete score. Error: {responseString}";
-                throw new SoilException(fullMessage);
+                var responseString = await response.Content.ReadAsStringAsync();
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
         }
 
@@ -147,29 +171,41 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var fetchClient = new HttpClient();
+            using var fetchClient = new HttpClient();
             fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchLeaderboardUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            
             HttpResponseMessage response;
             string responseString;
+            
             try
             {
                 response = await fetchClient.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
+                responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (Exception e)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {e.Message}";
-                throw new SoilException(fullMessage, SoilExceptionErrorCode.InvalidRequest);
+                throw new SoilException("Request timed out while fetching leaderboard", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while fetching leaderboard: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while fetching leaderboard: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {responseString}";
-                throw new SoilException(fullMessage, SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);

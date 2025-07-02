@@ -15,7 +15,6 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
 {
     public static class Authenticate
     {
-        private static HttpClient _refreshClient;
         internal static string UserBaseUrl => $"{Constants.ApiUrl}/users";
 
         private static string RegisterPlayerUrl => $"{UserBaseUrl}/register/";
@@ -87,20 +86,43 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             var bearerToken = JwtUtils.GenerateJwt(payload, sdkToken);
             var body = UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties();
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", body } });
-            var client = new HttpClient();
+            using var client = new HttpClient();
             client.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             var request = new HttpRequestMessage(HttpMethod.Post, RegisterPlayerUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            var response = await client.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await client.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while registering player", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while registering player: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while registering player: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Network error while registering player. Response: {responseString}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
@@ -118,7 +140,8 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Refresh))
             {
                 // TODO: Check user lifetime and re-register
-                throw new Exception("Refresh token is invalid. Re-register player.");
+                throw new SoilException("Refresh token is invalid. Re-register player.", 
+                    SoilExceptionErrorCode.InvalidRequest);
             }
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, string>
@@ -126,19 +149,41 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 { "refresh", UserPlayerPrefs.TokenData.Refresh }
             });
 
-            _refreshClient?.Dispose();
-            _refreshClient = new HttpClient();
-            _refreshClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _refreshClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var refreshClient = new HttpClient();
+            refreshClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            refreshClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             var request = new HttpRequestMessage(HttpMethod.Post, RefreshTokenUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            var response = await _refreshClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await refreshClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while refreshing tokens", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while refreshing tokens: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while refreshing tokens: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Network error while refreshing tokens. Response: {responseString}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);

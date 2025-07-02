@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
@@ -39,8 +40,6 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static bool _fetching;
 
         private static readonly string FetchUrl = $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
-
-        private static HttpClient _fetchClient;
 
 
         private static async Task Initialize()
@@ -85,29 +84,41 @@ namespace FlyingAcorn.Soil.RemoteConfig
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
                 { { "properties", GetPlayerProperties() } });
 
-            _fetchClient?.Dispose();
-            _fetchClient = new HttpClient();
-            _fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            using var fetchClient = new HttpClient();
+            fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            
             HttpResponseMessage response;
             string responseString;
+            
             try
             {
-                response = await _fetchClient.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
+                response = await fetchClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (Exception e)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new Exception($"FlyingAcorn ====> Failed to fetch remote config. Error: {e.Message}");
+                throw new SoilException("Request timed out while fetching remote config", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while fetching remote config: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while fetching remote config: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                throw new Exception(
-                    $"FlyingAcorn ====> Failed to fetch remote config. Status code: {response.StatusCode}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             try
@@ -123,7 +134,8 @@ namespace FlyingAcorn.Soil.RemoteConfig
             }
             catch (Exception)
             {
-                throw new Exception($"FlyingAcorn ====> Failed to parse remote config. Response: {responseString}");
+                throw new SoilException($"Failed to parse remote config. Response: {responseString}",
+                    SoilExceptionErrorCode.InvalidResponse);
             }
         }
     }

@@ -49,19 +49,40 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             var payload = GetLinkUserPayload(thirdPartyUser, settings);
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var linkClient = new HttpClient();
+            using var linkClient = new HttpClient();
             linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, LinkUserUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await linkClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await linkClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while linking account", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while linking account: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while linking account: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Network error while updating player info. Response: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -101,13 +122,35 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         [UsedImplicitly]
         internal static async Task<LinkGetResponse> GetLinks()
         {
-            var linkClient = new HttpClient();
+            using var linkClient = new HttpClient();
             linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, LinkUserUrl);
-            var response = await linkClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await linkClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while getting links", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while getting links: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while getting links: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -125,7 +168,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Network error while fetching player info. Response: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -143,18 +186,40 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             };
 
             var stringBody = JsonConvert.SerializeObject(body);
-            var linkClient = new HttpClient();
+            
+            using var linkClient = new HttpClient();
             linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, UnlinkUserUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
-            var response = await linkClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await linkClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while unlinking account", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while unlinking account: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while unlinking account: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response.StatusCode != HttpStatusCode.NotFound && !response.IsSuccessStatusCode)
-                throw new SoilException($"Network error while updating player info. Response: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             var unlinkResponse = JsonConvert.DeserializeObject<UnlinkResponse>(responseString);
             LinkingPlayerPrefs.RemoveLink(unlinkResponse);

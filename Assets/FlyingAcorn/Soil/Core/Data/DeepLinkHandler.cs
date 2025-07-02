@@ -15,7 +15,7 @@ namespace FlyingAcorn.Soil.Core.Data
             get
             {
                 if (Instance == null)
-                    MyDebug.LogWarning("DeepLinkHandler is not active");
+                    MyDebug.Info("DeepLinkHandler is not active");
                 return _lastDeepLinkURL;
             }
         }

@@ -30,13 +30,43 @@ namespace FlyingAcorn.Soil.Socialization
         public static async Task<FriendsResponse> GetFriends()
         {
             await Initialize();
-            var friendshipClient = new HttpClient();
+            
+            using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             friendshipClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             friendshipClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, FriendsUrl);
-            var response = await friendshipClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await friendshipClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while getting friends", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while getting friends: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while getting friends: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+
+            // Check HTTP status code
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             FriendsResponse firendshipResponse;
             try
@@ -45,7 +75,7 @@ namespace FlyingAcorn.Soil.Socialization
             }
             catch (Exception)
             {
-                throw new SoilException($"Network error while getting friends. Response: {responseString}",
+                throw new SoilException($"Invalid response format while getting friends. Response: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -60,11 +90,14 @@ namespace FlyingAcorn.Soil.Socialization
         {
             if (string.IsNullOrEmpty(uuid))
                 throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
+            
             await Initialize();
-            var friendshipClient = new HttpClient();
+            
+            using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             friendshipClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             friendshipClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            
             var request = new HttpRequestMessage(HttpMethod.Post, FriendsUrl);
             var body = new Dictionary<string, object>
             {
@@ -72,29 +105,60 @@ namespace FlyingAcorn.Soil.Socialization
             };
             request.Content = new StringContent(JsonConvert.SerializeObject(body));
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            var response = await friendshipClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
-
-            FriendsResponse firendshipResponse;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
             try
             {
-                firendshipResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
+                response = await friendshipClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (Exception)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException($"Network error while adding friend. Response: {responseString}",
+                throw new SoilException("Request timed out while adding friend", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while adding friend: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while adding friend: {ex.Message}", 
                     SoilExceptionErrorCode.TransportError);
             }
 
-            return firendshipResponse;
+            // Check HTTP status code
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+
+            FriendsResponse friendshipResponse;
+            try
+            {
+                friendshipResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
+            }
+            catch (Exception)
+            {
+                throw new SoilException($"Invalid response format while adding friend. Response: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
+            }
+
+            return friendshipResponse;
         }
 
         public static async Task<FriendsResponse> RemoveFriendWithUUID(string uuid)
         {
             if (string.IsNullOrEmpty(uuid))
                 throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
+            
             await Initialize();
-            var friendshipClient = new HttpClient();
+            
+            using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             friendshipClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             friendshipClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -105,17 +169,46 @@ namespace FlyingAcorn.Soil.Socialization
             };
             request.Content = new StringContent(JsonConvert.SerializeObject(body));
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            var response = await friendshipClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await friendshipClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while removing friend", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while removing friend: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while removing friend: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+
+            // Check HTTP status code
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             FriendsResponse firendshipResponse;
             try
             {
                 firendshipResponse = JsonConvert.DeserializeObject<FriendsResponse>(responseString);
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                throw new SoilException($"Network error while removing friend. Response: {responseString}",
+                throw new SoilException($"Invalid response format while removing friend. Response: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -138,29 +231,41 @@ namespace FlyingAcorn.Soil.Socialization
 
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            var fetchClient = new HttpClient();
+            using var fetchClient = new HttpClient();
             fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, FriendsLeaderboardUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            
             HttpResponseMessage response;
             string responseString;
+            
             try
             {
                 response = await fetchClient.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
+                responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (Exception e)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {e.Message}";
-                throw new SoilException(fullMessage, SoilExceptionErrorCode.InvalidRequest);
+                throw new SoilException("Request timed out while fetching friends leaderboard", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while fetching friends leaderboard: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while fetching friends leaderboard: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                var fullMessage = $"Soil ====> Failed to fetch leaderboard. Error: {responseString}";
-                throw new SoilException(fullMessage, SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);

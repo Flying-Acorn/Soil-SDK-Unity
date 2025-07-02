@@ -41,11 +41,6 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly]
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
 
-        private static Action<CreateResponse> _onCreatePurchaseResponse;
-        private static HttpClient _buyClient;
-        private static HttpClient _verifyClient;
-        private static HttpClient _queryItemsClient;
-
         public static bool Ready { get; private set; }
 
         public static async Task Initialize(bool verifyOnInitialize = true)
@@ -72,7 +67,8 @@ namespace FlyingAcorn.Soil.Purchasing
             catch (Exception e)
             {
                 _eventsSubscribed = false;
-                throw new Exception($"FlyingAcorn ====> Failed to initialize purchasing: {e.Message}");
+                throw new SoilException($"Failed to initialize purchasing: {e.Message}",
+                    SoilExceptionErrorCode.ServiceUnavailable);
             }
         }
 
@@ -100,19 +96,40 @@ namespace FlyingAcorn.Soil.Purchasing
 
         private static async Task QueryItems()
         {
-            _queryItemsClient?.Dispose();
-            _queryItemsClient = new HttpClient();
-            _queryItemsClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _queryItemsClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _queryItemsClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var queryItemsClient = new HttpClient();
+            queryItemsClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            queryItemsClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            queryItemsClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, ItemsUrl);
 
-            var response = await _queryItemsClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await queryItemsClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while querying items", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while querying items: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while querying items: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                throw new Exception($"FlyingAcorn ====> Failed to query items. Error: {responseString}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             try
@@ -121,7 +138,8 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             catch (Exception)
             {
-                throw new Exception($"FlyingAcorn ====> Failed to deserialize items: {responseString}");
+                throw new SoilException($"Failed to deserialize items. Response: {responseString}",
+                    SoilExceptionErrorCode.InvalidResponse);
             }
 
             OnItemsReceived?.Invoke(AvailableItems);
@@ -149,18 +167,40 @@ namespace FlyingAcorn.Soil.Purchasing
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _buyClient?.Dispose();
-            _buyClient = new HttpClient();
-            _buyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _buyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            using var buyClient = new HttpClient();
+            buyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            buyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, CreatePurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = await _buyClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await buyClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while buying item", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while buying item: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while buying item: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response is not { IsSuccessStatusCode: true })
-                throw new Exception($"FlyingAcorn ====> Failed to buy item. Error: {responseString}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
 
             var createResponse = JsonConvert.DeserializeObject<CreateResponse>(responseString);
             OnPurchaseCreated(createResponse);
@@ -182,15 +222,36 @@ namespace FlyingAcorn.Soil.Purchasing
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _verifyClient?.Dispose();
-            _verifyClient = new HttpClient();
-            _verifyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            using var verifyClient = new HttpClient();
+            verifyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, VerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = await _verifyClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await verifyClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while verifying purchase", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while verifying purchase: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while verifying purchase: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response is not { IsSuccessStatusCode: true })
             {
@@ -207,7 +268,8 @@ namespace FlyingAcorn.Soil.Purchasing
                     return;
                 }
 
-                throw new Exception($"FlyingAcorn ====> Failed to verify item. Error: {responseString}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                    SoilExceptionErrorCode.TransportError);
             }
 
             var verifyResponse = JsonConvert.DeserializeObject<VerifyResponse>(responseString);
@@ -232,19 +294,40 @@ namespace FlyingAcorn.Soil.Purchasing
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            _verifyClient?.Dispose();
-            _verifyClient = new HttpClient();
-            _verifyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            using var verifyClient = new HttpClient();
+            verifyClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            verifyClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             var request = new HttpRequestMessage(HttpMethod.Post, BatchVerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            var response = await _verifyClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await verifyClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while batch verifying purchases", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while batch verifying purchases: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while batch verifying purchases: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                throw new SoilException($"FlyingAcorn ====> Failed to batch verify items. Error: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -292,6 +375,15 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             if (purchase.paid)
                 OnPurchaseSuccessful?.Invoke(purchase);
+        }
+
+        // Use this method with caution, it will undo all unpaid purchases
+        public static void RollbackUnpaidPurchases()
+        {
+            MyDebug.Info("FlyingAcorn ====> Rolling back unpaid purchases");
+            var unverifiedPurchaseIds = PurchasingPlayerPrefs.UnverifiedPurchaseIds;
+            foreach (var purchaseId in unverifiedPurchaseIds)
+                PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchaseId);
         }
 
         [UsedImplicitly]

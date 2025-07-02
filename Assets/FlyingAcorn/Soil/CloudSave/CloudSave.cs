@@ -19,8 +19,6 @@ namespace FlyingAcorn.Soil.CloudSave
 {
     public static class CloudSave
     {
-        private static HttpClient _loadClient;
-        private static HttpClient _saveClient;
         private static readonly string CloudSaveUrl = $"{Constants.ApiUrl}/cloudsave/";
 
         [UsedImplicitly]
@@ -33,12 +31,12 @@ namespace FlyingAcorn.Soil.CloudSave
         {
             if (string.IsNullOrEmpty(key))
             {
-                throw new Exception("Key cannot be null or empty");
+                throw new SoilException("Key cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
 
             if (string.IsNullOrEmpty(value?.ToString()))
             {
-                throw new Exception("Value cannot be null or empty");
+                throw new SoilException("Value cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
 
 
@@ -53,11 +51,10 @@ namespace FlyingAcorn.Soil.CloudSave
 
             var stringBody = JsonConvert.SerializeObject(payload, Formatting.None);
             
-            // _saveClient?.Dispose(); // support async
-            _saveClient = new HttpClient();
-            _saveClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _saveClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _saveClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var saveClient = new HttpClient();
+            saveClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            saveClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            saveClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Post, CloudSaveUrl);
             request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
 
@@ -66,18 +63,27 @@ namespace FlyingAcorn.Soil.CloudSave
 
             try
             {
-                response = await _saveClient.SendAsync(request);
-                responseString = response.Content.ReadAsStringAsync().Result;
-
+                response = await saveClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (Exception e)
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException($"Network error while updating player info. Error: {e.Message}",
+                throw new SoilException("Request timed out while saving data", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while saving data: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while saving data: {ex.Message}", 
                     SoilExceptionErrorCode.TransportError);
             }
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Network error while updating player info. Response: {responseString}",
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -96,39 +102,61 @@ namespace FlyingAcorn.Soil.CloudSave
         {
             if (string.IsNullOrEmpty(key))
             {
-                throw new Exception("Key cannot be null or empty");
+                throw new SoilException("Key cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
 
             await Initialize();
 
-            // _loadClient?.Dispose(); // support async
-            _loadClient = new HttpClient();
-            _loadClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            _loadClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            _loadClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var loadClient = new HttpClient();
+            loadClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+            loadClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
+            loadClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var query = $"?key={key}";
             if (!string.IsNullOrEmpty(otherUserID))
                 query += $"&user={otherUserID}";
             if (extraScopes is { Count: > 0 })
                 query += $"&extra_scopes={string.Join(",", extraScopes.Distinct())}";
             var request = new HttpRequestMessage(HttpMethod.Get, $"{CloudSaveUrl}{query}");
-            var response = await _loadClient.SendAsync(request);
-            var responseString = response.Content.ReadAsStringAsync().Result;
+            
+            HttpResponseMessage response;
+            string responseString;
+            
+            try
+            {
+                response = await loadClient.SendAsync(request);
+                responseString = await response.Content.ReadAsStringAsync();
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                throw new SoilException("Request timed out while loading data", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new SoilException($"Network error while loading data: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while loading data: {ex.Message}", 
+                    SoilExceptionErrorCode.TransportError);
+            }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                throw new KeyNotFoundException($"Key {key} not found");
+                throw new SoilNotFoundException($"Key {key} not found");
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Network error while updating player info. Response: {responseString}");
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
+                    SoilExceptionErrorCode.TransportError);
             }
 
             var saveResponse = JsonConvert.DeserializeObject<SaveModel>(responseString);
             if (saveResponse == null)
             {
-                throw new Exception("Failed to load data");
+                throw new SoilException("Failed to load data", SoilExceptionErrorCode.InvalidResponse);
             }
 
             if (string.IsNullOrEmpty(otherUserID) || otherUserID == SoilServices.UserInfo.uuid)

@@ -13,6 +13,14 @@ namespace FlyingAcorn.Soil.Core.Data
         }
     }
 
+    public class SoilNotFoundException : SoilException
+    {
+        public SoilNotFoundException(string message) :
+            base(message, SoilExceptionErrorCode.NotFound)
+        {
+        }
+    }
+
     public enum SoilExceptionErrorCode
     {
         Unknown = 0,
