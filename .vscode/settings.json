@@ -56,11 +56,16 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Soil-SDK.sln",
-    "omnisharp.useGlobalMono": "never",
-    "omnisharp.useModernNet": true,
-    "omnisharp.path": "latest",
-    "dotnet.server.useOmnisharp": true,
+    "dotnet.defaultSolution": "Soil-SDK-Unity.sln",
+    "dotnet.server.useOmnisharp": false,
+    "dotnet.unitTests.runSettingsPath": "",
+    "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": false,
+    "unity.enableStickyDecorations": true,
+    "unity.defaultBreakpointsBehavior": "everywhere",
     "csharp.semanticHighlighting.enabled": true,
-    "csharp.format.enable": true
+    "csharp.format.enable": true,
+    "dotnet.preferCSharpExtension": true,
+    "omnisharp.enableRoslynAnalyzers": false,
+    "dotnet.inlayHints.enableInlayHintsForParameters": true,
+    "csharp.inlayHints.enableInlayHintsForTypes": true
 }
