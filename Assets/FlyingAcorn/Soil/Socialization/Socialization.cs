@@ -9,6 +9,8 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Leaderboard.Models;
+using FlyingAcorn.Soil.Socialization.Data;
+using FlyingAcorn.Soil.Socialization.Helpers;
 using FlyingAcorn.Soil.Socialization.Models;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
@@ -45,27 +47,15 @@ namespace FlyingAcorn.Soil.Socialization
                 response = await friendshipClient.SendAsync(request);
                 responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while getting friends", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while getting friends: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while getting friends: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpException(ex, SocializationOperation.GetFriends);
             }
 
             // Check HTTP status code
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpResponse(response, responseString, SocializationOperation.GetFriends);
             }
 
             FriendsResponse firendshipResponse;
@@ -75,21 +65,20 @@ namespace FlyingAcorn.Soil.Socialization
             }
             catch (Exception)
             {
-                throw new SoilException($"Invalid response format while getting friends. Response: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleSerializationError(responseString, SocializationOperation.GetFriends);
             }
 
             if (firendshipResponse.detail.code == Constants.FriendshipStatus.FriendshipExists &&
                 (firendshipResponse.friends == null || firendshipResponse.friends.Count == 0))
-                throw new SoilException("Problem with getting friends. No friends found", SoilExceptionErrorCode.InvalidResponse);
+                throw new SocializationException("Problem with getting friends. No friends found", 
+                    SocializationOperation.GetFriends, SoilExceptionErrorCode.InvalidResponse);
 
             return firendshipResponse;
         }
 
         public static async Task<FriendsResponse> AddFriendWithUUID(string uuid)
         {
-            if (string.IsNullOrEmpty(uuid))
-                throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
+            SocializationErrorHandler.ValidateParameter(uuid, nameof(uuid), SocializationOperation.AddFriend);
             
             await Initialize();
             
@@ -114,27 +103,15 @@ namespace FlyingAcorn.Soil.Socialization
                 response = await friendshipClient.SendAsync(request);
                 responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while adding friend", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while adding friend: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while adding friend: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpException(ex, SocializationOperation.AddFriend);
             }
 
             // Check HTTP status code
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpResponse(response, responseString, SocializationOperation.AddFriend);
             }
 
             FriendsResponse friendshipResponse;
@@ -144,8 +121,7 @@ namespace FlyingAcorn.Soil.Socialization
             }
             catch (Exception)
             {
-                throw new SoilException($"Invalid response format while adding friend. Response: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleSerializationError(responseString, SocializationOperation.AddFriend);
             }
 
             return friendshipResponse;
@@ -153,8 +129,7 @@ namespace FlyingAcorn.Soil.Socialization
 
         public static async Task<FriendsResponse> RemoveFriendWithUUID(string uuid)
         {
-            if (string.IsNullOrEmpty(uuid))
-                throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
+            SocializationErrorHandler.ValidateParameter(uuid, nameof(uuid), SocializationOperation.RemoveFriend);
             
             await Initialize();
             
@@ -178,27 +153,15 @@ namespace FlyingAcorn.Soil.Socialization
                 response = await friendshipClient.SendAsync(request);
                 responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while removing friend", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while removing friend: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while removing friend: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpException(ex, SocializationOperation.RemoveFriend);
             }
 
             // Check HTTP status code
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpResponse(response, responseString, SocializationOperation.RemoveFriend);
             }
 
             FriendsResponse firendshipResponse;
@@ -208,8 +171,7 @@ namespace FlyingAcorn.Soil.Socialization
             }
             catch (Exception)
             {
-                throw new SoilException($"Invalid response format while removing friend. Response: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleSerializationError(responseString, SocializationOperation.RemoveFriend);
             }
 
             return firendshipResponse;
@@ -218,9 +180,8 @@ namespace FlyingAcorn.Soil.Socialization
         public static async Task<List<UserScore>> GetFriendsLeaderboard(string leaderboardId, int count = 10,
             bool relative = false)
         {
-            if (string.IsNullOrEmpty(leaderboardId))
-                throw new SoilException("Leaderboard ID cannot be null or empty",
-                    SoilExceptionErrorCode.InvalidRequest);
+            SocializationErrorHandler.ValidateParameter(leaderboardId, nameof(leaderboardId), SocializationOperation.GetFriendsLeaderboard);
+            
             await Initialize();
             var payload = new Dictionary<string, object>
             {
@@ -246,29 +207,26 @@ namespace FlyingAcorn.Soil.Socialization
                 response = await fetchClient.SendAsync(request);
                 responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while fetching friends leaderboard", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while fetching friends leaderboard: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while fetching friends leaderboard: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpException(ex, SocializationOperation.GetFriendsLeaderboard);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw SocializationErrorHandler.HandleHttpResponse(response, responseString, SocializationOperation.GetFriendsLeaderboard);
             }
 
-            var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);
+            List<UserScore> leaderboard;
+            try
+            {
+                leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);
+            }
+            catch (Exception)
+            {
+                throw SocializationErrorHandler.HandleSerializationError(responseString, SocializationOperation.GetFriendsLeaderboard);
+            }
+
             SocializationPlayerPrefs.SetCachedLeaderboardData(leaderboardId, responseString, relative);
             return leaderboard;
         }
