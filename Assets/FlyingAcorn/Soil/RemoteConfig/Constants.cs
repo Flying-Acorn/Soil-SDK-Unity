@@ -4,5 +4,6 @@ namespace FlyingAcorn.Soil.RemoteConfig
     {
         public const string UserDefinedParentKey = "remote_configs";
         public const string UserInfoKey = "user_info";
+        public const string PurchasingSettingsKey = "purchasing_settings";
     }
 }

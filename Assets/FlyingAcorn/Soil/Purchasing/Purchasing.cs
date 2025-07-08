@@ -22,14 +22,13 @@ namespace FlyingAcorn.Soil.Purchasing
     public static class Purchasing
     {
         private static bool _eventsSubscribed;
-        private static readonly string PurchasingBaseUrl = $"{Constants.ApiUrl}/iap";
-        private static readonly string PurchaseBaseUrl = $"{PurchasingBaseUrl}/purchase";
-
-        private static readonly string ItemsUrl = $"{PurchasingBaseUrl}/items/";
-        private static readonly string CreatePurchaseUrl = $"{PurchaseBaseUrl}/";
-        private static readonly string VerifyPurchaseUrl = $"{PurchaseBaseUrl}/verify/";
-        private static readonly string BatchVerifyPurchaseUrl = $"{PurchaseBaseUrl}/batchverify/";
-        private static readonly string PurchaseInvoiceUrl = PurchaseBaseUrl + "{purchase_id}/invoice/";
+        private static string PurchasingAPIUrl => PurchasingPlayerPrefs.SavedSettings?.api ?? Constants.ApiUrl;
+        private static string PurchaseBaseUrl => $"{PurchasingAPIUrl}/purchase";
+        private static string ItemsUrl => $"{PurchasingAPIUrl}/items/";
+        private static string CreatePurchaseUrl => $"{PurchaseBaseUrl}/";
+        private static string VerifyPurchaseUrl => $"{PurchaseBaseUrl}/verify/";
+        private static string BatchVerifyPurchaseUrl => $"{PurchaseBaseUrl}/batchverify/";
+        private static string PurchaseInvoiceUrl => PurchaseBaseUrl + "/{purchase_id}/invoice/";
 
         [UsedImplicitly] public static Action<Item> OnPurchaseStart;
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
@@ -104,7 +103,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await queryItemsClient.SendAsync(request);
@@ -112,17 +111,17 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while querying items", 
+                throw new SoilException("Request timed out while querying items",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while querying items: {ex.Message}", 
+                throw new SoilException($"Network error while querying items: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while querying items: {ex.Message}", 
+                throw new SoilException($"Unexpected error while querying items: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -173,10 +172,10 @@ namespace FlyingAcorn.Soil.Purchasing
             var request = new HttpRequestMessage(HttpMethod.Post, CreatePurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
+
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await buyClient.SendAsync(request);
@@ -184,17 +183,17 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while buying item", 
+                throw new SoilException("Request timed out while buying item",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while buying item: {ex.Message}", 
+                throw new SoilException($"Network error while buying item: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while buying item: {ex.Message}", 
+                throw new SoilException($"Unexpected error while buying item: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -228,10 +227,10 @@ namespace FlyingAcorn.Soil.Purchasing
             var request = new HttpRequestMessage(HttpMethod.Post, VerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
+
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await verifyClient.SendAsync(request);
@@ -239,17 +238,17 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while verifying purchase", 
+                throw new SoilException("Request timed out while verifying purchase",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while verifying purchase: {ex.Message}", 
+                throw new SoilException($"Network error while verifying purchase: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while verifying purchase: {ex.Message}", 
+                throw new SoilException($"Unexpected error while verifying purchase: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -300,10 +299,10 @@ namespace FlyingAcorn.Soil.Purchasing
             var request = new HttpRequestMessage(HttpMethod.Post, BatchVerifyPurchaseUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
+
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await verifyClient.SendAsync(request);
@@ -311,17 +310,17 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while batch verifying purchases", 
+                throw new SoilException("Request timed out while batch verifying purchases",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while batch verifying purchases: {ex.Message}", 
+                throw new SoilException($"Network error while batch verifying purchases: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while batch verifying purchases: {ex.Message}", 
+                throw new SoilException($"Unexpected error while batch verifying purchases: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -409,6 +408,49 @@ namespace FlyingAcorn.Soil.Purchasing
                 MyDebug.LogWarning(message);
             }
             _verifyTask = null;
+        }
+
+        internal static async Task<bool> HealthCheck(string apiUrl)
+        {
+            var appID = UserPlayerPrefs.AppID;
+            var sdkToken = UserPlayerPrefs.SDKToken;
+
+            var payload = new Dictionary<string, string>
+            {
+                { "iss", appID }
+            };
+            var bearerToken = Core.JWTTools.JwtUtils.GenerateJwt(payload, sdkToken);
+
+            try
+            {
+                using var client = new HttpClient();
+                client.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var healthUri = new Uri($"{apiUrl}/health/");
+                var response = await client.GetAsync(healthUri);
+
+                if (response.IsSuccessStatusCode)
+                    return true;
+                MyDebug.LogWarning($"Purchasing Health Check - Server returned error {response.StatusCode} for URL: {apiUrl}");
+                return false;
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                MyDebug.LogWarning($"Purchasing Health Check - Request timed out for URL: {apiUrl} - {ex.Message}");
+                return false;
+            }
+            catch (HttpRequestException ex)
+            {
+                MyDebug.LogWarning($"Purchasing Health Check - Network error for URL: {apiUrl} - {ex.Message}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"Purchasing Health Check - Unexpected error for URL: {apiUrl} - {ex.Message}");
+                return false;
+            }
         }
     }
 }

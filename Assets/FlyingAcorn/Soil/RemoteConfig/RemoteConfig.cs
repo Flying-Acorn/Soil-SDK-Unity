@@ -32,7 +32,12 @@ namespace FlyingAcorn.Soil.RemoteConfig
         internal static JObject UserInfo =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserInfoKey] as JObject;
 
+        [UsedImplicitly]
+        internal static JObject PurchasingSettings =>
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.PurchasingSettingsKey] as JObject;
+
         internal static UserInfo RemoteConfigUserInfo;
+        internal static Purchasing.Models.PurchasingSettings RemoteConfigPurchasingSettings;
 
         private static bool _fetchSuccessState;
 
@@ -90,10 +95,10 @@ namespace FlyingAcorn.Soil.RemoteConfig
             var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
+
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await fetchClient.SendAsync(request);
@@ -101,17 +106,17 @@ namespace FlyingAcorn.Soil.RemoteConfig
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while fetching remote config", 
+                throw new SoilException("Request timed out while fetching remote config",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while fetching remote config: {ex.Message}", 
+                throw new SoilException($"Network error while fetching remote config: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while fetching remote config: {ex.Message}", 
+                throw new SoilException($"Unexpected error while fetching remote config: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -125,18 +130,40 @@ namespace FlyingAcorn.Soil.RemoteConfig
             {
                 RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
                 ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
-                RemoteConfigUserInfo = null;
-                if (RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(Constants.UserInfoKey))
-                    RemoteConfigUserInfo = JsonConvert.DeserializeObject<UserInfo>(RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.UserInfoKey]!.ToString());
-                RemoteConfigUserInfo ??= SoilServices.UserInfo;
-                UserApiHandler.ReplaceRegionInfo(RemoteConfigUserInfo);
-                _fetchSuccessState = true;
             }
             catch (Exception)
             {
-                throw new SoilException($"Failed to parse remote config. Response: {responseString}",
+                throw new SoilException($"Failed to parse remote config data. Response: {responseString}",
                     SoilExceptionErrorCode.InvalidResponse);
             }
+
+            try
+            {
+                RemoteConfigUserInfo = null;
+                if (RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(Constants.UserInfoKey))
+                    RemoteConfigUserInfo = JsonConvert.DeserializeObject<UserInfo>(RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.UserInfoKey].ToString());
+                RemoteConfigUserInfo ??= SoilServices.UserInfo;
+                UserApiHandler.ReplaceRegionInfo(RemoteConfigUserInfo);
+            }
+            catch (Exception e)
+            {
+                Analytics.MyDebug.LogException(e, $"Failed to parse remote config user info. Response: {responseString}");
+            }
+
+            try
+            {
+                RemoteConfigPurchasingSettings = null;
+                if (RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(Constants.PurchasingSettingsKey))
+                    RemoteConfigPurchasingSettings = JsonConvert.DeserializeObject<Purchasing.Models.PurchasingSettings>(RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.PurchasingSettingsKey].ToString());
+
+                _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(RemoteConfigPurchasingSettings);
+            }
+            catch (Exception)
+            {
+                _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(null);
+                Analytics.MyDebug.Info($"Failed to parse remote config purchasing settings. Response: {responseString}");
+            }
+            _fetchSuccessState = true;
         }
     }
 }

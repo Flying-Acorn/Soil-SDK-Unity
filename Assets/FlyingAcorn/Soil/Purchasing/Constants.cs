@@ -2,6 +2,6 @@ namespace FlyingAcorn.Soil.Purchasing
 {
     public static class Constants
     {
-        internal static string ApiUrl => "https://soil.flyingacorn.studio/api";
+        internal const string ApiUrl = "https://soil.flyingacorn.studio/api/iap";
     }
 }
