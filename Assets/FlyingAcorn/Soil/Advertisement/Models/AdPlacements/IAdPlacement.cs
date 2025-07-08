@@ -18,7 +18,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         Action OnShown { get; set; }
         Action OnHidden { get; set; }
         Action OnClicked { get; set; }
-        Action OnImpression { get; set; }
         Action OnAdClosed { get; set; }
+        AdDisplayComponent DisplayComponent { get; }
     }
 }

@@ -24,7 +24,10 @@ namespace FlyingAcorn.Soil.Advertisement
         public static event System.Action<AdEventData> OnRewardedAdShown;
         public static event System.Action<AdEventData> OnRewardedAdClosed;
         public static event System.Action<AdEventData> OnRewardedAdClicked;
-        public static event System.Action<AdEventData> OnRewardedAdCompleted;
+        public static event System.Action<AdEventData> OnRewardedAdRewarded;
+
+        // Asset caching events
+        public static event System.Action<Constants.AdFormat> OnAdFormatAssetsLoaded;
 
         // Internal methods to safely invoke events
         internal static void InvokeOnInitialized()
@@ -112,9 +115,31 @@ namespace FlyingAcorn.Soil.Advertisement
             OnRewardedAdClicked?.Invoke(data);
         }
 
-        internal static void InvokeOnRewardedAdCompleted(AdEventData data)
+        internal static void InvokeOnRewardedAdRewarded(AdEventData data)
         {
-            OnRewardedAdCompleted?.Invoke(data);
+            OnRewardedAdRewarded?.Invoke(data);
+        }
+
+        // Internal methods for asset loading events
+        internal static void InvokeOnAdFormatAssetsLoaded(Constants.AdFormat adFormat)
+        {
+            OnAdFormatAssetsLoaded?.Invoke(adFormat);
+            switch (adFormat)
+            {
+                case Constants.AdFormat.banner:
+                    InvokeOnBannerAdLoaded(new AdEventData(adFormat));
+                    break;
+                case Constants.AdFormat.interstitial:
+                    InvokeOnInterstitialAdLoaded(new AdEventData(adFormat));
+                    break;
+                case Constants.AdFormat.rewarded:
+                    InvokeOnRewardedAdLoaded(new AdEventData(adFormat));
+                    break;
+                default:
+                    throw new System.ArgumentException($"Unknown ad format: {adFormat}");
+
+            }
+
         }
     }
 }
