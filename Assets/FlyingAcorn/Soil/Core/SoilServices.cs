@@ -14,8 +14,6 @@ namespace FlyingAcorn.Soil.Core
 {
     public static class SoilServices
     {
-        private static bool _exisingDeeplinkBroadcasted;
-        private static bool _deepLinkWarningBroadcasted;
         private static DeepLinkHandler _deepLinkComponent;
         private static bool _readyBroadcasted;
         private static Task _initTask;
@@ -36,6 +34,7 @@ namespace FlyingAcorn.Soil.Core
 
         public static async Task Initialize()
         {
+            _soilCoreGameObject = GameObject.Find("SoilCore");
             if (!_soilCoreGameObject)
             {
                 _soilCoreGameObject = new GameObject("SoilCore");
