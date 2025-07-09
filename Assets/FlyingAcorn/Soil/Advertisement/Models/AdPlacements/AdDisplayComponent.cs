@@ -1,12 +1,23 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
+using RTLTMPro;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
+    /// <summary>
+    /// Enumeration for different types of text elements in ads
+    /// Used for applying appropriate RTL configuration and styling
+    /// </summary>
+    public enum TextType
+    {
+        Button,
+        Header, 
+        Description
+    }
+    
     public class AdDisplayComponent : MonoBehaviour
     {
         [Header("UI Components")]
@@ -14,15 +25,19 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         public Image backgroundImage;
         public Image mainAssetImage;
         public Image logoImage;
-        public TextMeshProUGUI adTitleText;
-        public TextMeshProUGUI adDescriptionText;
+        public RTLTextMeshPro adTitleText;
+        public RTLTextMeshPro adDescriptionText;
         public Button actionButton;
-        public TextMeshProUGUI actionButtonText;
+        public RTLTextMeshPro actionButtonText;
         public Button closeButton;
         
         [Header("Ad Configuration")]
         public AdFormat adFormat;
         public bool showCloseButton = true;
+        
+        [Header("Font Configuration")]
+        [Tooltip("Custom font to use for all ad text elements. Leave empty to use default fonts.")]
+        public TMPro.TMP_FontAsset customAdFont;
         
         private AssetCacheEntry _currentMainAsset;
         private AssetCacheEntry _currentLogoAsset;
@@ -36,7 +51,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         // Countdown functionality
         private float _countdownTime;
         private bool _isCountingDown = false;
-        private TextMeshProUGUI _closeButtonText;
+        private RTLTextMeshPro _closeButtonText;
         
         private void Awake()
         {
@@ -62,10 +77,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 closeButton.gameObject.SetActive(showCloseButton);
                 
                 // Get or find the close button text component
-                _closeButtonText = closeButton.GetComponentInChildren<TextMeshProUGUI>();
+                _closeButtonText = closeButton.GetComponentInChildren<RTLTextMeshPro>();
                 if (_closeButtonText == null)
                 {
-                    UnityEngine.Debug.LogWarning("[AdDisplayComponent] No TextMeshProUGUI found in close button for countdown display");
+                    UnityEngine.Debug.LogWarning("[AdDisplayComponent] No RTLTextMeshPro found in close button for countdown display");
                 }
             }
         }
@@ -182,6 +197,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Setup button text
             SetupActionButtonText();
             
+            // Apply custom font to all text elements
+            ApplyCustomFontToAllText();
+            
             // Load assets
             LoadMainAsset();
             LoadLogoAsset();
@@ -194,7 +212,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 if (_currentAd.main_header != null && !string.IsNullOrEmpty(_currentAd.main_header.text_content))
                 {
-                    adTitleText.text = _currentAd.main_header.text_content;
+                    SetTextWithConnection(adTitleText, _currentAd.main_header.text_content, TextType.Header);
                     adTitleText.gameObject.SetActive(true);
                 }
                 else
@@ -208,7 +226,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 if (_currentAd.description != null && !string.IsNullOrEmpty(_currentAd.description.text_content))
                 {
-                    adDescriptionText.text = _currentAd.description.text_content;
+                    SetTextWithConnection(adDescriptionText, _currentAd.description.text_content, TextType.Description);
                     adDescriptionText.gameObject.SetActive(true);
                 }
                 else
@@ -225,14 +243,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 if (_currentAd.action_button != null && !string.IsNullOrEmpty(_currentAd.action_button.text_content))
                 {
-                    actionButtonText.text = _currentAd.action_button.text_content;
+                    SetTextWithConnection(actionButtonText, _currentAd.action_button.text_content, TextType.Button);
                     actionButtonText.gameObject.SetActive(true);
                     actionButtonText.fontStyle = TMPro.FontStyles.Bold;
                     actionButtonText.color = Color.white;
                 }
                 else if (_currentAd.action_button != null && !string.IsNullOrEmpty(_currentAd.action_button.alt_text))
                 {
-                    actionButtonText.text = _currentAd.action_button.alt_text;
+                    SetTextWithConnection(actionButtonText, _currentAd.action_button.alt_text, TextType.Button);
                     actionButtonText.gameObject.SetActive(true);
                     actionButtonText.fontStyle = TMPro.FontStyles.Bold;
                     actionButtonText.color = Color.white;
@@ -246,23 +264,25 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             else if (actionButton != null)
             {
                 // Try to find text component dynamically
-                actionButtonText = actionButton.GetComponentInChildren<TextMeshProUGUI>();
+                actionButtonText = actionButton.GetComponentInChildren<RTLTextMeshPro>();
                 if (actionButtonText != null)
                 {
                     if (_currentAd.action_button != null && !string.IsNullOrEmpty(_currentAd.action_button.text_content))
                     {
-                        actionButtonText.text = _currentAd.action_button.text_content;
+                        SetTextWithConnection(actionButtonText, _currentAd.action_button.text_content, TextType.Button);
                         actionButtonText.gameObject.SetActive(true);
                         actionButtonText.fontStyle = TMPro.FontStyles.Bold;
                         actionButtonText.color = Color.white;
+                        
                         Analytics.MyDebug.Info($"[AdDisplayComponent] Found and configured ActionButtonText dynamically");
                     }
                     else if (_currentAd.action_button != null && !string.IsNullOrEmpty(_currentAd.action_button.alt_text))
                     {
-                        actionButtonText.text = _currentAd.action_button.alt_text;
+                        SetTextWithConnection(actionButtonText, _currentAd.action_button.alt_text, TextType.Button);
                         actionButtonText.gameObject.SetActive(true);
                         actionButtonText.fontStyle = TMPro.FontStyles.Bold;
                         actionButtonText.color = Color.white;
+                        
                         Analytics.MyDebug.Info($"[AdDisplayComponent] Found and configured ActionButtonText dynamically");
                     }
                     else
@@ -452,6 +472,104 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 _onRewardedCallback?.Invoke();
             }
+        }
+        
+        /// <summary>
+        /// Text type enumeration for RTL configuration
+        /// </summary>
+        private enum TextType
+        {
+            Button,
+            Header,
+            Description
+        }
+        
+        private bool IsRTLText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return false;
+                
+            foreach (char c in text)
+            {
+                // Check for Arabic and Persian Unicode ranges
+                if ((c >= 0x0600 && c <= 0x06FF) ||  // Arabic
+                    (c >= 0x0750 && c <= 0x077F) ||  // Arabic Supplement
+                    (c >= 0x08A0 && c <= 0x08FF) ||  // Arabic Extended-A
+                    (c >= 0xFB50 && c <= 0xFDFF) ||  // Arabic Presentation Forms-A
+                    (c >= 0xFE70 && c <= 0xFEFF) ||  // Arabic Presentation Forms-B
+                    (c >= 0x0590 && c <= 0x05FF))    // Hebrew
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        /// <summary>
+        /// Applies the custom font to all TextMeshPro components in the ad
+        /// Call this method after setting up text content to ensure proper font application
+        /// </summary>
+        private void ApplyCustomFontToAllText()
+        {
+            if (customAdFont == null)
+            {
+                UnityEngine.Debug.Log("[AdDisplayComponent] No custom font assigned, using default fonts");
+                return;
+            }
+            
+            UnityEngine.Debug.Log($"[AdDisplayComponent] Applying custom font '{customAdFont.name}' to all ad text elements");
+            
+            // Apply to all text components
+            ApplyFontToTextComponent(adTitleText, "Ad Title");
+            ApplyFontToTextComponent(adDescriptionText, "Ad Description");
+            ApplyFontToTextComponent(actionButtonText, "Action Button");
+            ApplyFontToTextComponent(_closeButtonText, "Close Button");
+        }
+        
+        /// <summary>
+        /// Applies the custom font to a specific TextMeshPro component
+        /// </summary>
+        private void ApplyFontToTextComponent(RTLTextMeshPro textComponent, string componentName)
+        {
+            if (textComponent == null)
+            {
+                UnityEngine.Debug.Log($"[AdDisplayComponent] {componentName} text component is null, skipping font application");
+                return;
+            }
+            
+            if (customAdFont == null)
+            {
+                UnityEngine.Debug.Log($"[AdDisplayComponent] No custom font assigned for {componentName}");
+                return;
+            }
+            
+            // Store the original font for potential restoration
+            var originalFont = textComponent.font;
+            
+            // Apply the custom font
+            textComponent.font = customAdFont;
+            
+            UnityEngine.Debug.Log($"[AdDisplayComponent] Applied custom font '{customAdFont.name}' to {componentName} (was: '{originalFont?.name ?? "null"}')");
+        }
+        
+        /// <summary>
+        /// Sets up custom font configuration - call this in Awake or when font is assigned
+        /// </summary>
+        public void SetCustomFont(TMPro.TMP_FontAsset font)
+        {
+            customAdFont = font;
+            UnityEngine.Debug.Log($"[AdDisplayComponent] Custom font set to: {font?.name ?? "null"}");
+            
+            // Apply immediately if we have text components ready
+            ApplyCustomFontToAllText();
+        }
+        
+        private void SetTextWithConnection(RTLTextMeshPro textComponent, string text, TextType textType = TextType.Button)
+        {
+            if (textComponent == null || string.IsNullOrEmpty(text))
+                return;
+            
+            textComponent.text = text;
         }
     }
 }

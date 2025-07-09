@@ -176,9 +176,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Create a basic ad object with information from cached assets
             var mainAsset = cachedAssets.Find(a => a.AssetType == AssetType.image);
             var logoAsset = cachedAssets.Find(a => a.AssetType == AssetType.logo);
-            
+
             // Get the click URL from any cached asset (they should all have the same click URL from the same AdGroup)
-            var clickUrl = mainAsset?.ClickUrl ?? logoAsset?.ClickUrl ?? "https://www.google.com"; // Fallback to fake URL if no real one available
+            var clickUrl = mainAsset?.ClickUrl ?? logoAsset?.ClickUrl;
+            if (string.IsNullOrEmpty(clickUrl))
+                Analytics.MyDebug.Info("No click URL found in cached assets");
             
             // Get ad-level text content from cached assets (use first available asset that has this data)
             var assetWithAdData = cachedAssets.FirstOrDefault(a => !string.IsNullOrEmpty(a.AdId)) ?? mainAsset ?? logoAsset;
@@ -193,13 +195,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 main_header = !string.IsNullOrEmpty(mainHeaderText) ? new Asset { 
                     asset_type = "text", 
                     url = "", 
-                    text_content = mainHeaderText,
+                    text_content = "Best HEADER",
                     alt_text = mainHeaderText 
                 } : null,
                 action_button = !string.IsNullOrEmpty(actionButtonText) ? new Asset { 
                     asset_type = "text", 
                     url = clickUrl, // Use real click URL from campaign
-                    text_content = actionButtonText,
+                    text_content = "دانلود رایگان",
                     alt_text = actionButtonText 
                 } : new Asset {
                     asset_type = "text",
@@ -210,7 +212,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 description = !string.IsNullOrEmpty(descriptionText) ? new Asset { 
                     asset_type = "text", 
                     url = "", 
-                    text_content = descriptionText,
+                    text_content = "پ ففففپففف",
                     alt_text = descriptionText 
                 } : null,
                 main_image = mainAsset != null ? new Asset { 

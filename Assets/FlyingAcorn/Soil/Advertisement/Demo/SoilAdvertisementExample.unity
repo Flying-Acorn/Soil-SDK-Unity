@@ -268,18 +268,6 @@ PrefabInstance:
       propertyPath: m_Name
       value: SoilAdManager
       objectReference: {fileID: 0}
-    - target: {fileID: 2075524466422328730, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 4317349102109963394, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
-      propertyPath: m_IsActive
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4926033874288130509, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
-      propertyPath: m_IsActive
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 5940313004391898425, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
       propertyPath: m_Pivot.x
       value: 0
@@ -358,14 +346,6 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5940313004391898425, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 6166047255133449949, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
-      propertyPath: m_IsActive
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 8995123121756342193, guid: d277e064e3b1f49dab14133a9add9be4, type: 3}
-      propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []

@@ -12,6 +12,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: FullScreenAd_Rewarded
       objectReference: {fileID: 0}
+    - target: {fileID: 5377257603700132387, guid: bfc823df0ea60486e90562b3cb3b691a, type: 3}
+      propertyPath: adFormat
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 7048261476025845150, guid: bfc823df0ea60486e90562b3cb3b691a, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5
@@ -131,4 +135,3 @@ MonoBehaviour:
   placementId: rewarded_placement
   placementName: Rewarded Ad
   adDisplayComponent: {fileID: 1909987698176282931}
-  rewardedAdDuration: 15
