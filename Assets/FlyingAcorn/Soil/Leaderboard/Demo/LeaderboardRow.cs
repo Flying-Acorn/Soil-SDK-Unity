@@ -13,7 +13,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         {
             nameText.text = score.name;
             rankText.text = score.rank.ToString();
-            scoreText.text = score.score;
+            scoreText.text = score.score_scientific.ToString();
         }
     }
 }

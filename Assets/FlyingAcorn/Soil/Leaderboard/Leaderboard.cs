@@ -16,7 +16,7 @@ namespace FlyingAcorn.Soil.Leaderboard
 {
     public static class Leaderboard
     {
-        private static readonly string LeaderboardBaseUrl = $"{Core.Data.Constants.ApiUrl}/leaderboard";
+        private static readonly string LeaderboardBaseUrl = $"{Core.Data.Constants.ApiUrl}/leaderboard/v2";
 
         private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";

@@ -59,7 +59,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             {
                 var userScore = await Leaderboard.Leaderboard.ReportScore(score, "demo_dec_manual");
                 GetLeaderboard(userScore);
-                yourScore.text = "score" + ":" + userScore.score;
+                yourScore.text = "score" + ":" + userScore.score_scientific.ToString();
             }
             catch (Exception e)
             {

@@ -12,7 +12,8 @@ namespace FlyingAcorn.Soil.Leaderboard.Models
         public string name;
         public string uuid;
         public string avatar_asset;
-        public string score;
+        // public string score; Deprecated, use score_scientific instead
+        public ScientificScore score_scientific;
         public long rank;
     }
 }

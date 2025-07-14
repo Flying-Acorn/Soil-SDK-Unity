@@ -20,7 +20,7 @@ namespace FlyingAcorn.Soil.Socialization
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
         private static readonly string SocializationBaseUrl = $"{Core.Data.Constants.ApiUrl}/socialization/";
         private static readonly string FriendsUrl = $"{SocializationBaseUrl}friends/";
-        private static readonly string FriendsLeaderboardUrl = $"{SocializationBaseUrl}getfriendleaderboard/";
+        private static readonly string FriendsLeaderboardUrl = $"{SocializationBaseUrl}v2/getfriendleaderboard/";
 
         public static async Task Initialize()
         {
