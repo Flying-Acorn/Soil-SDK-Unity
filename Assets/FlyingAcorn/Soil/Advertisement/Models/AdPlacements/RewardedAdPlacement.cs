@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
+using FlyingAcorn.Analytics;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
@@ -62,7 +63,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (loadedFormat == AdFormat.rewarded)
             {
                 _isFormatReady = true;
-                Debug.Log("Rewarded ad format assets loaded - placement is now ready");
+                MyDebug.Verbose("Rewarded ad format assets loaded - placement is now ready");
             }
         }
 
@@ -72,12 +73,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 adDisplayComponent.HideAd();
                 OnHidden?.Invoke();
-                OnAdClosed?.Invoke();
-                
-                // Fire event
-                var eventData = new AdEventData(AdFormat.rewarded);
-                eventData.ad = _currentAd;
-                Events.InvokeOnRewardedAdClosed(eventData);
             }
         }
 
@@ -139,30 +134,25 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     onClose: () => {
                         OnAdClosed?.Invoke();
                         OnHidden?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdClosed(eventData);
+                        Advertisement.HideAd(AdFormat.rewarded);
                     },
                     onClick: () => {
                         OnClicked?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdClicked(eventData);
                     },
                     onRewarded: () => {
                         OnRewardEarned?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdRewarded(eventData);
-                        
-                        // Close button will be handled automatically by AdDisplayComponent countdown
                     },
                     onShown: () => {
                         OnShown?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdShown(eventData);

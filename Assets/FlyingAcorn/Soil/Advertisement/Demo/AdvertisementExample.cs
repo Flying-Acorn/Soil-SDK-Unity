@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Data;
 using TMPro;
 using UnityEngine;
@@ -9,29 +11,31 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 {
     public class AdvertisementExample : MonoBehaviour
     {
+        // Track processed ad formats to prevent duplicate messages
+        private HashSet<AdFormat> readyFormats = new HashSet<AdFormat>();
+        // Track last closed ad format to prevent duplicate closed messages in quick succession
+        private AdFormat? lastClosedFormat = null;
+        private float lastClosedTime = 0f;
         public Button getCampaignButton;
         public TextMeshProUGUI statusText;
         public Button showBannerButton;
         public Button showInterstitialButton;
         public Button showRewardedButton;
-        
+
         private void Awake()
         {
             getCampaignButton.interactable = true;
             showBannerButton.interactable = false;
             showInterstitialButton.interactable = false;
             showRewardedButton.interactable = false;
-            
+
             getCampaignButton.onClick.AddListener(Init);
             showBannerButton.onClick.AddListener(BannerButtonListener);
             showInterstitialButton.onClick.AddListener(InterstitialButtonListener);
             showRewardedButton.onClick.AddListener(RewardedButtonListener);
-            
+
             Events.OnInitialized += OnInitialized;
             Events.OnInitializeFailed += OnInitializeFailed;
-            
-            // Subscribe to format assets loaded events
-            Events.OnAdFormatAssetsLoaded += OnAdFormatAssetsLoaded;
 
             Events.OnBannerAdLoaded += HandleAdLoaded;
             Events.OnInterstitialAdLoaded += HandleAdLoaded;
@@ -46,17 +50,22 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             Events.OnBannerAdClosed += HandleAdClosed;
 
             Events.OnRewardedAdRewarded += HandleAdCompleted;
-            
+
             // Add more event logging
             Events.OnBannerAdShown += HandleAdShown;
             Events.OnInterstitialAdShown += HandleAdShown;
             Events.OnRewardedAdShown += HandleAdShown;
-            
+
             Events.OnBannerAdClicked += HandleAdClicked;
             Events.OnInterstitialAdClicked += HandleAdClicked;
             Events.OnRewardedAdClicked += HandleAdClicked;
-            
+
             Init();
+        }
+
+        private void OnDisable()
+        {
+            Advertisement.HideAd(AdFormat.banner);
         }
 
         private void OnDestroy()
@@ -68,7 +77,6 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             showRewardedButton.onClick.RemoveListener(RewardedButtonListener);
             Events.OnInitialized -= OnInitialized;
             Events.OnInitializeFailed -= OnInitializeFailed;
-            Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
             Events.OnBannerAdLoaded -= HandleAdLoaded;
             Events.OnInterstitialAdLoaded -= HandleAdLoaded;
             Events.OnRewardedAdLoaded -= HandleAdLoaded;
@@ -85,29 +93,36 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             Events.OnBannerAdClicked -= HandleAdClicked;
             Events.OnInterstitialAdClicked -= HandleAdClicked;
             Events.OnRewardedAdClicked -= HandleAdClicked;
+            readyFormats.Clear();
+            lastClosedFormat = null;
         }
 
         private void HandleAdShown(AdEventData data)
         {
-            statusText.text += $"\n{data.AdFormat} ad shown.";
-            Debug.Log($"[AdDemo] {data.AdFormat} ad shown event fired");
+            statusText.text += $"\n{data.AdFormat} shown.";
+            MyDebug.Info($"[AdDemo] {data.AdFormat} ad shown event fired");
         }
-        
+
         private void HandleAdClicked(AdEventData data)
         {
-            statusText.text += $"\n{data.AdFormat} ad clicked.";
-            Debug.Log($"[AdDemo] {data.AdFormat} ad clicked event fired");
+            statusText.text += $"\n{data.AdFormat} clicked.";
+            MyDebug.Info($"[AdDemo] {data.AdFormat} ad clicked event fired");
         }
 
         private void HandleAdCompleted(AdEventData data)
         {
-            statusText.text += $"\n{data.AdFormat} ad completed. Reward granted!";
+            statusText.text += $"\n{data.AdFormat} done. Reward!";
         }
 
         private void HandleAdClosed(AdEventData data)
         {
-            statusText.text += $"\n{data.AdFormat} ad closed.";
-            Debug.Log($"[AdDemo] {data.AdFormat} ad closed event fired");
+            // Prevent duplicate closed messages within a short time window (0.2s)
+            if (lastClosedFormat == data.AdFormat && (Time.unscaledTime - lastClosedTime) < 0.2f)
+                return;
+            lastClosedFormat = data.AdFormat;
+            lastClosedTime = Time.unscaledTime;
+            statusText.text += $"\n{data.AdFormat} closed.";
+            MyDebug.Info($"[AdDemo] {data.AdFormat} ad closed event fired");
             switch (data.AdFormat)
             {
                 case AdFormat.banner:
@@ -124,7 +139,7 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 
         private void HandleAdError(AdEventData data)
         {
-            statusText.text += $"\n{data.AdFormat} ad error: {data.AdError}";
+            statusText.text += $"\n{data.AdFormat} error: {data.AdError}";
             switch (data.AdFormat)
             {
                 case AdFormat.banner:
@@ -141,7 +156,7 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 
         private void HandleAdLoaded(AdEventData data)
         {
-            statusText.text += $"\n{data} ad loaded successfully.";
+            statusText.text += $"\n{data.AdFormat} loaded.";
             switch (data?.AdFormat)
             {
                 case AdFormat.banner:
@@ -158,67 +173,43 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 
         private void Init()
         {
+            if (Advertisement.Ready)
+            {
+                OnInitialized();
+                return;
+            }
             Advertisement.InitializeAsync(new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded });
             getCampaignButton.interactable = false;
-            statusText.text = "Initializing advertisement...";
+            statusText.text = "Initializing...";
         }
 
         private void OnInitializeFailed(string error)
         {
-            statusText.text = $"Advertisement initialization failed: {error}";
+            statusText.text = $"Init failed: {error}";
             getCampaignButton.interactable = true;
         }
 
         private void OnInitialized()
         {
-            statusText.text = "Advertisement initialized successfully.\nLoading assets...";
+            statusText.text = "Initialized.\nLoading...";
             getCampaignButton.interactable = false;
-            
-            // Check if any formats are already ready (in case of cached assets)
-            CheckFormatReadiness();
-        }
-        
-        private void CheckFormatReadiness()
-        {
-            var readiness = Advertisement.GetFormatReadiness();
-            foreach (var kvp in readiness)
-            {
-                if (kvp.Value)
-                {
-                    OnAdFormatAssetsLoaded(kvp.Key);
-                }
-            }
+
+            EnableAnyLoadedFormat();
+            LoadAds();
         }
 
-        private void OnAdFormatAssetsLoaded(AdFormat adFormat)
+        private void EnableAnyLoadedFormat()
         {
-            statusText.text += $"\n{adFormat} assets loaded and ready!";
-            
-            // Enable the show button for this format
-            switch (adFormat)
-            {
-                case AdFormat.banner:
-                    if (Advertisement.IsFormatReady(AdFormat.banner))
-                    {
-                        showBannerButton.interactable = true;
-                        Advertisement.LoadAd(AdFormat.banner); // Pre-load the ad
-                    }
-                    break;
-                case AdFormat.interstitial:
-                    if (Advertisement.IsFormatReady(AdFormat.banner))
-                    {
-                        showInterstitialButton.interactable = true;
-                        Advertisement.LoadAd(AdFormat.interstitial); // Pre-load the ad
-                    }
-                    break;
-                case AdFormat.rewarded:
-                    if (Advertisement.IsFormatReady(AdFormat.rewarded))
-                    {
-                        showRewardedButton.interactable = true;
-                        Advertisement.LoadAd(AdFormat.rewarded); // Pre-load the ad
-                    }
-                    break;
-            }
+            showBannerButton.interactable = Advertisement.IsFormatReady(AdFormat.banner);
+            showInterstitialButton.interactable = Advertisement.IsFormatReady(AdFormat.interstitial);
+            showRewardedButton.interactable = Advertisement.IsFormatReady(AdFormat.rewarded);
+        }
+
+        private void LoadAds()
+        {
+            Advertisement.LoadAd(AdFormat.banner);
+            Advertisement.LoadAd(AdFormat.interstitial);
+            Advertisement.LoadAd(AdFormat.rewarded);
         }
 
         private void BannerButtonListener() => Advertisement.ShowAd(AdFormat.banner);

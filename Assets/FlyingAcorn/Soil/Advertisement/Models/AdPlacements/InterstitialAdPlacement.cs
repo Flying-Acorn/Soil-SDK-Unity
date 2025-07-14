@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
+using FlyingAcorn.Analytics;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
@@ -61,7 +62,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (loadedFormat == AdFormat.interstitial)
             {
                 _isFormatReady = true;
-                Debug.Log("Interstitial ad format assets loaded - placement is now ready");
+                MyDebug.Verbose("Interstitial ad format assets loaded - placement is now ready");
             }
         }
 
@@ -138,14 +139,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     onClose: () => {
                         OnAdClosed?.Invoke();
                         OnHidden?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.interstitial);
                         eventData.ad = _currentAd;
                         Events.InvokeOnInterstitialAdClosed(eventData);
+                        // Ensure ad is hidden and destroyed
+                        Advertisement.HideAd(AdFormat.interstitial);
                     },
                     onClick: () => {
                         OnClicked?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.interstitial);
                         eventData.ad = _currentAd;
                         Events.InvokeOnInterstitialAdClicked(eventData);
@@ -153,7 +154,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     onRewarded: null, // Interstitials don't have completion
                     onShown: () => {
                         OnShown?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.interstitial);
                         eventData.ad = _currentAd;
                         Events.InvokeOnInterstitialAdShown(eventData);

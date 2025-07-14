@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
+using FlyingAcorn.Analytics;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
@@ -61,13 +62,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (loadedFormat == AdFormat.banner)
             {
                 _isFormatReady = true;
-                Debug.Log("Banner ad format assets loaded - placement is now ready");
+                MyDebug.Verbose("Banner ad format assets loaded - placement is now ready");
             }
         }
 
         public void Hide()
         {
-            Debug.Log($"[BannerAdPlacement] Hide called");
+            MyDebug.Verbose($"[BannerAdPlacement] Hide called");
             if (adDisplayComponent != null)
             {
                 adDisplayComponent.HideAd();
@@ -141,14 +142,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     onClose: () => {
                         OnAdClosed?.Invoke();
                         OnHidden?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.banner);
                         eventData.ad = _currentAd;
                         Events.InvokeOnBannerAdClosed(eventData);
+                        // Ensure ad is hidden and destroyed
+                        Advertisement.HideAd(AdFormat.banner);
                     },
                     onClick: () => {
                         OnClicked?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.banner);
                         eventData.ad = _currentAd;
                         Events.InvokeOnBannerAdClicked(eventData);
@@ -156,7 +157,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     onRewarded: null, // Banners don't have completion
                     onShown: () => {
                         OnShown?.Invoke();
-                        
                         var eventData = new AdEventData(AdFormat.banner);
                         eventData.ad = _currentAd;
                         Events.InvokeOnBannerAdShown(eventData);
@@ -201,7 +201,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 action_button = !string.IsNullOrEmpty(actionButtonText) ? new Asset { 
                     asset_type = "text", 
                     url = clickUrl, // Use real click URL from campaign
-                    text_content = "دانلود رایگان",
+                    text_content = actionButtonText,
                     alt_text = actionButtonText 
                 } : new Asset {
                     asset_type = "text",
@@ -212,7 +212,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 description = !string.IsNullOrEmpty(descriptionText) ? new Asset { 
                     asset_type = "text", 
                     url = "", 
-                    text_content = "پ ففففپففف",
+                    text_content = descriptionText,
                     alt_text = descriptionText 
                 } : null,
                 main_image = mainAsset != null ? new Asset { 

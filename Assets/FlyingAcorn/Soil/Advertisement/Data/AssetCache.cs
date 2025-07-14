@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Models;
 using UnityEngine;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
@@ -72,7 +73,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Caches assets from a campaign, ensuring only one asset of each type per ad format
+        /// Caches assets from a campaign, ensuring only one asset of each type per ad format (random ad group/ad)
         /// </summary>
         public static async Task CacheAssetsAsync(Campaign campaign, List<AdFormat> requestedFormats)
         {
@@ -80,38 +81,42 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return;
 
             var cachingTasks = new List<Task>();
+            var random = new System.Random();
 
-            foreach (var adGroup in campaign.ad_groups)
+            foreach (var adFormat in requestedFormats)
             {
-                if (adGroup.ads == null || !adGroup.ads.Any())
+                // Get all ad groups that have at least one ad of this format
+                var eligibleAdGroups = campaign.ad_groups
+                    .Where(g => g.ads != null && g.ads.Any(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat))
+                    .ToList();
+                if (!eligibleAdGroups.Any())
                     continue;
-
-                foreach (var ad in adGroup.ads)
+                // Pick a random ad group
+                var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
+                // Get all ads in this group with the requested format
+                var eligibleAds = adGroup.ads
+                    .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
+                    .ToList();
+                if (!eligibleAds.Any())
+                    continue;
+                // Pick a random ad
+                var ad = eligibleAds[random.Next(eligibleAds.Count)];
+                // Cache one asset of each type for this ad format
+                var assetsToCache = GetAssetsToCache(ad, adFormat);
+                foreach (var (asset, assetType) in assetsToCache)
                 {
-                    // Check if this ad format is requested
-                    if (!Enum.TryParse<AdFormat>(ad.format, true, out var adFormat) || 
-                        !requestedFormats.Contains(adFormat))
-                        continue;
-
-                    // Cache one asset of each type for this ad format
-                    var assetsToCache = GetAssetsToCache(ad, adFormat);
-                    
-                    foreach (var (asset, assetType) in assetsToCache)
+                    if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
                     {
-                        if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
-                        {
-                            var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                            cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
-                        }
+                        var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
+                        cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
                     }
                 }
             }
-
             await Task.WhenAll(cachingTasks);
         }
 
         /// <summary>
-        /// Caches assets for a specific ad format and invokes callback when complete
+        /// Caches assets for a specific ad format and invokes callback when complete (random ad group/ad)
         /// </summary>
         public static async Task CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
@@ -120,57 +125,53 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
-
-            var cachingTasks = new List<Task>();
-            var foundFormat = false;
-
-            foreach (var adGroup in campaign.ad_groups)
+            var random = new System.Random();
+            // Get all ad groups that have at least one ad of this format
+            var eligibleAdGroups = campaign.ad_groups
+                .Where(g => g.ads != null && g.ads.Any(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat))
+                .ToList();
+            if (!eligibleAdGroups.Any())
             {
-                if (adGroup.ads == null || !adGroup.ads.Any())
-                    continue;
-
-                foreach (var ad in adGroup.ads)
-                {
-                    // Check if this ad matches the requested format
-                    if (!Enum.TryParse<AdFormat>(ad.format, true, out var parsedFormat) || 
-                        parsedFormat != adFormat)
-                        continue;
-
-                    foundFormat = true;
-
-                    // Cache one asset of each type for this ad format
-                    var assetsToCache = GetAssetsToCache(ad, adFormat);
-                    
-                    foreach (var (asset, assetType) in assetsToCache)
-                    {
-                        if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
-                        {
-                            var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                            cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
-                        }
-                    }
-
-                    // Only cache the first ad found for this format
-                    break;
-                }
-
-                if (foundFormat)
-                    break;
+                MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
+                onFormatReady?.Invoke(adFormat);
+                return;
             }
-
+            // Pick a random ad group
+            var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
+            // Get all ads in this group with the requested format
+            var eligibleAds = adGroup.ads
+                .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
+                .ToList();
+            if (!eligibleAds.Any())
+            {
+                MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
+                onFormatReady?.Invoke(adFormat);
+                return;
+            }
+            // Pick a random ad
+            var ad = eligibleAds[random.Next(eligibleAds.Count)];
+            var cachingTasks = new List<Task>();
+            // Cache one asset of each type for this ad format
+            var assetsToCache = GetAssetsToCache(ad, adFormat);
+            foreach (var (asset, assetType) in assetsToCache)
+            {
+                if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
+                {
+                    var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
+                    cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
+                }
+            }
             if (cachingTasks.Count > 0)
             {
                 await Task.WhenAll(cachingTasks);
-                Debug.Log($"Successfully cached assets for {adFormat} format");
+                MyDebug.Verbose($"Successfully cached assets for {adFormat} format");
             }
             else
             {
-                Debug.LogWarning($"No assets found to cache for {adFormat} format");
+                MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
             }
-
             // Persist the updated cache
             PersistCachedAssets();
-
             // Invoke callback to signal this format is ready
             onFormatReady?.Invoke(adFormat);
         }
@@ -247,13 +248,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     if (_cachedAssets.ContainsKey(cacheKey))
                     {
-                        Debug.Log($"Asset already cached: {cacheKey}");
+                        MyDebug.Verbose($"Asset already cached: {cacheKey}");
                         return;
                     }
 
                     if (_currentlyDownloading.Contains(cacheKey))
                     {
-                        Debug.Log($"Asset already being downloaded: {cacheKey}");
+                        MyDebug.Verbose($"Asset already being downloaded: {cacheKey}");
                         return;
                     }
 
@@ -262,7 +263,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
                 // Resolve URL (handle relative URLs)
                 var resolvedUrl = ResolveAssetUrl(asset.url);
-                Analytics.MyDebug.Info($"Caching asset {cacheKey} from URL: {resolvedUrl}");
+                Analytics.MyDebug.Verbose($"Caching asset {cacheKey} from URL: {resolvedUrl}");
 
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(30);
@@ -318,11 +319,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 // Persist the updated cache to PlayerPrefs
                 PersistCachedAssets();
 
-                Debug.Log($"Successfully cached asset: {cacheKey} -> {cachedAsset.Id}");
+                MyDebug.Verbose($"Successfully cached asset: {cacheKey} -> {cachedAsset.Id}");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to cache asset {cacheKey}: {ex.Message}");
+                MyDebug.LogError($"Failed to cache asset {cacheKey}: {ex.Message}");
             }
             finally
             {
@@ -380,29 +381,26 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Gets a cached asset by ad format and asset type
+        /// Gets a cached asset by ad format and asset type (random)
         /// </summary>
         public static AssetCacheEntry GetCachedAsset(AdFormat adFormat, AssetType assetType)
         {
-            var asset = _cachedAssets.Values.FirstOrDefault(a => 
-                a.AdFormat == adFormat && a.AssetType == assetType);
-            
-            if (asset == null)
+            var assets = _cachedAssets.Values.Where(a => a.AdFormat == adFormat && a.AssetType == assetType).ToList();
+            if (!assets.Any())
             {
-                Debug.LogWarning($"No {assetType} asset found for {adFormat}. Available assets for this format: {_cachedAssets.Values.Count(a => a.AdFormat == adFormat)}");
-                
+                MyDebug.LogWarning($"No {assetType} asset found for {adFormat}. Available assets for this format: {_cachedAssets.Values.Count(a => a.AdFormat == adFormat)}");
                 // List available assets for this format
                 var assetsForFormat = _cachedAssets.Values.Where(a => a.AdFormat == adFormat).ToList();
                 foreach (var entry in assetsForFormat)
                 {
-                    Debug.Log($"- Available: {entry.AssetType} ({entry.Id})");
+                    MyDebug.Verbose($"- Available: {entry.AssetType} ({entry.Id})");
                 }
+                return null;
             }
-            else
-            {
-                Debug.Log($"Found {assetType} asset for {adFormat}: {asset.Id}");
-            }
-            
+            // Pick a random asset
+            var random = new System.Random();
+            var asset = assets[random.Next(assets.Count)];
+            MyDebug.Verbose($"Found {assetType} asset for {adFormat}: {asset.Id}");
             return asset;
         }
 
@@ -415,15 +413,15 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             
             if (asset == null)
             {
-                Debug.LogWarning($"Asset with UUID {uuid} not found in cache. Available assets: {_cachedAssets.Count}");
+                MyDebug.LogWarning($"Asset with UUID {uuid} not found in cache. Available assets: {_cachedAssets.Count}");
                 foreach (var entry in _cachedAssets.Values.Take(5)) // Show first 5 for debugging
                 {
-                    Debug.Log($"- {entry.Id}: {entry.AssetType} for {entry.AdFormat}");
+                    MyDebug.Verbose($"- {entry.Id}: {entry.AssetType} for {entry.AdFormat}");
                 }
             }
             else
             {
-                Debug.Log($"Found asset {uuid}: {asset.AssetType} for {asset.AdFormat} at {asset.LocalPath}");
+                MyDebug.Verbose($"Found asset {uuid}: {asset.AssetType} for {asset.AdFormat} at {asset.LocalPath}");
             }
             
             return asset;
@@ -474,12 +472,12 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     File.Delete(asset.LocalPath);
                 }
 
-                Debug.Log($"Removed cached asset: {uuid}");
+                MyDebug.Verbose($"Removed cached asset: {uuid}");
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to remove cached asset {uuid}: {ex.Message}");
+                MyDebug.LogError($"Failed to remove cached asset {uuid}: {ex.Message}");
                 
                 // Re-add to cache if file deletion failed
                 lock (_lockObject)
@@ -520,7 +518,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"Failed to delete cached file {asset.LocalPath}: {ex.Message}");
+                        MyDebug.LogWarning($"Failed to delete cached file {asset.LocalPath}: {ex.Message}");
                     }
                 }
 
@@ -534,15 +532,15 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"Failed to clean cache directory: {ex.Message}");
+                        MyDebug.LogWarning($"Failed to clean cache directory: {ex.Message}");
                     }
                 }
 
-                Debug.Log("Cleared all cached assets");
+                MyDebug.Verbose("Cleared all cached assets");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to clear cache: {ex.Message}");
+                MyDebug.LogError($"Failed to clear cache: {ex.Message}");
             }
         }
 
@@ -554,14 +552,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             var asset = GetCachedAssetByUUID(uuid);
             if (asset == null)
             {
-                Debug.LogWarning($"Asset not found in cache: {uuid}");
+                MyDebug.LogWarning($"Asset not found in cache: {uuid}");
                 return null;
             }
             
             // Accept both image and logo assets for texture loading
             if (asset.AssetType != AssetType.image && asset.AssetType != AssetType.logo)
             {
-                Debug.LogWarning($"Asset {uuid} is not a visual asset (type: {asset.AssetType})");
+                MyDebug.LogWarning($"Asset {uuid} is not a visual asset (type: {asset.AssetType})");
                 return null;
             }
 
@@ -569,14 +567,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 if (!File.Exists(asset.LocalPath))
                 {
-                    Debug.LogError($"Asset file not found: {asset.LocalPath}");
+                    MyDebug.LogError($"Asset file not found: {asset.LocalPath}");
                     return null;
                 }
 
                 var data = File.ReadAllBytes(asset.LocalPath);
                 if (data == null || data.Length == 0)
                 {
-                    Debug.LogError($"Asset file is empty or could not be read: {asset.LocalPath}");
+                    MyDebug.LogError($"Asset file is empty or could not be read: {asset.LocalPath}");
                     return null;
                 }
 
@@ -584,17 +582,17 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 
                 if (texture.LoadImage(data))
                 {
-                    Debug.Log($"Successfully loaded texture {uuid} ({texture.width}x{texture.height}) - {asset.AssetType}");
+                    MyDebug.Verbose($"Successfully loaded texture {uuid} ({texture.width}x{texture.height}) - {asset.AssetType}");
                     return texture;
                 }
                 
-                Debug.LogError($"Failed to decode image data for asset {uuid}");
+                MyDebug.LogError($"Failed to decode image data for asset {uuid}");
                 UnityEngine.Object.DestroyImmediate(texture);
                 return null;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to load texture for asset {uuid}: {ex.Message}");
+                MyDebug.LogError($"Failed to load texture for asset {uuid}: {ex.Message}");
                 return null;
             }
         }
@@ -625,11 +623,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 var assets = GetAllCachedAssets();
                 AdvertisementPlayerPrefs.CachedAssets = assets;
-                Debug.Log($"Persisted {assets.Count} cached assets to PlayerPrefs");
+                MyDebug.Verbose($"Persisted {assets.Count} cached assets to PlayerPrefs");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to persist cached assets: {ex.Message}");
+                MyDebug.LogError($"Failed to persist cached assets: {ex.Message}");
             }
         }
 
@@ -656,12 +654,12 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         }
                     }
                     
-                    Debug.Log($"Loaded {_cachedAssets.Count} cached assets from PlayerPrefs");
+                    MyDebug.Verbose($"Loaded {_cachedAssets.Count} cached assets from PlayerPrefs");
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to load cached assets: {ex.Message}");
+                MyDebug.LogError($"Failed to load cached assets: {ex.Message}");
             }
         }
     }

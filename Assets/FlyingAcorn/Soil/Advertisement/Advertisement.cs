@@ -24,22 +24,29 @@ namespace FlyingAcorn.Soil.Advertisement
     public class Advertisement
     {
         [UsedImplicitly]
-        public static bool Ready => SoilServices.Ready;
+        public static bool Ready => availableCampaign != null;
         private static readonly string AdvertisementBaseUrl = $"{Core.Data.Constants.ApiUrl}/advertisement/";
         private static readonly string CampaignsUrl = $"{AdvertisementBaseUrl}campaigns/";
         private static readonly string CampaignsSelectUrl = $"{CampaignsUrl}select/";
         private static bool _campaignRequested;
         private static Campaign availableCampaign = null;
         private static List<AdFormat> _requestedFormats;
-        
+
         // Ad placement instances
         private static SoilAdManager _adPlacementManager;
         private static BannerAdPlacement _bannerPlacement;
         private static InterstitialAdPlacement _interstitialPlacement;
         private static RewardedAdPlacement _rewardedPlacement;
 
-        // Shared canvas for all ad placements
-        private static Canvas _sharedAdCanvas;
+        // Persistent canvas for all ad placements
+        private static Canvas _persistentAdCanvas;
+
+        // Prefabs for ad placements (assign in inspector or via code)
+        public static BannerAdPlacement BannerAdPlacementPrefab;
+        public static InterstitialAdPlacement InterstitialAdPlacementPrefab;
+        public static RewardedAdPlacement RewardedAdPlacementPrefab;
+        // Track active ad placement instances
+        private static readonly Dictionary<AdFormat, GameObject> _activePlacements = new();
 
         public static async void InitializeAsync(List<AdFormat> adFormats)
         {
@@ -73,7 +80,18 @@ namespace FlyingAcorn.Soil.Advertisement
             _campaignRequested = true;
             try
             {
-                availableCampaign = (await SelectCampaignAsync()).campaign;
+                var campaignResponse = await SelectCampaignAsync();
+                if (campaignResponse == null || campaignResponse.campaign == null)
+                {
+                    MyDebug.Verbose("No campaign available. Clearing ad asset cache and notifying listeners.");
+                    ClearAssetCache();
+                    availableCampaign = null;
+                    AdvertisementPlayerPrefs.CachedCampaign = null;
+                    _campaignRequested = false;
+                    Events.InvokeOnInitialized();
+                    return;
+                }
+                availableCampaign = campaignResponse.campaign;
             }
             catch (SoilException ex)
             {
@@ -84,10 +102,10 @@ namespace FlyingAcorn.Soil.Advertisement
             catch (Exception ex)
             {
                 _campaignRequested = false;
-                Events.InvokeOnInitializeFailed($"Unexpected error while initializing advertisement: {ex.Message}");
+                Events.InvokeOnInitializeFailed($"Unexpected error selecting campaign: {ex.Message}");
                 return;
             }
-
+            GetOrCreatePersistentAdCanvas();
             Events.InvokeOnInitialized();
             CacheAds(availableCampaign);
             _campaignRequested = false;
@@ -99,45 +117,31 @@ namespace FlyingAcorn.Soil.Advertisement
         private static void AssignAdPlacementManager()
         {
             if (_adPlacementManager != null)
-            {
-                Analytics.MyDebug.Info("Ad placement manager already exists. Reusing existing instance.");
                 return;
-            }
+
             _adPlacementManager = UnityEngine.Object.FindObjectOfType<SoilAdManager>();
             if (_adPlacementManager == null)
-            {
                 throw new SoilException("SoilAdManager not found in the scene. Please add it to your scene before initializing Advertisement.",
                     SoilExceptionErrorCode.NotFound);
-            }
-            _bannerPlacement = _adPlacementManager.GetComponentInChildren<BannerAdPlacement>();
-            _interstitialPlacement = _adPlacementManager.GetComponentInChildren<InterstitialAdPlacement>();
-            _rewardedPlacement = _adPlacementManager.GetComponentInChildren<RewardedAdPlacement>();
-            UnityEngine.Object.DontDestroyOnLoad(_adPlacementManager);
-
-            AssignSharedAdCanvas();
-        }
-
-        private static void AssignSharedAdCanvas()
-        {
-            _sharedAdCanvas = _adPlacementManager.GetComponent<Canvas>();
-            _sharedAdCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _sharedAdCanvas.sortingOrder = 1000; // High sorting order to appear on top
-            
-            CanvasScaler canvasScaler = _sharedAdCanvas.GetComponent<CanvasScaler>();
-            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasScaler.referenceResolution = new Vector2(1920, 1080);
-
-            _bannerPlacement.DisplayComponent.SetCanvas(_sharedAdCanvas);
-            _interstitialPlacement.DisplayComponent.SetCanvas(_sharedAdCanvas);
-            _rewardedPlacement.DisplayComponent.SetCanvas(_sharedAdCanvas);
-
-            _sharedAdCanvas.enabled = false;
+            // Assign prefab references from SoilAdManager
+            BannerAdPlacementPrefab = _adPlacementManager.bannerAdPlacementPrefab;
+            InterstitialAdPlacementPrefab = _adPlacementManager.interstitialAdPlacementPrefab;
+            RewardedAdPlacementPrefab = _adPlacementManager.rewardedAdPlacementPrefab;
+            _bannerPlacement = UnityEngine.Object.FindAnyObjectByType<BannerAdPlacement>();
+            _interstitialPlacement = UnityEngine.Object.FindAnyObjectByType<InterstitialAdPlacement>();
+            _rewardedPlacement = UnityEngine.Object.FindAnyObjectByType<RewardedAdPlacement>();
         }
 
         // Downloads and caches ads for the selected campaign.
         // This method caches each format separately and invokes events as each format becomes ready.
         private static async void CacheAds(Campaign availableCampaign)
         {
+            // If the campaign has changed, unload all previous caches
+            if (AdvertisementPlayerPrefs.CachedCampaign == null || AdvertisementPlayerPrefs.CachedCampaign.id != availableCampaign.id)
+            {
+                MyDebug.Verbose("Campaign changed. Clearing previous ad asset cache.");
+                ClearAssetCache();
+            }
             AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
 
             // Cache assets for each requested format separately
@@ -154,7 +158,7 @@ namespace FlyingAcorn.Soil.Advertisement
             try
             {
                 await Task.WhenAll(cachingTasks);
-                MyDebug.Info($"Completed caching for all {_requestedFormats.Count} requested formats");
+                MyDebug.Verbose($"Completed caching for all {_requestedFormats.Count} requested formats");
             }
             catch (Exception ex)
             {
@@ -184,13 +188,13 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            MyDebug.Info($"Assets ready for {adFormat} format");
+            MyDebug.Verbose($"Assets ready for {adFormat} format");
             Events.InvokeOnAdFormatAssetsLoaded(adFormat);
         }
 
         private static async Task<CampaignSelectResponse> SelectCampaignAsync()
         {
-            if (!Ready)
+            if (!SoilServices.Ready)
             {
                 throw new SoilException("Soil services are not ready. Please initialize Soil first.",
                     SoilExceptionErrorCode.NotReady);
@@ -259,39 +263,196 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
-        public static void LoadAd(AdFormat adFormat)
+        /// <summary>
+        /// Creates or gets the persistent ad canvas that survives scene changes and handles all ad types
+        /// </summary>
+        private static Canvas GetOrCreatePersistentAdCanvas()
         {
-            if (adFormat == AdFormat.banner)
+            if (_persistentAdCanvas != null)
+                return _persistentAdCanvas;
+
+            // Create a new root GameObject for the persistent canvas
+            var canvasObject = new GameObject("PersistentAdCanvas");
+            UnityEngine.Object.DontDestroyOnLoad(canvasObject);
+            
+            // Add Canvas component
+            _persistentAdCanvas = canvasObject.AddComponent<Canvas>();
+            _persistentAdCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            _persistentAdCanvas.sortingOrder = 1000; // High sorting order to appear above other UI
+            
+            // Copy canvas scaler settings from SoilAdManager's canvas reference
+            var canvasScaler = canvasObject.AddComponent<CanvasScaler>();
+            if (_adPlacementManager != null && _adPlacementManager.canvasReference != null)
             {
-                _bannerPlacement.Load();
-            }
-            else if (adFormat == AdFormat.interstitial)
-            {
-                _interstitialPlacement.Load();
-            }
-            else if (adFormat == AdFormat.rewarded)
-            {
-                _rewardedPlacement.Load();
+                var referenceScaler = _adPlacementManager.canvasReference.GetComponent<CanvasScaler>();
+                if (referenceScaler != null)
+                {
+                    canvasScaler.uiScaleMode = referenceScaler.uiScaleMode;
+                    canvasScaler.referenceResolution = referenceScaler.referenceResolution;
+                    canvasScaler.screenMatchMode = referenceScaler.screenMatchMode;
+                    canvasScaler.matchWidthOrHeight = referenceScaler.matchWidthOrHeight;
+                    canvasScaler.referencePixelsPerUnit = referenceScaler.referencePixelsPerUnit;
+                    MyDebug.Verbose($"Copied canvas scaler settings from SoilAdManager reference: {referenceScaler.referenceResolution}");
+                }
+                else
+                {
+                    // Fallback to default settings
+                    SetDefaultCanvasScalerSettings(canvasScaler);
+                }
             }
             else
             {
-                throw new SoilException($"Unsupported ad format: {adFormat}", SoilExceptionErrorCode.InvalidRequest);
+                // Fallback to default settings
+                SetDefaultCanvasScalerSettings(canvasScaler);
             }
+            
+            // Add GraphicRaycaster for UI interactions
+            canvasObject.AddComponent<GraphicRaycaster>();
+            
+            // Start with canvas disabled
+            canvasObject.SetActive(false);
+            
+            MyDebug.Verbose("Created persistent ad canvas with DontDestroyOnLoad (initially disabled)");
+            return _persistentAdCanvas;
+        }
+
+        /// <summary>
+        /// Sets default canvas scaler settings as fallback
+        /// </summary>
+        private static void SetDefaultCanvasScalerSettings(CanvasScaler canvasScaler)
+        {
+            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            canvasScaler.referenceResolution = new Vector2(1170, 2532);
+            canvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            canvasScaler.referencePixelsPerUnit = 100;
+        }
+
+        /// <summary>
+        /// Enables or disables the persistent ad canvas based on active ads
+        /// </summary>
+        private static void UpdatePersistentCanvasVisibility()
+        {
+            if (_persistentAdCanvas == null) return;
+
+            bool hasActiveAds = _activePlacements.Any(kvp => kvp.Value != null && kvp.Value.activeSelf);
+            
+            if (hasActiveAds && !_persistentAdCanvas.gameObject.activeInHierarchy)
+                _persistentAdCanvas.gameObject.SetActive(true);
+            else if (!hasActiveAds && _persistentAdCanvas.gameObject.activeInHierarchy)
+                _persistentAdCanvas.gameObject.SetActive(false);
         }
 
         public static void ShowAd(AdFormat adFormat)
         {
+            if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat] != null)
+            {
+                var existingPlacement = _activePlacements[adFormat];
+                
+                if (existingPlacement.activeInHierarchy)
+                    return;
+            }
+            GameObject prefab = adFormat switch
+            {
+                AdFormat.banner => BannerAdPlacementPrefab?.gameObject,
+                AdFormat.interstitial => InterstitialAdPlacementPrefab?.gameObject,
+                AdFormat.rewarded => RewardedAdPlacementPrefab?.gameObject,
+                _ => null
+            };
+            if (prefab == null)
+            {
+                throw new SoilException($"No prefab assigned for {adFormat}", SoilExceptionErrorCode.NotFound);
+            }
+            if (!_activePlacements.TryGetValue(adFormat, out GameObject instance) || instance == null)
+                instance = UnityEngine.Object.Instantiate(prefab);
+            instance.SetActive(true);
+
+            Canvas targetCanvas = GetOrCreatePersistentAdCanvas();
+            MyDebug.Verbose($"Parenting {adFormat} to persistent canvas");
+
+            if (targetCanvas != null)
+            {
+                instance.transform.SetParent(targetCanvas.transform, false);
+                instance.transform.SetAsLastSibling();
+                if (instance.TryGetComponent(out RectTransform rectTransform))
+                {
+                    rectTransform.anchorMin = Vector2.zero;
+                    rectTransform.anchorMax = Vector2.one;
+                    rectTransform.offsetMin = Vector2.zero;
+                    rectTransform.offsetMax = Vector2.zero;
+                }
+            }
+            _activePlacements[adFormat] = instance;
+            MyDebug.Verbose($"Added {adFormat} to active placements. Total count: {_activePlacements.Count}");
+            
+            // Update canvas visibility
+            UpdatePersistentCanvasVisibility();
+            
+            // Set placement reference
+            if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
+            {
+                _bannerPlacement = banner;
+                _bannerPlacement.Show();
+            }
+            else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
+            {
+                _interstitialPlacement = interstitial;
+                _interstitialPlacement.Show();
+            }
+            else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
+            {
+                _rewardedPlacement = rewarded;
+                _rewardedPlacement.Show();
+            }
+        }
+
+        public static void HideAd(AdFormat adFormat)
+        {
+            if (_activePlacements.TryGetValue(adFormat, out var instance) && instance != null)
+            {
+                // Call Hide and clear placement reference
+                if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
+                {
+                    banner.Hide();
+                    _bannerPlacement = null;
+                    // For banner, do not destroy, just deactivate
+                    instance.SetActive(false);
+                }
+                else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
+                {
+                    interstitial.Hide();
+                    _interstitialPlacement = null;
+                    UnityEngine.Object.Destroy(instance);
+                    _activePlacements[adFormat] = null;
+                }
+                else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
+                {
+                    rewarded.Hide();
+                    _rewardedPlacement = null;
+                    UnityEngine.Object.Destroy(instance);
+                    _activePlacements[adFormat] = null;
+                }
+                
+                // Update canvas visibility after hiding ad
+                UpdatePersistentCanvasVisibility();
+            }
+        }
+
+        public static void LoadAd(AdFormat adFormat)
+        {
             if (adFormat == AdFormat.banner)
             {
-                _bannerPlacement.Show();
+                if (_bannerPlacement != null)
+                    _bannerPlacement.Load();
             }
             else if (adFormat == AdFormat.interstitial)
             {
-                _interstitialPlacement.Show();
+                if (_interstitialPlacement != null)
+                    _interstitialPlacement.Load();
             }
             else if (adFormat == AdFormat.rewarded)
             {
-                _rewardedPlacement.Show();
+                if (_rewardedPlacement != null)
+                    _rewardedPlacement.Load();
             }
             else
             {
@@ -392,11 +553,10 @@ namespace FlyingAcorn.Soil.Advertisement
                     var validAssets = persistedAssets.Where(a => a.IsValid).ToList();
                     if (validAssets.Count != persistedAssets.Count)
                     {
-                        // Some assets are no longer valid, update the cache
                         AdvertisementPlayerPrefs.CachedAssets = validAssets;
-                        MyDebug.Info($"Cleaned up {persistedAssets.Count - validAssets.Count} invalid cached assets");
+                        MyDebug.Verbose($"Cleaned up {persistedAssets.Count - validAssets.Count} invalid cached assets");
                     }
-                    MyDebug.Info($"Initialized asset cache with {validAssets.Count} valid assets");
+                    MyDebug.Verbose($"Initialized asset cache with {validAssets.Count} valid assets");
                 }
             }
             catch (Exception ex)

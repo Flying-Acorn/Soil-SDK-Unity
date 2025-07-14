@@ -247,10 +247,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 9100065741936116194}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.3}
-  m_AnchorMax: {x: 1, y: 0.65}
-  m_AnchoredPosition: {x: 0, y: -1159}
-  m_SizeDelta: {x: 0, y: -832.85}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: -569.5}
+  m_SizeDelta: {x: 850, y: 150}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &5938863283653859303
 CanvasRenderer:
@@ -307,7 +307,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 100
+  m_fontSize: 66.15
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -415,7 +415,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 0.2, b: 0.2, a: 0.9}
-  m_RaycastTarget: 1
+  m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -534,13 +534,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7659d9f746ed94fa493c2830d76ade42, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  adCanvas: {fileID: 0}
   backgroundImage: {fileID: 8237087100553321741}
   mainAssetImage: {fileID: 8896252847430696338}
   logoImage: {fileID: 6002198129836813507}
+  actionButton: {fileID: 733190060530985217}
   adTitleText: {fileID: 2668755039296654219}
   adDescriptionText: {fileID: 731402523036771107}
-  actionButton: {fileID: 733190060530985217}
   actionButtonText: {fileID: 263104346024781844}
   closeButton: {fileID: 6287051687217678462}
   adFormat: 1
@@ -622,10 +621,10 @@ RectTransform:
   - {fileID: 6361469377546895400}
   m_Father: {fileID: 9100065741936116194}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 182.33}
-  m_SizeDelta: {x: 0, y: -832.12}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 100}
+  m_SizeDelta: {x: 1000, y: 1700}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8299715446260683828
 CanvasRenderer:
@@ -673,8 +672,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 85}
-  m_SizeDelta: {x: 1539.885, y: 3331.6016}
+  m_AnchoredPosition: {x: 0, y: 29.4}
+  m_SizeDelta: {x: 1000, y: 1941.1}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &3833922145650738774
 GameObject:
@@ -707,10 +706,10 @@ RectTransform:
   - {fileID: 2525190269490756694}
   m_Father: {fileID: 9100065741936116194}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0}
-  m_AnchorMax: {x: 0.5, y: 0}
-  m_AnchoredPosition: {x: 0, y: 125.21002}
-  m_SizeDelta: {x: 1156, y: 250.42001}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 0}
+  m_AnchoredPosition: {x: 0, y: 103.15}
+  m_SizeDelta: {x: 0, y: 206.3}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &5476019332367090932
 GameObject:
@@ -897,8 +896,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 752}
-  m_SizeDelta: {x: 400, y: 400}
+  m_AnchoredPosition: {x: 0, y: 555}
+  m_SizeDelta: {x: 300, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3679392443933748160
 CanvasRenderer:
@@ -970,10 +969,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 9100065741936116194}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.7}
+  m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 383.69}
-  m_SizeDelta: {x: 0, y: -764.11}
+  m_AnchoredPosition: {x: 0, y: -170}
+  m_SizeDelta: {x: -20, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7406186450988590905
 CanvasRenderer:
@@ -1030,7 +1029,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 100
+  m_fontSize: 89.5
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1136,7 +1135,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
+  m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:

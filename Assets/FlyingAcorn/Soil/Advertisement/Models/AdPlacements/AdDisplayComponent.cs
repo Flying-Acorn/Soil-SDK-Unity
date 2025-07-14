@@ -4,6 +4,8 @@ using UnityEngine.UI;
 using RTLTMPro;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
+using FlyingAcorn.Analytics;
+using TMPro;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
@@ -21,15 +23,15 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
     public class AdDisplayComponent : MonoBehaviour
     {
         [Header("UI Components")]
-        public Canvas adCanvas;
         public Image backgroundImage;
         public Image mainAssetImage;
         public Image logoImage;
+        public Button actionButton;
         public RTLTextMeshPro adTitleText;
         public RTLTextMeshPro adDescriptionText;
-        public Button actionButton;
         public RTLTextMeshPro actionButtonText;
         public Button closeButton;
+        public Image closeButtonImage;
 
         [Header("Ad Configuration")]
         public AdFormat adFormat;
@@ -57,11 +59,8 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             // Setup button listeners
             SetupButtonListeners();
-        }
-
-        public void SetCanvas(Canvas canvas)
-        {
-            adCanvas = canvas;
+            if (closeButton != null)
+                closeButtonImage = closeButton.GetComponent<Image>();
         }
 
         private void SetupButtonListeners()
@@ -80,7 +79,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 _closeButtonText = closeButton.GetComponentInChildren<RTLTextMeshPro>();
                 if (_closeButtonText == null)
                 {
-                    UnityEngine.Debug.LogWarning("[AdDisplayComponent] No RTLTextMeshPro found in close button for countdown display");
+                    MyDebug.LogWarning("[AdDisplayComponent] No RTLTextMeshPro found in close button for countdown display");
                 }
             }
         }
@@ -92,12 +91,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             _onClickCallback = onClick;
             _onRewardedCallback = onRewarded;
             _onShownCallback = onShown;
-
-            if (adCanvas == null)
-            {
-                UnityEngine.Debug.LogError($"AdCanvas is null for {adFormat}! Cannot show ad.");
-                return;
-            }
 
             // Load and display assets
             LoadAndDisplayAssets();
@@ -113,39 +106,23 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             try
             {
-                // Ensure the shared canvas is active
-                if (adCanvas != null)
+                if (backgroundImage != null && backgroundImage.gameObject != null)
                 {
-                    if (!adCanvas.enabled)
-                    {
-                        adCanvas.enabled = true;
-                        Analytics.MyDebug.Info($"Activated shared canvas");
-                    }
-
-                    // Show this ad type's background
-                    if (backgroundImage != null && backgroundImage.gameObject != null)
-                    {
-                        backgroundImage.gameObject.SetActive(true);
-
-                        // Fire events and reassign listeners
-                        FireAdShownEvents();
-                        ReassignButtonListeners();
-                    }
-                    else
-                    {
-                        UnityEngine.Debug.LogError($"Background image not found for {adFormat} ad");
-                    }
-
-                    Canvas.ForceUpdateCanvases();
+                    backgroundImage.gameObject.SetActive(true);
+                    // Fire events and reassign listeners
+                    FireAdShownEvents();
+                    ReassignButtonListeners();
                 }
                 else
                 {
-                    UnityEngine.Debug.LogError($"Shared canvas not found for {adFormat} ad");
+                    MyDebug.LogError($"Background image not found for {adFormat} ad");
                 }
+
+                Canvas.ForceUpdateCanvases();
             }
             catch (System.Exception ex)
             {
-                UnityEngine.Debug.LogError($"Exception during {adFormat} ad display: {ex.Message}");
+                MyDebug.LogError($"Exception during {adFormat} ad display: {ex.Message}");
             }
         }
 
@@ -189,7 +166,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             if (_currentAd == null) return;
 
-            Analytics.MyDebug.Info($"[AdDisplayComponent] Loading assets for {adFormat} ad");
+            Analytics.MyDebug.Verbose($"[AdDisplayComponent] Loading assets for {adFormat} ad");
 
             // Setup text elements based on data availability
             SetupTextElements();
@@ -274,7 +251,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         actionButtonText.fontStyle = TMPro.FontStyles.Bold;
                         actionButtonText.color = Color.white;
 
-                        Analytics.MyDebug.Info($"[AdDisplayComponent] Found and configured ActionButtonText dynamically");
+                        Analytics.MyDebug.Verbose($"[AdDisplayComponent] Found and configured ActionButtonText dynamically");
                     }
                     else if (_currentAd.action_button != null && !string.IsNullOrEmpty(_currentAd.action_button.alt_text))
                     {
@@ -283,7 +260,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         actionButtonText.fontStyle = TMPro.FontStyles.Bold;
                         actionButtonText.color = Color.white;
 
-                        Analytics.MyDebug.Info($"[AdDisplayComponent] Found and configured ActionButtonText dynamically");
+                        Analytics.MyDebug.Verbose($"[AdDisplayComponent] Found and configured ActionButtonText dynamically");
                     }
                     else
                     {
@@ -315,7 +292,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    UnityEngine.Debug.LogError($"Failed to load texture for main asset: {_currentMainAsset.Id}");
+                    MyDebug.LogError($"Failed to load texture for main asset: {_currentMainAsset.Id}");
                     mainAssetImage?.gameObject.SetActive(false);
                 }
             }
@@ -340,7 +317,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    UnityEngine.Debug.LogError($"Failed to load texture for logo asset: {_currentLogoAsset.Id}");
+                    MyDebug.LogError($"Failed to load texture for logo asset: {_currentLogoAsset.Id}");
                     logoImage?.gameObject.SetActive(false);
                 }
             }
@@ -366,7 +343,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             if (!string.IsNullOrEmpty(urlToOpen))
             {
-                Analytics.MyDebug.Info($"[AdDisplayComponent] Opening URL: {urlToOpen}");
+                Analytics.MyDebug.Verbose($"[AdDisplayComponent] Opening URL: {urlToOpen}");
                 Application.OpenURL(urlToOpen);
             }
         }
@@ -413,14 +390,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             if (_countdownTime <= 0f)
             {
-                // Show close button immediately for banner ads
                 EnableCloseButton();
             }
             else
             {
-                // Start countdown for interstitial and rewarded ads
                 _isCountingDown = true;
                 closeButton.interactable = false;
+                closeButtonImage.raycastTarget = false;
                 closeButton.gameObject.SetActive(true);
                 UpdateCountdownDisplay();
                 InvokeRepeating(nameof(UpdateCountdown), 1f, 1f);
@@ -458,19 +434,19 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         private void EnableCloseButton()
         {
+            if (adFormat == AdFormat.rewarded)
+                _onRewardedCallback?.Invoke();
+
             if (closeButton != null)
             {
                 closeButton.interactable = true;
+                closeButtonImage.raycastTarget = true;
                 closeButton.gameObject.SetActive(true);
 
                 if (_closeButtonText != null)
                 {
                     _closeButtonText.text = "X";
                 }
-            }
-            if (adFormat == AdFormat.rewarded)
-            {
-                _onRewardedCallback?.Invoke();
             }
         }
 
@@ -492,11 +468,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             if (customAdFont == null)
             {
-                UnityEngine.Debug.Log("[AdDisplayComponent] No custom font assigned, using default fonts");
+                MyDebug.Verbose("[AdDisplayComponent] No custom font assigned, using default fonts");
                 return;
             }
-
-            UnityEngine.Debug.Log($"[AdDisplayComponent] Applying custom font '{customAdFont.name}' to all ad text elements");
 
             // Apply to all text components
             ApplyFontToTextComponent(adTitleText, "Ad Title");
@@ -512,13 +486,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             if (textComponent == null)
             {
-                UnityEngine.Debug.Log($"[AdDisplayComponent] {componentName} text component is null, skipping font application");
+                MyDebug.Verbose($"[AdDisplayComponent] {componentName} text component is null, skipping font application");
                 return;
             }
 
             if (customAdFont == null)
             {
-                UnityEngine.Debug.Log($"[AdDisplayComponent] No custom font assigned for {componentName}");
+                MyDebug.Verbose($"[AdDisplayComponent] No custom font assigned for {componentName}");
                 return;
             }
 
@@ -527,8 +501,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             // Apply the custom font
             textComponent.font = customAdFont;
-
-            UnityEngine.Debug.Log($"[AdDisplayComponent] Applied custom font '{customAdFont.name}' to {componentName} (was: '{originalFont?.name ?? "null"}')");
+            UpdateStyle(textComponent);
         }
 
         /// <summary>
@@ -537,8 +510,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         public void SetCustomFont(TMPro.TMP_FontAsset font)
         {
             customAdFont = font;
-            UnityEngine.Debug.Log($"[AdDisplayComponent] Custom font set to: {font?.name ?? "null"}");
-
             // Apply immediately if we have text components ready
             ApplyCustomFontToAllText();
         }
@@ -549,6 +520,16 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 return;
 
             textComponent.text = text;
+        }
+
+        private void UpdateStyle(RTLTextMeshPro textComponent)
+        {
+            if (adFormat == AdFormat.banner) return;
+            var duplicatedMaterial = new Material(textComponent.fontMaterial);
+            duplicatedMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.2f);
+            duplicatedMaterial.SetColor(ShaderUtilities.ID_OutlineColor, Color.black);
+            duplicatedMaterial.SetFloat(ShaderUtilities.ID_FaceDilate, 0.35f);
+            textComponent.fontMaterial = duplicatedMaterial;
         }
     }
 }
