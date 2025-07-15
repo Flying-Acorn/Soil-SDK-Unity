@@ -174,8 +174,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         private Ad CreateAdFromCachedAssets(System.Collections.Generic.List<AssetCacheEntry> cachedAssets)
         {
             // Create a basic ad object with information from cached assets
-            var mainAsset = cachedAssets.Find(a => a.AssetType == AssetType.image);
+            var videoAsset = cachedAssets.Find(a => a.AssetType == AssetType.video);
+            var imageAsset = cachedAssets.Find(a => a.AssetType == AssetType.image);
             var logoAsset = cachedAssets.Find(a => a.AssetType == AssetType.logo);
+
+            // Primary asset is image for banners, but support video too
+            var mainAsset = imageAsset ?? videoAsset;
 
             // Get the click URL from any cached asset (they should all have the same click URL from the same AdGroup)
             var clickUrl = mainAsset?.ClickUrl ?? logoAsset?.ClickUrl;
@@ -215,10 +219,15 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     text_content = descriptionText,
                     alt_text = descriptionText 
                 } : null,
-                main_image = mainAsset != null ? new Asset { 
-                    id = mainAsset.Id, 
-                    url = mainAsset.OriginalUrl, 
+                main_image = imageAsset != null ? new Asset { 
+                    id = imageAsset.Id, 
+                    url = imageAsset.OriginalUrl, 
                     asset_type = "image" 
+                } : null,
+                main_video = videoAsset != null ? new Asset { 
+                    id = videoAsset.Id, 
+                    url = videoAsset.OriginalUrl, 
+                    asset_type = "video" 
                 } : null,
                 logo = logoAsset != null ? new Asset { 
                     id = logoAsset.Id, 

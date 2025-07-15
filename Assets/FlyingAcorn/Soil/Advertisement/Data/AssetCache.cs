@@ -46,7 +46,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             } 
         }
 
-        public bool IsValid => !string.IsNullOrEmpty(LocalPath) && File.Exists(LocalPath);
+        public bool IsValid => 
+            !string.IsNullOrEmpty(LocalPath) && 
+            (AssetType == AssetType.video 
+                ? (LocalPath.StartsWith("http://") || LocalPath.StartsWith("https://")) // Videos: URL validation
+                : File.Exists(LocalPath)); // Images/Logos: File existence validation
 
         public string DisplayName => $"{AdFormat}_{AssetType}_{Id}";
 
@@ -120,39 +124,54 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// </summary>
         public static async Task CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
+            MyDebug.Verbose($"Starting CacheAssetsForFormatAsync for {adFormat}");
+            
             if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
             {
+                MyDebug.LogWarning($"No campaign or ad groups available for {adFormat}");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
+            
+            MyDebug.Verbose($"Campaign has {campaign.ad_groups.Count} ad groups");
+            
             var random = new System.Random();
-            // Get all ad groups that have at least one ad of this format
+            
+            // Get all ad groups that have ads of this format in either image_ads or video_ads
             var eligibleAdGroups = campaign.ad_groups
-                .Where(g => g.ads != null && g.ads.Any(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat))
+                .Where(g => HasAdsForFormat(g, adFormat))
                 .ToList();
+                
+            MyDebug.Verbose($"Found {eligibleAdGroups.Count} eligible ad groups for {adFormat}");
+                
             if (!eligibleAdGroups.Any())
             {
                 MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
+            
             // Pick a random ad group
             var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
-            // Get all ads in this group with the requested format
-            var eligibleAds = adGroup.ads
-                .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
-                .ToList();
+            
+            // Get all ads in this group with the requested format, prioritizing video ads for video-capable formats
+            var eligibleAds = GetEligibleAdsForFormat(adGroup, adFormat);
+            
             if (!eligibleAds.Any())
             {
                 MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
+            
             // Pick a random ad
             var ad = eligibleAds[random.Next(eligibleAds.Count)];
+            
             var cachingTasks = new List<Task>();
+            
             // Cache one asset of each type for this ad format
             var assetsToCache = GetAssetsToCache(ad, adFormat);
+            
             foreach (var (asset, assetType) in assetsToCache)
             {
                 if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
@@ -161,6 +180,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
                 }
             }
+            
             if (cachingTasks.Count > 0)
             {
                 await Task.WhenAll(cachingTasks);
@@ -170,41 +190,205 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
             }
+            
             // Persist the updated cache
             PersistCachedAssets();
+            
             // Invoke callback to signal this format is ready
             onFormatReady?.Invoke(adFormat);
+        }
+        
+        /// <summary>
+        /// Checks if an ad group has ads for the specified format
+        /// </summary>
+        private static bool HasAdsForFormat(AdGroup adGroup, AdFormat adFormat)
+        {
+            // Add debugging to see what we're working with
+            MyDebug.Verbose($"Checking ad group for {adFormat} format:");
+            MyDebug.Verbose($"  - image_ads count: {adGroup.image_ads?.Count ?? 0}");
+            MyDebug.Verbose($"  - video_ads count: {adGroup.video_ads?.Count ?? 0}");
+            MyDebug.Verbose($"  - legacy ads count: {adGroup.ads?.Count ?? 0}");
+            
+            // Debug all format values we find
+            if (adGroup.image_ads != null)
+            {
+                foreach (var ad in adGroup.image_ads)
+                {
+                    MyDebug.Verbose($"  - image_ad id: {ad.id}, format: '{ad.format ?? "NULL"}'");
+                }
+            }
+            if (adGroup.video_ads != null)
+            {
+                foreach (var ad in adGroup.video_ads)
+                {
+                    MyDebug.Verbose($"  - video_ad id: {ad.id}, format: '{ad.format ?? "NULL"}'");
+                }
+            }
+            if (adGroup.ads != null)
+            {
+                foreach (var ad in adGroup.ads)
+                {
+                    MyDebug.Verbose($"  - legacy_ad id: {ad.id}, format: '{ad.format ?? "NULL"}'");
+                }
+            }
+            
+            // Check both new structure (image_ads/video_ads) and legacy structure (ads)
+            var hasInImageAds = adGroup.image_ads?.Any(a => {
+                // If format is null or empty, assume it matches (API might not set format for individual ads)
+                if (string.IsNullOrEmpty(a.format))
+                {
+                    MyDebug.Verbose($"  - image_ad {a.id} has no format, assuming match for {adFormat}");
+                    return true;
+                }
+                var formatMatches = Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat;
+                MyDebug.Verbose($"  - image_ad {a.id} format: '{a.format}' -> {f} (matches: {formatMatches})");
+                return formatMatches;
+            }) == true;
+            
+            var hasInVideoAds = adGroup.video_ads?.Any(a => {
+                // If format is null or empty, assume it matches (API might not set format for individual ads)
+                if (string.IsNullOrEmpty(a.format))
+                {
+                    MyDebug.Verbose($"  - video_ad {a.id} has no format, assuming match for {adFormat}");
+                    return true;
+                }
+                var formatMatches = Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat;
+                MyDebug.Verbose($"  - video_ad {a.id} format: '{a.format}' -> {f} (matches: {formatMatches})");
+                return formatMatches;
+            }) == true;
+            
+            var hasInLegacyAds = adGroup.ads?.Any(a => {
+                var formatMatches = Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat;
+                MyDebug.Verbose($"  - legacy_ad {a.id} format: '{a.format ?? "NULL"}' -> {f} (matches: {formatMatches})");
+                return formatMatches;
+            }) == true;
+            
+            var result = hasInImageAds || hasInVideoAds || hasInLegacyAds;
+            MyDebug.Verbose($"HasAdsForFormat({adFormat}): {result} (image: {hasInImageAds}, video: {hasInVideoAds}, legacy: {hasInLegacyAds})");
+            
+            return result;
+        }
+        
+        /// <summary>
+        /// Gets eligible ads for the format, including both video and image ads
+        /// </summary>
+        private static List<Ad> GetEligibleAdsForFormat(AdGroup adGroup, AdFormat adFormat)
+        {
+            var eligibleAds = new List<Ad>();
+            
+            MyDebug.Verbose($"Getting eligible ads for {adFormat} format");
+            
+            // Include both video and image ads for all formats
+            // First collect video ads
+            if (adGroup.video_ads != null)
+            {
+                var videoAds = adGroup.video_ads
+                    .Where(a => {
+                        // If format is null or empty, assume it matches (API might not set format for individual ads)
+                        if (string.IsNullOrEmpty(a.format))
+                        {
+                            MyDebug.Verbose($"  - video_ad {a.id} has no format, including for {adFormat}");
+                            return true;
+                        }
+                        var formatMatches = Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat;
+                        MyDebug.Verbose($"  - video_ad {a.id} format: '{a.format}' -> {f} (matches: {formatMatches})");
+                        return formatMatches;
+                    })
+                    .ToList();
+                
+                if (videoAds.Any())
+                {
+                    MyDebug.Verbose($"Found {videoAds.Count} matching video ads for {adFormat}");
+                    eligibleAds.AddRange(videoAds);
+                }
+            }
+            
+            // Then collect image ads
+            if (adGroup.image_ads != null)
+            {
+                var imageAds = adGroup.image_ads
+                    .Where(a => {
+                        // If format is null or empty, assume it matches (API might not set format for individual ads)
+                        if (string.IsNullOrEmpty(a.format))
+                        {
+                            MyDebug.Verbose($"  - image_ad {a.id} has no format, including for {adFormat}");
+                            return true;
+                        }
+                        var formatMatches = Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat;
+                        MyDebug.Verbose($"  - image_ad {a.id} format: '{a.format}' -> {f} (matches: {formatMatches})");
+                        return formatMatches;
+                    })
+                    .ToList();
+                
+                if (imageAds.Any())
+                {
+                    MyDebug.Verbose($"Found {imageAds.Count} matching image ads for {adFormat}");
+                    eligibleAds.AddRange(imageAds);
+                }
+            }
+            
+            // Fallback to legacy ads structure for backward compatibility
+            if (!eligibleAds.Any() && adGroup.ads != null)
+            {
+                var legacyAds = adGroup.ads
+                    .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
+                    .ToList();
+                MyDebug.Verbose($"Found {legacyAds.Count} matching legacy ads for {adFormat}");
+                eligibleAds.AddRange(legacyAds);
+            }
+            
+            MyDebug.Verbose($"Total eligible ads for {adFormat}: {eligibleAds.Count} (including both videos and images)");
+            return eligibleAds;
         }
 
         /// <summary>
         /// Gets the assets to cache for a given ad
+        /// IMPORTANT: Videos are no longer cached to reduce storage footprint.
+        /// Only images and logos are cached for offline display fallback.
+        /// Videos will be streamed directly from URLs when online.
+        /// However, we still create cache entries for videos to track metadata.
         /// </summary>
         private static List<(Asset asset, AssetType assetType)> GetAssetsToCache(Ad ad, AdFormat adFormat)
         {
             var assetsToCache = new List<(Asset, AssetType)>();
 
-            // Map ad properties to asset types
+            MyDebug.Verbose($"GetAssetsToCache for {adFormat} ad {ad.id}:");
+            MyDebug.Verbose($"  - main_image: {(ad.main_image?.url != null ? "available" : "null")}");
+            MyDebug.Verbose($"  - main_video: {(ad.main_video?.url != null ? "available" : "null")}");
+            MyDebug.Verbose($"  - logo: {(ad.logo?.url != null ? "available" : "null")}");
+
+            // Map ad properties to asset types - INCLUDE VIDEO for metadata tracking
             var assetMappings = new Dictionary<AssetType, Asset>
             {
                 { AssetType.image, ad.main_image },
-                { AssetType.video, ad.main_image }, // Assuming main_image can be video too
+                { AssetType.video, ad.main_video }, // Keep for metadata tracking
                 { AssetType.logo, ad.logo }
             };
 
-            // Only cache assets that have URLs and are media assets (image/video/logo)
+            // Cache images/logos, create metadata entries for videos
             foreach (var (assetType, asset) in assetMappings)
             {
                 if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
                 {
                     // Determine actual asset type based on URL or asset_type field
                     var actualAssetType = DetermineAssetType(asset);
-                    if (actualAssetType == AssetType.image || actualAssetType == AssetType.video || actualAssetType == AssetType.logo)
+                    
+                    if (actualAssetType == AssetType.image || actualAssetType == AssetType.logo)
                     {
+                        // Cache images and logos normally
                         assetsToCache.Add((asset, actualAssetType));
+                        MyDebug.Verbose($"  - Will cache {actualAssetType}: {asset.id}");
+                    }
+                    else if (actualAssetType == AssetType.video)
+                    {
+                        // Create metadata entry for video (URL will be stored directly, no file download)
+                        assetsToCache.Add((asset, actualAssetType));
+                        MyDebug.Verbose($"  - Will create metadata entry for video: {asset.id} (streaming only)");
                     }
                 }
             }
 
+            MyDebug.Verbose($"Total assets to process for {adFormat}: {assetsToCache.Count}");
             return assetsToCache;
         }
 
@@ -263,8 +447,43 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
                 // Resolve URL (handle relative URLs)
                 var resolvedUrl = ResolveAssetUrl(asset.url);
-                Analytics.MyDebug.Verbose($"Caching asset {cacheKey} from URL: {resolvedUrl}");
+                Analytics.MyDebug.Verbose($"Processing asset {cacheKey} ({assetType}) from URL: {resolvedUrl}");
 
+                // For videos, create metadata entry without downloading
+                if (assetType == AssetType.video)
+                {
+                    Analytics.MyDebug.Verbose($"Creating metadata entry for video {cacheKey} (no download)");
+                    
+                    var cachedVideoAsset = new AssetCacheEntry
+                    {
+                        Id = asset.id,
+                        AssetType = assetType,
+                        AdFormat = adFormat,
+                        LocalPath = resolvedUrl, // Store URL directly for streaming
+                        OriginalUrl = resolvedUrl,
+                        ClickUrl = clickUrl,
+                        Width = asset.width,
+                        Height = asset.height,
+                        AltText = asset.alt_text,
+                        CachedAt = DateTime.UtcNow,
+                        // Store ad-level data for later use in placements
+                        AdId = ad?.id,
+                        MainHeaderText = ad?.main_header?.text_content,
+                        ActionButtonText = ad?.action_button?.text_content,
+                        DescriptionText = ad?.description?.text_content
+                    };
+
+                    lock (_lockObject)
+                    {
+                        _cachedAssets[cacheKey] = cachedVideoAsset;
+                        _currentlyDownloading.Remove(cacheKey);
+                    }
+                    
+                    Analytics.MyDebug.Verbose($"Video metadata entry created for {cacheKey}");
+                    return;
+                }
+
+                // For images and logos, download and cache normally
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(30);
 
@@ -388,7 +607,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             var assets = _cachedAssets.Values.Where(a => a.AdFormat == adFormat && a.AssetType == assetType).ToList();
             if (!assets.Any())
             {
-                MyDebug.LogWarning($"No {assetType} asset found for {adFormat}. Available assets for this format: {_cachedAssets.Values.Count(a => a.AdFormat == adFormat)}");
+                MyDebug.Verbose($"No {assetType} asset found for {adFormat}. Available assets for this format: {_cachedAssets.Values.Count(a => a.AdFormat == adFormat)}");
                 // List available assets for this format
                 var assetsForFormat = _cachedAssets.Values.Where(a => a.AdFormat == adFormat).ToList();
                 foreach (var entry in assetsForFormat)

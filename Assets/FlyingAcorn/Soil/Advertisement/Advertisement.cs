@@ -47,6 +47,10 @@ namespace FlyingAcorn.Soil.Advertisement
         public static RewardedAdPlacement RewardedAdPlacementPrefab;
         // Track active ad placement instances
         private static readonly Dictionary<AdFormat, GameObject> _activePlacements = new();
+        
+        // Rewarded ad cooldown tracking
+        private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
+        private static readonly float RewardedAdCooldownSeconds = 10f;
 
         public static async void InitializeAsync(List<AdFormat> adFormats)
         {
@@ -83,7 +87,6 @@ namespace FlyingAcorn.Soil.Advertisement
                 var campaignResponse = await SelectCampaignAsync();
                 if (campaignResponse == null || campaignResponse.campaign == null)
                 {
-                    MyDebug.Verbose("No campaign available. Clearing ad asset cache and notifying listeners.");
                     ClearAssetCache();
                     availableCampaign = null;
                     AdvertisementPlayerPrefs.CachedCampaign = null;
@@ -139,7 +142,6 @@ namespace FlyingAcorn.Soil.Advertisement
             // If the campaign has changed, unload all previous caches
             if (AdvertisementPlayerPrefs.CachedCampaign == null || AdvertisementPlayerPrefs.CachedCampaign.id != availableCampaign.id)
             {
-                MyDebug.Verbose("Campaign changed. Clearing previous ad asset cache.");
                 ClearAssetCache();
             }
             AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
@@ -158,7 +160,6 @@ namespace FlyingAcorn.Soil.Advertisement
             try
             {
                 await Task.WhenAll(cachingTasks);
-                MyDebug.Verbose($"Completed caching for all {_requestedFormats.Count} requested formats");
             }
             catch (Exception ex)
             {
@@ -178,8 +179,7 @@ namespace FlyingAcorn.Soil.Advertisement
             catch (Exception ex)
             {
                 MyDebug.LogError($"Failed to cache assets for {adFormat} format: {ex}");
-                // Still invoke the event even if caching failed, so the app can handle the error state
-                OnFormatAssetsReady(adFormat);
+                // Do NOT invoke the loaded event if caching failed - the format is not ready
             }
         }
 
@@ -188,8 +188,11 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            MyDebug.Verbose($"Assets ready for {adFormat} format");
-            Events.InvokeOnAdFormatAssetsLoaded(adFormat);
+            // Only invoke the loaded event if we actually have cached assets for this format
+            if (IsFormatReady(adFormat))
+            {
+                Events.InvokeOnAdFormatAssetsLoaded(adFormat);
+            }
         }
 
         private static async Task<CampaignSelectResponse> SelectCampaignAsync()
@@ -292,7 +295,6 @@ namespace FlyingAcorn.Soil.Advertisement
                     canvasScaler.screenMatchMode = referenceScaler.screenMatchMode;
                     canvasScaler.matchWidthOrHeight = referenceScaler.matchWidthOrHeight;
                     canvasScaler.referencePixelsPerUnit = referenceScaler.referencePixelsPerUnit;
-                    MyDebug.Verbose($"Copied canvas scaler settings from SoilAdManager reference: {referenceScaler.referenceResolution}");
                 }
                 else
                 {
@@ -312,7 +314,6 @@ namespace FlyingAcorn.Soil.Advertisement
             // Start with canvas disabled
             canvasObject.SetActive(false);
             
-            MyDebug.Verbose("Created persistent ad canvas with DontDestroyOnLoad (initially disabled)");
             return _persistentAdCanvas;
         }
 
@@ -342,8 +343,81 @@ namespace FlyingAcorn.Soil.Advertisement
                 _persistentAdCanvas.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// Checks if rewarded ads are currently in cooldown period
+        /// </summary>
+        /// <returns>True if in cooldown, false if available</returns>
+        public static bool IsRewardedAdInCooldown()
+        {
+            if (_lastRewardedAdShownTime == DateTime.MinValue)
+                return false;
+                
+            var timeSinceLastShown = (DateTime.Now - _lastRewardedAdShownTime).TotalSeconds;
+            return timeSinceLastShown < RewardedAdCooldownSeconds;
+        }
+        
+        /// <summary>
+        /// Gets the remaining cooldown time for rewarded ads in seconds
+        /// </summary>
+        /// <returns>Remaining cooldown time in seconds, 0 if no cooldown</returns>
+        public static float GetRewardedAdCooldownRemainingSeconds()
+        {
+            if (_lastRewardedAdShownTime == DateTime.MinValue)
+                return 0f;
+                
+            var timeSinceLastShown = (DateTime.Now - _lastRewardedAdShownTime).TotalSeconds;
+            var remainingTime = RewardedAdCooldownSeconds - timeSinceLastShown;
+            return remainingTime > 0 ? (float)remainingTime : 0f;
+        }
+        
+        /// <summary>
+        /// Resets the rewarded ad cooldown timer (useful for testing or administrative purposes)
+        /// </summary>
+        public static void ResetRewardedAdCooldown()
+        {
+            _lastRewardedAdShownTime = DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Helper method to invoke the appropriate error event based on ad format
+        /// </summary>
+        private static void InvokeAdErrorEvent(AdFormat adFormat, AdEventData errorData)
+        {
+            switch (adFormat)
+            {
+                case AdFormat.banner:
+                    Events.InvokeOnBannerAdError(errorData);
+                    break;
+                case AdFormat.interstitial:
+                    Events.InvokeOnInterstitialAdError(errorData);
+                    break;
+                case AdFormat.rewarded:
+                    Events.InvokeOnRewardedAdError(errorData);
+                    break;
+                default:
+                    MyDebug.LogError($"Unknown ad format for error event: {adFormat}");
+                    break;
+            }
+        }
+
         public static void ShowAd(AdFormat adFormat)
         {
+            // Check if assets are available for this ad format
+            if (!IsFormatReady(adFormat))
+            {
+                var errorData = new AdEventData(adFormat, AdError.AdNotReady);
+                InvokeAdErrorEvent(adFormat, errorData);
+                return;
+            }
+            
+            // Check rewarded ad cooldown
+            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
+            {
+                var errorData = new AdEventData(adFormat, AdError.AdNotReady);
+                InvokeAdErrorEvent(adFormat, errorData);
+                return;
+            }
+
             if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat] != null)
             {
                 var existingPlacement = _activePlacements[adFormat];
@@ -360,14 +434,15 @@ namespace FlyingAcorn.Soil.Advertisement
             };
             if (prefab == null)
             {
-                throw new SoilException($"No prefab assigned for {adFormat}", SoilExceptionErrorCode.NotFound);
+                var errorData = new AdEventData(adFormat, AdError.InternalError);
+                InvokeAdErrorEvent(adFormat, errorData);
+                return;
             }
             if (!_activePlacements.TryGetValue(adFormat, out GameObject instance) || instance == null)
                 instance = UnityEngine.Object.Instantiate(prefab);
             instance.SetActive(true);
 
             Canvas targetCanvas = GetOrCreatePersistentAdCanvas();
-            MyDebug.Verbose($"Parenting {adFormat} to persistent canvas");
 
             if (targetCanvas != null)
             {
@@ -382,7 +457,6 @@ namespace FlyingAcorn.Soil.Advertisement
                 }
             }
             _activePlacements[adFormat] = instance;
-            MyDebug.Verbose($"Added {adFormat} to active placements. Total count: {_activePlacements.Count}");
             
             // Update canvas visibility
             UpdatePersistentCanvasVisibility();
@@ -402,6 +476,9 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 _rewardedPlacement = rewarded;
                 _rewardedPlacement.Show();
+                
+                // Track when rewarded ad was shown for cooldown
+                _lastRewardedAdShownTime = DateTime.Now;
             }
         }
 
@@ -430,6 +507,9 @@ namespace FlyingAcorn.Soil.Advertisement
                     _rewardedPlacement = null;
                     UnityEngine.Object.Destroy(instance);
                     _activePlacements[adFormat] = null;
+                    
+                    // Start cooldown timer when rewarded ad is closed
+                    _lastRewardedAdShownTime = DateTime.Now;
                 }
                 
                 // Update canvas visibility after hiding ad
@@ -439,6 +519,14 @@ namespace FlyingAcorn.Soil.Advertisement
 
         public static void LoadAd(AdFormat adFormat)
         {
+            // Check rewarded ad cooldown only (don't block loading for other formats)
+            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
+            {
+                var errorData = new AdEventData(adFormat, AdError.AdNotReady);
+                InvokeAdErrorEvent(adFormat, errorData);
+                return;
+            }
+
             if (adFormat == AdFormat.banner)
             {
                 if (_bannerPlacement != null)
@@ -456,7 +544,9 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             else
             {
-                throw new SoilException($"Unsupported ad format: {adFormat}", SoilExceptionErrorCode.InvalidRequest);
+                var errorData = new AdEventData(adFormat, AdError.InvalidRequest);
+                InvokeAdErrorEvent(adFormat, errorData);
+                return;
             }
         }
 
@@ -530,6 +620,38 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
+        /// Loads a video clip URL from a cached asset for video player
+        /// </summary>
+        /// <param name="uuid">The UUID of the cached asset</param>
+        /// <returns>Video file URL or null if not found</returns>
+        public static string LoadVideoUrl(string uuid)
+        {
+            var asset = AssetCache.GetCachedAssetByUUID(uuid);
+            if (asset == null)
+                return null;
+            
+            if (asset.AssetType != AssetType.video)
+                return null;
+
+            // For videos, check if it's a local file or URL
+            if (asset.LocalPath.StartsWith("http://") || asset.LocalPath.StartsWith("https://"))
+            {
+                // Direct URL streaming - return as is
+                return asset.LocalPath;
+            }
+            else if (System.IO.File.Exists(asset.LocalPath))
+            {
+                // Local cached file - return with file:// protocol for cross-platform compatibility
+                var filePath = asset.LocalPath.Replace('\\', '/');
+                return "file://" + filePath;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Gets the file path for a cached asset
         /// </summary>
         /// <param name="uuid">The UUID of the cached asset</param>
@@ -554,9 +676,7 @@ namespace FlyingAcorn.Soil.Advertisement
                     if (validAssets.Count != persistedAssets.Count)
                     {
                         AdvertisementPlayerPrefs.CachedAssets = validAssets;
-                        MyDebug.Verbose($"Cleaned up {persistedAssets.Count - validAssets.Count} invalid cached assets");
                     }
-                    MyDebug.Verbose($"Initialized asset cache with {validAssets.Count} valid assets");
                 }
             }
             catch (Exception ex)
@@ -567,13 +687,22 @@ namespace FlyingAcorn.Soil.Advertisement
 
         /// <summary>
         /// Checks if assets for a specific ad format are cached and ready
+        /// For rewarded ads, also checks cooldown period
         /// </summary>
         /// <param name="adFormat">The ad format to check</param>
-        /// <returns>True if assets are cached for this format</returns>
+        /// <returns>True if assets are cached for this format and not in cooldown</returns>
         public static bool IsFormatReady(AdFormat adFormat)
         {
             var assets = AssetCache.GetCachedAssets(adFormat);
-            return assets != null && assets.Count > 0;
+            var hasAssets = assets != null && assets.Count > 0;
+            
+            // For rewarded ads, also check cooldown
+            if (adFormat == AdFormat.rewarded && hasAssets)
+            {
+                return !IsRewardedAdInCooldown();
+            }
+            
+            return hasAssets;
         }
 
         /// <summary>

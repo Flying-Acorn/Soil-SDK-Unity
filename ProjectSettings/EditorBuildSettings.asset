@@ -29,4 +29,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity
     guid: d589a334ebbc14f79be8db6db0aeb576
+  - enabled: 1
+    path: Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample.unity
+    guid: f3d5a098d4a154c05bccf115eb04bca5
   m_configObjects: {}
