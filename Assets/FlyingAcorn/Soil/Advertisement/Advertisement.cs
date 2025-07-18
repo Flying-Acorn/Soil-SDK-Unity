@@ -18,11 +18,68 @@ using FlyingAcorn.Soil.Advertisement.Data;
 using UnityEngine;
 using UnityEngine.UI;
 using FlyingAcorn.Analytics;
-
 namespace FlyingAcorn.Soil.Advertisement
 {
     public class Advertisement
     {
+        /// <summary>
+        /// Downloads a video from the given URL and caches it locally. Returns the local file path if successful, otherwise null.
+        /// </summary>
+        public static string DownloadAndCacheVideo(string id, string url)
+        {
+            try
+            {
+                // Determine cache directory
+                string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+                if (!System.IO.Directory.Exists(cacheDir))
+                    System.IO.Directory.CreateDirectory(cacheDir);
+
+                // Determine file path
+                string fileName = id + ".mp4";
+                string filePath = System.IO.Path.Combine(cacheDir, fileName);
+
+                // If already cached, return path
+                if (System.IO.File.Exists(filePath))
+            {
+                return filePath;
+            }
+
+            // Download video
+            using (var client = new System.Net.WebClient())
+            {
+                client.DownloadFile(url, filePath);
+            }
+
+            // Verify file exists and is >0 bytes
+            if (System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0)
+            {
+                return filePath;
+            }
+            else
+            {
+                // Clean up incomplete file
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+                return null;
+            }
+        }
+        catch (System.Exception ex)
+        {
+            UnityEngine.Debug.LogError($"[Advertisement] DownloadAndCacheVideo failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Checks if a video is already cached locally for the given id.
+    /// </summary>
+    public static bool IsVideoCached(string id)
+    {
+        string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+        string fileName = id + ".mp4";
+        string filePath = System.IO.Path.Combine(cacheDir, fileName);
+        return System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0;
+    }
         [UsedImplicitly]
         public static bool Ready => availableCampaign != null;
         private static readonly string AdvertisementBaseUrl = $"{Core.Data.Constants.ApiUrl}/advertisement/";
@@ -188,7 +245,12 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            // Only invoke the loaded event if we actually have cached assets for this format
+            // For rewarded ads, only invoke loaded if not in cooldown
+            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
+            {
+                MyDebug.Verbose($"[OnFormatAssetsReady] Rewarded ad is in cooldown, not firing loaded event.");
+                return;
+            }
             if (IsFormatReady(adFormat))
             {
                 Events.InvokeOnAdFormatAssetsLoaded(adFormat);
@@ -688,21 +750,53 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Checks if assets for a specific ad format are cached and ready
         /// For rewarded ads, also checks cooldown period
+        /// IMPORTANT: Every ad format must have at least one cached image before being considered ready,
+        /// even for video ads. This ensures a fallback image is available while video loads/renders.
         /// </summary>
         /// <param name="adFormat">The ad format to check</param>
         /// <returns>True if assets are cached for this format and not in cooldown</returns>
         public static bool IsFormatReady(AdFormat adFormat)
         {
             var assets = AssetCache.GetCachedAssets(adFormat);
-            var hasAssets = assets != null && assets.Count > 0;
-            
-            // For rewarded ads, also check cooldown
-            if (adFormat == AdFormat.rewarded && hasAssets)
+            // Step 1: Must have at least one cached image asset
+            var hasImageAsset = assets != null && assets.Any(asset => asset.AssetType == AssetType.image);
+            if (!hasImageAsset)
+            {
+                MyDebug.Verbose($"Format {adFormat} not ready: no cached image asset found (required for fallback)");
+                return false;
+            }
+
+            // Step 2: If the current campaign has a video asset for this format, it must be cached (partly or fully)
+            bool campaignHasVideo = false;
+            if (availableCampaign != null && availableCampaign.ad_groups != null)
+            {
+                foreach (var adGroup in availableCampaign.ad_groups)
+                {
+                    // Check all ads in image_ads and video_ads for this format
+                    var allAds = adGroup.allAds;
+                    if (allAds != null && allAds.Any(ad => ad.format == adFormat.ToString() && ad.main_video != null))
+                    {
+                        campaignHasVideo = true;
+                        break;
+                    }
+                }
+            }
+            if (campaignHasVideo)
+            {
+                var hasVideoAsset = assets.Any(asset => asset.AssetType == AssetType.video && asset.IsValid);
+                if (!hasVideoAsset)
+                {
+                    MyDebug.Verbose($"Format {adFormat} not ready: campaign has video asset but none cached");
+                    return false;
+                }
+            }
+
+            // Step 3: For rewarded ads, also check cooldown
+            if (adFormat == AdFormat.rewarded)
             {
                 return !IsRewardedAdInCooldown();
             }
-            
-            return hasAssets;
+            return true;
         }
 
         /// <summary>

@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
+using System.Linq;
 using RTLTMPro;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
@@ -26,11 +27,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
     {
         [Header("UI Components")]
         public Image backgroundImage;
-        [Tooltip("Used for static image ads only")]
-        public Image mainAssetImage;
-        [Tooltip("Used for video display only - shows video content from render texture")]
+        [Tooltip("Used for all ad display - images, fallbacks, and video content from render texture")]
         public RawImage rawAssetImage;
-        [Tooltip("Video player component for video ads only")]
+        [Tooltip("Video player component for video ads only - renders to rawAssetImage when video is prepared")]
         public VideoPlayer mainAssetVideoPlayer;
         [Tooltip("Optional: Pre-assigned render texture. If null, will be created dynamically with optimized size")]
         public RenderTexture videoRenderTexture;
@@ -41,6 +40,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         public RTLTextMeshPro actionButtonText;
         public Button closeButton;
         private Image _closeButtonImage;
+
+        // Track the video preparation coroutine so it can be stopped if ad is closed
+        private Coroutine _videoPrepareCoroutine;
 
         [Header("Video Configuration")]
         [Tooltip("Maximum resolution for dynamically created render textures (0 = use source resolution)")]
@@ -136,14 +138,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         }
 
         /// <summary>
-        /// Sets up the RawImage component for video display
+        /// Sets up the RawImage component for all ad display (images and video)
         /// </summary>
         private void SetupVideoRawImage()
         {
             if (rawAssetImage != null)
             {
-                // Ensure RawImage is initially disabled until video is ready
-                rawAssetImage.gameObject.SetActive(false);
+                // RawImage is always active and ready - it displays all content
+                rawAssetImage.gameObject.SetActive(true);
                 rawAssetImage.texture = null;
             }
         }
@@ -292,6 +294,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 CancelInvoke(nameof(UpdateCountdown));
             }
 
+            // Stop and clean up video preparation coroutine if running
+            if (_videoPrepareCoroutine != null)
+            {
+                StopCoroutine(_videoPrepareCoroutine);
+                _videoPrepareCoroutine = null;
+                MyDebug.Verbose("[AdDisplayComponent] Stopped video preparation coroutine on HideAd");
+            }
+
             // Stop video if playing
             if (_isVideoAd && mainAssetVideoPlayer != null && mainAssetVideoPlayer.isPlaying)
             {
@@ -328,20 +338,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 MyDebug.Verbose("[AdDisplayComponent] Dynamic render texture cleaned up");
             }
 
-            // Reset video-specific components to their original state
-            if (rawAssetImage != null && rawAssetImage.gameObject != null)
+            // Clear the texture from rawAssetImage when hiding the ad
+            if (rawAssetImage != null)
             {
                 rawAssetImage.texture = null;
-                rawAssetImage.gameObject.SetActive(false);
-                MyDebug.Verbose("[AdDisplayComponent] Video RawImage component reset to original state");
-            }
-
-            // Reset static image component if needed
-            if (mainAssetImage != null && mainAssetImage.gameObject != null)
-            {
-                mainAssetImage.sprite = null;
-                mainAssetImage.enabled = true;
-                MyDebug.Verbose("[AdDisplayComponent] Static Image component reset to original state");
+                MyDebug.Verbose("[AdDisplayComponent] RawImage texture cleared");
             }
         }
 
@@ -352,6 +353,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 _isCountingDown = false;
                 CancelInvoke(nameof(UpdateCountdown));
+            }
+
+            // Stop and clean up video preparation coroutine if running
+            if (_videoPrepareCoroutine != null)
+            {
+                StopCoroutine(_videoPrepareCoroutine);
+                _videoPrepareCoroutine = null;
+                MyDebug.Verbose("[AdDisplayComponent] Stopped video preparation coroutine on ClearCallbacks");
             }
 
             // Stop video if playing
@@ -494,11 +503,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Check network connectivity for video streaming
             bool isOnline = Application.internetReachability != NetworkReachability.NotReachable;
 
-            // Videos are no longer cached - check for video URL when online
+            // Videos: Check for video URL when online
             bool hasVideoUrl = false;
+            string videoUrl = null;
             if (isOnline && _currentAd?.main_video?.url != null)
             {
-                hasVideoUrl = !string.IsNullOrEmpty(_currentAd.main_video.url);
+                videoUrl = _currentAd.main_video.url;
+                hasVideoUrl = !string.IsNullOrEmpty(videoUrl);
             }
 
             // Always check for cached image (fallback when offline or no video)
@@ -507,20 +518,95 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             MyDebug.Verbose($"LoadMainAsset - Online: {isOnline}, HasVideoUrl: {hasVideoUrl}, HasCachedImage: {hasCachedImage}");
 
-            // Priority: Video streaming when online and available, otherwise cached image
+            if (hasCachedImage)
+            {
+                MyDebug.Verbose($"LoadMainAsset - Found cached image asset: ID={_currentMainAsset.Id}, LocalPath={_currentMainAsset.LocalPath}, IsValid={_currentMainAsset.IsValid}");
+            }
+            else
+            {
+                MyDebug.LogWarning($"LoadMainAsset - No cached image found for {adFormat} format");
+                // Let's also check what assets are available
+                var allAssets = Advertisement.GetCachedAssets(adFormat);
+                MyDebug.Verbose($"LoadMainAsset - Available {adFormat} assets: {allAssets?.Count ?? 0}");
+                if (allAssets != null)
+                {
+                    foreach (var asset in allAssets)
+                    {
+                        MyDebug.Verbose($"  Available asset: {asset.AssetType} - {asset.Id} - Valid: {asset.IsValid}");
+                    }
+                }
+            }
+
+            // Adaptive caching: If video is available and online, check its size
             if (hasVideoUrl && isOnline)
             {
-                MyDebug.Verbose($"Loading video from URL: {_currentAd.main_video.url}");
-                _isVideoAd = true;
-                // Create a temporary asset entry for video streaming
+                long videoSizeBytes = -1;
+                string contentType = null;
+                try
+                {
+                    var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(videoUrl);
+                    request.Method = "HEAD";
+                    using (var response = request.GetResponse())
+                    {
+                        videoSizeBytes = response.ContentLength;
+                        contentType = response.ContentType;
+                        MyDebug.Verbose($"[AdDisplayComponent] Video HEAD response: ContentLength={videoSizeBytes}, ContentType={contentType}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MyDebug.LogError($"[AdDisplayComponent] Video HEAD request failed: {ex.Message}");
+                }
+
+                // If video size is known and < 15MB, download and cache locally
+                const long maxCacheSizeBytes = 15 * 1024 * 1024; // 15MB
+                bool shouldCacheVideo = videoSizeBytes > 0 && videoSizeBytes <= maxCacheSizeBytes;
+
+                if (shouldCacheVideo)
+                {
+                    MyDebug.Verbose($"[AdDisplayComponent] Video size {videoSizeBytes} bytes < 15MB, will cache locally");
+                    // Download and cache video (synchronously for demo, async recommended)
+                    string localVideoPath = Advertisement.DownloadAndCacheVideo(_currentAd.main_video.id, videoUrl);
+                    if (!string.IsNullOrEmpty(localVideoPath))
+                    {
+                        _currentMainAsset = new AssetCacheEntry
+                        {
+                            Id = _currentAd.main_video.id,
+                            LocalPath = localVideoPath,
+                            OriginalUrl = videoUrl,
+                            AssetType = AssetType.video,
+                            AdFormat = adFormat
+                        };
+                        _isVideoAd = true;
+                        if (hasCachedImage)
+                        {
+                            var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+                            ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
+                        }
+                        LoadVideoAsset();
+                        return;
+                    }
+                    else
+                    {
+                        MyDebug.LogError($"[AdDisplayComponent] Failed to cache video locally, will stream instead");
+                    }
+                }
+                // Otherwise, stream from URL
+                MyDebug.Verbose($"[AdDisplayComponent] Streaming video from URL: {videoUrl}");
                 _currentMainAsset = new AssetCacheEntry
                 {
                     Id = _currentAd.main_video.id,
-                    LocalPath = _currentAd.main_video.url, // Use URL directly for streaming
-                    OriginalUrl = _currentAd.main_video.url,
+                    LocalPath = videoUrl, // Use URL directly for streaming
+                    OriginalUrl = videoUrl,
                     AssetType = AssetType.video,
                     AdFormat = adFormat
                 };
+                _isVideoAd = true;
+                if (hasCachedImage)
+                {
+                    var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+                    ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
+                }
                 LoadVideoAsset();
             }
             else if (hasCachedImage)
@@ -534,8 +620,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 MyDebug.LogWarning("No media assets available to display (offline and no cached image) - hiding entire ad");
                 _isVideoAd = false;
                 _currentMainAsset = null;
-
-                // Hide entire ad when no media is available offline
                 HideEntireAd();
             }
         }
@@ -559,8 +643,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 mainAssetVideoPlayer.gameObject.SetActive(false);
             if (rawAssetImage != null)
                 rawAssetImage.gameObject.SetActive(false);
-            if (mainAssetImage != null)
-                mainAssetImage.gameObject.SetActive(false);
 
             // Trigger close callback immediately to signal ad failure
             // This causes the placement to handle the error state properly
@@ -589,66 +671,48 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             try
             {
-                string videoUrl = null;
+                string videoPath = _currentMainAsset.LocalPath;
+                MyDebug.Verbose($"[AdDisplayComponent] Video asset debug: Id={_currentMainAsset.Id}, LocalPath={videoPath}");
 
-                // Check if this is a direct URL (streaming) or cached file
-                if (_currentMainAsset.LocalPath.StartsWith("http://") || _currentMainAsset.LocalPath.StartsWith("https://"))
+                // If videoPath is a local file, use VideoSource.Url with file:// prefix
+                if (!string.IsNullOrEmpty(videoPath))
                 {
-                    // Direct URL streaming - no caching
-                    videoUrl = _currentMainAsset.LocalPath;
-                    MyDebug.Verbose($"[AdDisplayComponent] Streaming video from URL: {videoUrl}");
-                }
-                else
-                {
-                    // Cached file - use the traditional method
-                    videoUrl = Advertisement.LoadVideoUrl(_currentMainAsset.Id);
-                    MyDebug.Verbose($"[AdDisplayComponent] Loading cached video: {videoUrl}");
-                }
+                    if (System.IO.File.Exists(videoPath))
+                    {
+                        // Local file: use file:// prefix
+                        mainAssetVideoPlayer.source = VideoSource.Url;
+                        mainAssetVideoPlayer.url = "file://" + videoPath;
+                        MyDebug.Verbose($"[AdDisplayComponent] Playing cached video from local file: {mainAssetVideoPlayer.url}");
+                    }
+                    else
+                    {
+                        // Remote URL
+                        mainAssetVideoPlayer.source = VideoSource.Url;
+                        mainAssetVideoPlayer.url = videoPath;
+                        MyDebug.Verbose($"[AdDisplayComponent] Streaming video from URL: {mainAssetVideoPlayer.url}");
+                    }
 
-                if (!string.IsNullOrEmpty(videoUrl))
-                {
-                    // Prepare video for loading
                     _videoLoaded = false;
                     _videoStarted = false;
-
-                    // Set video source
-                    mainAssetVideoPlayer.source = VideoSource.Url;
-                    mainAssetVideoPlayer.url = videoUrl;
-
-                    // Enable video player and ensure component is enabled
                     mainAssetVideoPlayer.gameObject.SetActive(true);
                     mainAssetVideoPlayer.enabled = true;
-
-                    // Hide static image since we're showing video
-                    if (mainAssetImage != null)
+                    if (_videoPrepareCoroutine != null)
                     {
-                        mainAssetImage.gameObject.SetActive(false);
+                        StopCoroutine(_videoPrepareCoroutine);
+                        _videoPrepareCoroutine = null;
                     }
-
-                    // Setup RawImage for video display (will be properly configured when video is prepared)
-                    if (rawAssetImage != null && mainAssetVideoPlayer.renderMode == VideoRenderMode.RenderTexture)
-                    {
-                        rawAssetImage.gameObject.SetActive(false); // Keep inactive to prevent white first frame
-                        rawAssetImage.texture = null; // Will be set when video is prepared
-                    }
-
-                    MyDebug.Verbose($"[AdDisplayComponent] VideoPlayer state - GameObject active: {mainAssetVideoPlayer.gameObject.activeInHierarchy}, Component enabled: {mainAssetVideoPlayer.enabled}");
-
-                    // Wait a frame to ensure the VideoPlayer is properly initialized before preparing
-                    StartCoroutine(PrepareVideoDelayed());
-
-                    MyDebug.Verbose($"[AdDisplayComponent] Loading video asset: {videoUrl}");
+                    _videoPrepareCoroutine = StartCoroutine(PrepareVideoDelayed());
                 }
                 else
                 {
-                    MyDebug.LogError($"[AdDisplayComponent] Failed to get video URL for asset: {_currentMainAsset.Id}");
-                    LoadImageAsset(); // Fallback to image
+                    MyDebug.LogError($"[AdDisplayComponent] Failed to get video path for asset: {_currentMainAsset.Id}");
+                    LoadImageAsset();
                 }
             }
             catch (System.Exception ex)
             {
                 MyDebug.LogError($"[AdDisplayComponent] Failed to load video asset: {ex.Message}");
-                LoadImageAsset(); // Fallback to image
+                LoadImageAsset();
             }
         }
 
@@ -661,9 +725,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             yield return new WaitForEndOfFrame();
 
             // Double-check that the VideoPlayer is still valid and enabled
-            if (mainAssetVideoPlayer != null &&
-                mainAssetVideoPlayer.gameObject.activeInHierarchy &&
-                mainAssetVideoPlayer.enabled)
+            if (mainAssetVideoPlayer != null && mainAssetVideoPlayer.enabled)
             {
                 try
                 {
@@ -684,52 +746,113 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 _isVideoAd = false;
                 LoadImageAsset();
             }
+
+            // When finished, clear the coroutine reference
+            _videoPrepareCoroutine = null;
+        }
+
+        private void ShowFallbackImageDuringVideoLoad(AssetCacheEntry imageAsset)
+        {
+            if (imageAsset != null && rawAssetImage != null)
+            {
+                MyDebug.Verbose($"[AdDisplayComponent] Attempting to show fallback image asset: {imageAsset.Id} (conversation logic)");
+                var texture = Advertisement.LoadTexture(imageAsset.Id);
+                if (texture != null)
+                {
+                    rawAssetImage.texture = texture;
+                    rawAssetImage.gameObject.SetActive(true);
+                    StretchRawImageAndSetNative();
+
+                    MyDebug.Verbose($"[AdDisplayComponent] Showing fallback image {imageAsset.Id} while video prepares (conversation logic)");
+                }
+                else
+                {
+                    MyDebug.LogWarning($"[AdDisplayComponent] Failed to load fallback image texture: {imageAsset.Id} (conversation logic)");
+                }
+            }
         }
 
         private void LoadImageAsset()
         {
-            if (_currentMainAsset != null && mainAssetImage != null)
+            MyDebug.Verbose($"[AdDisplayComponent] LoadImageAsset called - _currentMainAsset: {_currentMainAsset?.Id}, rawAssetImage: {rawAssetImage != null}");
+
+            if (_currentMainAsset != null && rawAssetImage != null)
             {
+                MyDebug.Verbose($"[AdDisplayComponent] Attempting to load texture for asset: {_currentMainAsset.Id}, LocalPath: {_currentMainAsset.LocalPath}, IsValid: {_currentMainAsset.IsValid}");
+
+                // Debug: Try to download the image file header before loading texture
+                if (!string.IsNullOrEmpty(_currentMainAsset.LocalPath) && (_currentMainAsset.LocalPath.StartsWith("http://") || _currentMainAsset.LocalPath.StartsWith("https://")))
+                {
+                    System.Net.HttpWebRequest request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(_currentMainAsset.LocalPath);
+                    request.Method = "HEAD";
+                    try
+                    {
+                        using (var response = request.GetResponse())
+                        {
+                            MyDebug.Verbose($"[AdDisplayComponent] Image HEAD response: ContentLength={response.ContentLength}, ContentType={response.ContentType}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MyDebug.LogError($"[AdDisplayComponent] Image HEAD request failed: {ex.Message}");
+                    }
+                }
+
                 var texture = Advertisement.LoadTexture(_currentMainAsset.Id);
                 if (texture != null)
                 {
-                    var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
-                    mainAssetImage.sprite = sprite;
-                    mainAssetImage.gameObject.SetActive(true);
+                    MyDebug.Verbose($"[AdDisplayComponent] Loaded texture for asset: {_currentMainAsset.Id}, TextureSize: {texture.width}x{texture.height}");
+                    rawAssetImage.texture = texture;
+                    rawAssetImage.gameObject.SetActive(true);
+                    StretchRawImageAndSetNative();
 
-                    // Ensure video components are completely disabled for image ads
+                    // Ensure video player is disabled for image ads
                     if (mainAssetVideoPlayer != null)
                     {
                         mainAssetVideoPlayer.gameObject.SetActive(false);
                         mainAssetVideoPlayer.enabled = false;
                     }
 
-                    if (rawAssetImage != null)
-                    {
-                        rawAssetImage.gameObject.SetActive(false);
-                    }
+                    MyDebug.Verbose($"[AdDisplayComponent] Image asset loaded and displayed successfully: {_currentMainAsset.Id}");
                 }
                 else
                 {
-                    MyDebug.LogError($"Failed to load texture for main asset: {_currentMainAsset.Id}");
-                    mainAssetImage?.gameObject.SetActive(false);
+                    MyDebug.LogError($"[AdDisplayComponent] Failed to load texture for main asset: {_currentMainAsset.Id} - Advertisement.LoadTexture returned null");
+
+                    // Don't give up immediately - try to continue showing the ad without image
+                    rawAssetImage.texture = null;
+
+                    // Keep rawAssetImage active but with no texture - this prevents complete ad failure
+                    rawAssetImage.gameObject.SetActive(true);
 
                     // Disable video components
                     if (mainAssetVideoPlayer != null)
+                    {
                         mainAssetVideoPlayer.gameObject.SetActive(false);
-                    if (rawAssetImage != null)
-                        rawAssetImage.gameObject.SetActive(false);
+                        mainAssetVideoPlayer.enabled = false;
+                    }
+
+                    MyDebug.LogWarning($"[AdDisplayComponent] Continuing to show ad without main image asset");
                 }
             }
             else
             {
-                mainAssetImage?.gameObject.SetActive(false);
+                MyDebug.LogError($"[AdDisplayComponent] LoadImageAsset failed - _currentMainAsset is null: {_currentMainAsset == null}, rawAssetImage is null: {rawAssetImage == null}");
+
+                if (rawAssetImage != null)
+                {
+                    rawAssetImage.texture = null;
+                    rawAssetImage.gameObject.SetActive(true); // Keep active even without texture to prevent ad failure
+                }
 
                 // Disable video components
                 if (mainAssetVideoPlayer != null)
+                {
                     mainAssetVideoPlayer.gameObject.SetActive(false);
-                if (rawAssetImage != null)
-                    rawAssetImage.gameObject.SetActive(false);
+                    mainAssetVideoPlayer.enabled = false;
+                }
+
+                MyDebug.LogWarning($"[AdDisplayComponent] Showing ad without main image asset due to missing data");
             }
         }
 
@@ -820,7 +943,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 {
                     AdFormat.banner => 0f, // Immediate
                     AdFormat.interstitial => Mathf.Max(5f, videoDuration * 0.8f), // 80% of video or minimum 5 seconds
-                    AdFormat.rewarded => Mathf.Max(10f, videoDuration), // Full video or minimum 10 seconds
+                    AdFormat.rewarded => Mathf.Max(20f, videoDuration), // Full video or minimum 10 seconds
                     _ => 0f
                 };
             }
@@ -831,7 +954,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 {
                     AdFormat.banner => 0f, // Immediate
                     AdFormat.interstitial => 5f, // 5 seconds
-                    AdFormat.rewarded => 10f, // 10 seconds
+                    AdFormat.rewarded => 20f, // 10 seconds
                     _ => 0f
                 };
             }
@@ -883,7 +1006,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         private void EnableCloseButton()
         {
             if (adFormat == AdFormat.rewarded)
+            {
                 _onRewardedCallback?.Invoke();
+                _onRewardedCallback = null;
+            }
 
             if (closeButton != null)
             {
@@ -896,16 +1022,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     _closeButtonText.text = "X";
                 }
             }
-        }
-
-        /// <summary>
-        /// Text type enumeration for RTL configuration
-        /// </summary>
-        private enum TextType
-        {
-            Button,
-            Header,
-            Description
         }
 
         /// <summary>
@@ -1042,10 +1158,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 return;
             }
 
-            // Set up the rawAssetImage texture but DON'T activate it yet to prevent white first frame
+            // Set up the rawAssetImage to be ready for video display, but keep showing fallback image until video starts
             if (rawAssetImage != null)
             {
-                rawAssetImage.texture = activeRenderTexture;
                 rawAssetImage.SetNativeSize();
                 var rectTransform = rawAssetImage.GetComponent<RectTransform>();
                 rectTransform.anchorMin = Vector2.zero;
@@ -1053,20 +1168,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 rectTransform.offsetMin = Vector2.zero;
                 rectTransform.offsetMax = Vector2.zero;
 
-                rawAssetImage.gameObject.SetActive(false);
-
-                MyDebug.Verbose($"[AdDisplayComponent] Configured separated RawImage component for video display with {(activeRenderTexture == _dynamicRenderTexture ? "dynamic" : "pre-assigned")} render texture ({activeRenderTexture.width}x{activeRenderTexture.height}), will activate when video starts");
+                MyDebug.Verbose($"[AdDisplayComponent] Configured RawImage for video display with {(activeRenderTexture == _dynamicRenderTexture ? "dynamic" : "pre-assigned")} render texture ({activeRenderTexture.width}x{activeRenderTexture.height}), will switch to video when it starts");
             }
             else
             {
                 MyDebug.LogError("[AdDisplayComponent] No rawAssetImage component assigned for video display");
                 return;
-            }
-
-            // Ensure static image component is hidden since video is displayed on rawAssetImage
-            if (mainAssetImage != null)
-            {
-                mainAssetImage.gameObject.SetActive(false);
             }
 
             // Print component state for debugging
@@ -1092,6 +1199,18 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
             }
         }
+        private void StretchRawImageAndSetNative()
+        {
+            rawAssetImage.SetNativeSize();
+            var rectTransform = rawAssetImage.GetComponent<RectTransform>();
+            var parentRectTransform = rectTransform.parent as RectTransform;
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            rectTransform.anchoredPosition = Vector2.zero;
+            if (adFormat == AdFormat.banner)
+                rectTransform.sizeDelta = new Vector2(parentRectTransform.rect.width, parentRectTransform.rect.height);
+        }
 
         /// <summary>
         /// Debug method to print component states
@@ -1111,9 +1230,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     MyDebug.Verbose($"  RawAssetImage Texture: {rawAssetImage.texture}");
                 }
 
-                if (mainAssetImage != null)
+                if (rawAssetImage != null)
                 {
-                    MyDebug.Verbose($"  MainAssetImage GameObject Active: {mainAssetImage.gameObject.activeInHierarchy}");
+                    MyDebug.Verbose($"  rawAssetImage GameObject Active: {rawAssetImage.gameObject.activeInHierarchy}");
                 }
             }
         }
@@ -1125,35 +1244,35 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             _videoStarted = true;
             MyDebug.Verbose($"[AdDisplayComponent] Video started for {adFormat} ad");
 
-            // Now that the video has started and first frame is rendered, activate the rawAssetImage to prevent white frame
-            if (rawAssetImage != null && rawAssetImage.texture != null)
+            // Now that video is playing, ensure rawAssetImage displays the video render texture
+            if (rawAssetImage != null && mainAssetVideoPlayer != null && mainAssetVideoPlayer.targetTexture != null)
             {
+                rawAssetImage.texture = mainAssetVideoPlayer.targetTexture;
                 rawAssetImage.gameObject.SetActive(true);
-                MyDebug.Verbose($"[AdDisplayComponent] Activated rawAssetImage now that video has started - no more white first frame");
-            }
+                MyDebug.Verbose($"[AdDisplayComponent] rawAssetImage now displaying video content from render texture");
 
-            // Get the active render texture (either dynamic or pre-assigned)
-            var activeRenderTexture = _dynamicRenderTexture ?? mainAssetVideoPlayer.targetTexture;
-
-            // Verify the RawImage on VideoPlayer is properly displaying the video
-            if (activeRenderTexture != null && mainAssetVideoPlayer != null)
-            {
-                var rawImage = rawAssetImage.GetComponent<RawImage>();
-
-                if (rawImage != null && rawImage.enabled)
+                // Check if the first frame is blank/white (common on failed/partial loads)
+                Texture2D frameCheck = new Texture2D(mainAssetVideoPlayer.targetTexture.width, mainAssetVideoPlayer.targetTexture.height, TextureFormat.RGB24, false);
+                RenderTexture.active = mainAssetVideoPlayer.targetTexture;
+                frameCheck.ReadPixels(new Rect(0, 0, frameCheck.width, frameCheck.height), 0, 0);
+                frameCheck.Apply();
+                RenderTexture.active = null;
+                Color32[] pixels = frameCheck.GetPixels32();
+                int whiteCount = pixels.Where(p => p.r > 240 && p.g > 240 && p.b > 240).Count();
+                float whiteRatio = (float)whiteCount / pixels.Length;
+                MyDebug.Verbose($"[AdDisplayComponent] Video frame check: {whiteCount} white pixels, ratio={whiteRatio:F2}"); // Conversation log
+                if (whiteRatio > 0.95f)
                 {
-                    // RawImage on VideoPlayer is handling the display directly
-                    MyDebug.Verbose($"[AdDisplayComponent] RawImage on VideoPlayer is displaying video directly from {(activeRenderTexture == _dynamicRenderTexture ? "dynamic" : "pre-assigned")} render texture");
-                }
-                else
-                {
-                    MyDebug.Verbose("[AdDisplayComponent] No valid RawImage component found on VideoPlayer for video display");
+                    MyDebug.LogWarning("[AdDisplayComponent] Video frame appears blank/white, falling back to image ad (conversation logic)");
+                    _isVideoAd = false;
+                    var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+                    MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after blank video: {fallbackImageAsset?.Id}"); // Conversation log
+                    ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
+                    return;
                 }
             }
-            else
-            {
-                MyDebug.LogWarning($"[AdDisplayComponent] No render texture available for video display. activeRenderTexture: {activeRenderTexture}, mainAssetVideoPlayer: {mainAssetVideoPlayer}");
-            }
+
+            // ...existing code...
         }
 
 
@@ -1161,22 +1280,30 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         /// <summary>
         private void OnVideoFinished(VideoPlayer vp)
         {
-            MyDebug.Verbose($"[AdDisplayComponent] Video finished for {adFormat} ad");
+            MyDebug.Verbose($"[AdDisplayComponent] Video finished for {adFormat} ad (conversation logic)");
+
+            // Show image fallback after video finishes once (conversation logic)
+            var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+            MyDebug.Verbose($"[AdDisplayComponent] Showing fallback image after video finished: {fallbackImageAsset?.Id}"); // Conversation log
+            ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
 
             // For rewarded ads, enable close button when video finishes
             if (adFormat == AdFormat.rewarded)
             {
+                MyDebug.Verbose("[AdDisplayComponent] Enabling close button after rewarded video finished (conversation logic)");
                 EnableCloseButton();
             }
         }
 
         private void OnVideoError(VideoPlayer vp, string message)
         {
-            MyDebug.LogError($"[AdDisplayComponent] Video error for {adFormat} ad: {message}");
+            MyDebug.LogError($"[AdDisplayComponent] Video error for {adFormat} ad: {message} (conversation logic)");
 
-            // Fallback to image display if video fails
+            // Fallback to image display if video fails or if video is interrupted (network error, blank frame, etc)
             _isVideoAd = false;
-            LoadImageAsset();
+            var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+            MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after video error: {fallbackImageAsset?.Id}"); // Conversation log
+            ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
         }
 
         private void StartVideoPlayback()

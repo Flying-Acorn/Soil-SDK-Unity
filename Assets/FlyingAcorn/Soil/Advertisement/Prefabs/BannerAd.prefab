@@ -400,7 +400,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6355843255494322107}
   - component: {fileID: 2563189277407824874}
-  - component: {fileID: 4060632834285521987}
+  - component: {fileID: 3438277140722894339}
   m_Layer: 0
   m_Name: MainImage
   m_TagString: Untagged
@@ -435,7 +435,7 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2811648494937690520}
   m_CullTransparentMesh: 1
---- !u!114 &4060632834285521987
+--- !u!114 &3438277140722894339
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -444,7 +444,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2811648494937690520}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
@@ -455,16 +455,13 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 1
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
+  m_Texture: {fileID: 0}
+  m_UVRect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1
+    height: 1
 --- !u!1 &4862523936287625439
 GameObject:
   m_ObjectHideFlags: 0
@@ -653,13 +650,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   backgroundImage: {fileID: 2274772932478690900}
-  mainAssetImage: {fileID: 4060632834285521987}
+  rawAssetImage: {fileID: 3438277140722894339}
+  mainAssetVideoPlayer: {fileID: 0}
+  videoRenderTexture: {fileID: 0}
   logoImage: {fileID: 3744973624167778321}
   actionButton: {fileID: 8202862552165052827}
   adTitleText: {fileID: 5612409326478082465}
   adDescriptionText: {fileID: 4203410226783331826}
   actionButtonText: {fileID: 4512017256316937255}
   closeButton: {fileID: 0}
+  maxRenderTextureSize: 1024
+  renderTextureFormat: 4
   adFormat: 0
   showCloseButton: 0
   customAdFont: {fileID: 11400000, guid: 3fbde2e562e333d488bc46986fc6f4f1, type: 2}

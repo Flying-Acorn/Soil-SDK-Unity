@@ -81,9 +81,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Use event-driven readiness status as primary check
             var eventReady = _isFormatReady;
             
-            // Fallback to cache check (assets only, not considering cooldown)
+            // Fallback to cache check - must have at least one cached image asset
             var assets = Advertisement.GetCachedAssets(AdFormat.rewarded);
-            var cacheReady = assets != null && assets.Count > 0;
+            var cacheReady = assets != null && assets.Any(asset => asset.AssetType == AssetType.image);
             
             // Check if assets are ready
             var assetsReady = eventReady || cacheReady;

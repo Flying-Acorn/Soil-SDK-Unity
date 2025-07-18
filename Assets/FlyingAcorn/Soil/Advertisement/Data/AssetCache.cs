@@ -91,14 +91,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 // Get all ad groups that have at least one ad of this format
                 var eligibleAdGroups = campaign.ad_groups
-                    .Where(g => g.ads != null && g.ads.Any(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat))
+                    .Where(g => g.allAds != null && g.allAds.Any(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat))
                     .ToList();
                 if (!eligibleAdGroups.Any())
                     continue;
                 // Pick a random ad group
                 var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
                 // Get all ads in this group with the requested format
-                var eligibleAds = adGroup.ads
+                var eligibleAds = adGroup.allAds
                     .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
                     .ToList();
                 if (!eligibleAds.Any())
@@ -120,7 +120,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Caches assets for a specific ad format and invokes callback when complete (random ad group/ad)
+        /// Caches assets for a specific ad format from multiple ads within the same ad group to ensure comprehensive asset coverage.
+        /// This approach ensures that video ads have image fallbacks by caching from both video and image ads in the same group.
         /// </summary>
         public static async Task CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
@@ -154,7 +155,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             // Pick a random ad group
             var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
             
-            // Get all ads in this group with the requested format, prioritizing video ads for video-capable formats
+            // Get all ads in this group with the requested format
             var eligibleAds = GetEligibleAdsForFormat(adGroup, adFormat);
             
             if (!eligibleAds.Any())
@@ -164,20 +165,70 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return;
             }
             
-            // Pick a random ad
-            var ad = eligibleAds[random.Next(eligibleAds.Count)];
-            
             var cachingTasks = new List<Task>();
             
-            // Cache one asset of each type for this ad format
-            var assetsToCache = GetAssetsToCache(ad, adFormat);
+            // NEW APPROACH: Cache assets from multiple ads in the same ad group to ensure we have both video and image fallbacks
+            // This ensures that even if one ad only has video, another ad in the same group provides the image fallback
             
-            foreach (var (asset, assetType) in assetsToCache)
+            // Separate ads by their primary asset type
+            var videoAds = eligibleAds.Where(ad => ad.main_video?.url != null).ToList();
+            var imageAds = eligibleAds.Where(ad => ad.main_image?.url != null).ToList();
+            
+            MyDebug.Verbose($"Ad group breakdown - Video ads: {videoAds.Count}, Image ads: {imageAds.Count}");
+            
+            // Cache from video ad (if available) to get video + any accompanying assets
+            if (videoAds.Any())
             {
-                if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
+                var videoAd = videoAds[random.Next(videoAds.Count)];
+                MyDebug.Verbose($"Caching assets from video ad: {videoAd.id}");
+                var videoAssetsToCache = GetAssetsToCache(videoAd, adFormat);
+                
+                foreach (var (asset, assetType) in videoAssetsToCache)
                 {
-                    var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                    cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
+                    if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
+                    {
+                        var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
+                        cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, videoAd));
+                    }
+                }
+            }
+            
+            // Cache from image ad (if available and different from video ad) to ensure image fallback
+            if (imageAds.Any())
+            {
+                var imageAd = imageAds[random.Next(imageAds.Count)];
+                
+                // Only cache if it's different from the video ad (avoid duplicates) or if no video ad was processed
+                if (!videoAds.Any() || !videoAds.Any(va => va.id == imageAd.id))
+                {
+                    MyDebug.Verbose($"Caching assets from image ad: {imageAd.id}");
+                    var imageAssetsToCache = GetAssetsToCache(imageAd, adFormat);
+                    
+                    // Track which asset types we're already caching from video ad
+                    var existingAssetTypes = new HashSet<AssetType>();
+                    if (videoAds.Any())
+                    {
+                        var videoAssetsToCache = GetAssetsToCache(videoAds.First(), adFormat);
+                        existingAssetTypes = videoAssetsToCache.Select(x => x.assetType).ToHashSet();
+                    }
+                    
+                    foreach (var (asset, assetType) in imageAssetsToCache)
+                    {
+                        if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
+                        {
+                            // Only cache if we don't already have this asset type from video ad
+                            if (!existingAssetTypes.Contains(assetType))
+                            {
+                                var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
+                                cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, imageAd));
+                                MyDebug.Verbose($"Adding {assetType} asset from image ad to ensure fallback coverage");
+                            }
+                            else
+                            {
+                                MyDebug.Verbose($"Skipping {assetType} asset - already covered by video ad");
+                            }
+                        }
+                    }
                 }
             }
             
@@ -207,7 +258,6 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             MyDebug.Verbose($"Checking ad group for {adFormat} format:");
             MyDebug.Verbose($"  - image_ads count: {adGroup.image_ads?.Count ?? 0}");
             MyDebug.Verbose($"  - video_ads count: {adGroup.video_ads?.Count ?? 0}");
-            MyDebug.Verbose($"  - legacy ads count: {adGroup.ads?.Count ?? 0}");
             
             // Debug all format values we find
             if (adGroup.image_ads != null)
@@ -222,13 +272,6 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 foreach (var ad in adGroup.video_ads)
                 {
                     MyDebug.Verbose($"  - video_ad id: {ad.id}, format: '{ad.format ?? "NULL"}'");
-                }
-            }
-            if (adGroup.ads != null)
-            {
-                foreach (var ad in adGroup.ads)
-                {
-                    MyDebug.Verbose($"  - legacy_ad id: {ad.id}, format: '{ad.format ?? "NULL"}'");
                 }
             }
             
@@ -257,14 +300,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return formatMatches;
             }) == true;
             
-            var hasInLegacyAds = adGroup.ads?.Any(a => {
-                var formatMatches = Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat;
-                MyDebug.Verbose($"  - legacy_ad {a.id} format: '{a.format ?? "NULL"}' -> {f} (matches: {formatMatches})");
-                return formatMatches;
-            }) == true;
-            
-            var result = hasInImageAds || hasInVideoAds || hasInLegacyAds;
-            MyDebug.Verbose($"HasAdsForFormat({adFormat}): {result} (image: {hasInImageAds}, video: {hasInVideoAds}, legacy: {hasInLegacyAds})");
+            var result = hasInImageAds || hasInVideoAds;
+            MyDebug.Verbose($"HasAdsForFormat({adFormat}): {result} (image: {hasInImageAds}, video: {hasInVideoAds}");
             
             return result;
         }
@@ -325,16 +362,6 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     MyDebug.Verbose($"Found {imageAds.Count} matching image ads for {adFormat}");
                     eligibleAds.AddRange(imageAds);
                 }
-            }
-            
-            // Fallback to legacy ads structure for backward compatibility
-            if (!eligibleAds.Any() && adGroup.ads != null)
-            {
-                var legacyAds = adGroup.ads
-                    .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
-                    .ToList();
-                MyDebug.Verbose($"Found {legacyAds.Count} matching legacy ads for {adFormat}");
-                eligibleAds.AddRange(legacyAds);
             }
             
             MyDebug.Verbose($"Total eligible ads for {adFormat}: {eligibleAds.Count} (including both videos and images)");

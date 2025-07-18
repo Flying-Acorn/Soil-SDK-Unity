@@ -11,10 +11,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models
         public List<Ad> image_ads;
         public List<Ad> video_ads;
         
-        /// <summary>
-        /// Gets all ads (both image and video) for backward compatibility
-        /// </summary>
-        public List<Ad> ads
+        public List<Ad> allAds
         {
             get
             {
