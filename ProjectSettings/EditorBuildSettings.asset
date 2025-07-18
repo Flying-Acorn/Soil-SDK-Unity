@@ -7,7 +7,7 @@ EditorBuildSettings:
   m_Scenes:
   - enabled: 1
     path: Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity
-    guid: 68c3b7e9762be47f9b600ee99006d76e
+    guid: a01c33352eb2e4f14b3ed2a0c6ed4621
   - enabled: 1
     path: Assets/FlyingAcorn/Soil/Core/Demo/SoilExample.unity
     guid: cd8af88fb2e53462badce8a6cd5bbe61
