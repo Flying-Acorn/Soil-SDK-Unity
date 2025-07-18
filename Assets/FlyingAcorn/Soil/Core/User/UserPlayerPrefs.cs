@@ -6,14 +6,18 @@ namespace FlyingAcorn.Soil.Core.User
 {
     public static class UserPlayerPrefs
     {
-        internal static UserInfo UserInfoInstance => _userInfoInstance ?? UserInfo;
-
+        internal static UserInfo UserInfoInstance => UserInfo;
         private static UserInfo _userInfoInstance;
 
         private static readonly string TokenDataKey = $"{GetKeysPrefix()}token_data";
         private static readonly string UserInfoKey = $"{GetKeysPrefix()}player_info";
         private static readonly string AppIDKey = $"{GetKeysPrefix()}app_id";
         private static readonly string SDKTokenKey = $"{GetKeysPrefix()}sdk_token";
+
+        internal static void ResetSetInMemoryCache()
+        {
+            _userInfoInstance = null;
+        }
 
         internal static UserInfo UserInfo
         {

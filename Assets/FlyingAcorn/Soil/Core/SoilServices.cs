@@ -7,41 +7,53 @@ using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using UnityEngine;
-using Constants = FlyingAcorn.Soil.Core.Data.Constants;
-using Object = UnityEngine.Object;
 
 namespace FlyingAcorn.Soil.Core
 {
-    public static class SoilServices
+    public class SoilServices : MonoBehaviour
     {
-        private static DeepLinkHandler _deepLinkComponent;
+        private static SoilServices _instance;
         private static bool _readyBroadcasted;
         private static Task _initTask;
-        private static GameObject _soilCoreGameObject;
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
-        [UsedImplicitly] public static bool Ready => _initTask is { IsCompletedSuccessfully: true };
-
-        static SoilServices()
+        [UsedImplicitly] public static bool Ready => _instance != null && _instance._instanceReady && (_initTask?.IsCompletedSuccessfully ?? false);
+        private bool _instanceReady;
+        private void StartInstance()
         {
-            UserApiHandler.OnUserFilled += userChanged =>
-            {
-                if (!userChanged) return;
-                _readyBroadcasted = false;
-                _ = Initialize();
-            };
+            UserPlayerPrefs.ResetSetInMemoryCache();
+            _instance.transform.SetParent(null);
+            _initTask = null;
+            _readyBroadcasted = false;
+            DontDestroyOnLoad(gameObject);
+            SetupDeeplink();
+            UserApiHandler.OnUserFilled += OnUserChanged;
+            _instanceReady = true;
         }
 
-        public static async Task Initialize()
+        private static void OnUserChanged(bool userChanged)
         {
-            _soilCoreGameObject = GameObject.Find("SoilCore");
-            if (!_soilCoreGameObject)
-            {
-                _soilCoreGameObject = new GameObject("SoilCore");
-                Object.DontDestroyOnLoad(_soilCoreGameObject);
-            }
-            SetupDeeplink();
+            if (!userChanged) return;
+            _readyBroadcasted = false;
+            _ = Initialize();
+        }
 
+        private void OnDestroy()
+        {
+            _instance = null;
+            OnServicesReady = null;
+            UserApiHandler.OnUserFilled -= OnUserChanged;
+        }
+
+        internal static async Task Initialize()
+        {
+            if (!_instance)
+            {
+                _instance = FindObjectOfType<SoilServices>();
+                if (!_instance)
+                    _instance = new GameObject(nameof(SoilServices)).AddComponent<SoilServices>();
+                _instance.StartInstance();
+            }
             if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
                 _initTask = null;
 
@@ -64,11 +76,10 @@ namespace FlyingAcorn.Soil.Core
                     return;
             }
 
-            if (UserPlayerPrefs.AppID == Constants.DemoAppID ||
-                UserPlayerPrefs.SDKToken == Constants.DemoAppSDKToken)
+            if (UserPlayerPrefs.AppID == Data.Constants.DemoAppID ||
+                UserPlayerPrefs.SDKToken == Data.Constants.DemoAppSDKToken)
                 MyDebug.LogError(
                     $"Soil-Core: AppID or SDKToken are not set. You must create and fill {nameof(SDKSettings)}. Using demo values.");
-
             try
             {
                 _initTask ??= Authenticate.AuthenticateUser();
@@ -84,23 +95,21 @@ namespace FlyingAcorn.Soil.Core
             BroadcastReady();
         }
 
+
         private static void BroadcastReady()
         {
             if (_readyBroadcasted) return;
-            MyDebug.Info("Soil-Core: Services are ready");
-
+            MyDebug.Info($"Soil-Core: Services are ready - {UserInfo?.uuid}");
             _readyBroadcasted = true;
             OnServicesReady?.Invoke();
         }
 
-        [UsedImplicitly]
-        public static void SetupDeeplink()
+        internal void SetupDeeplink()
         {
             if (!UserPlayerPrefs.DeepLinkActivated) return;
-            if (_deepLinkComponent)
+            if (GetComponent<DeepLinkHandler>())
                 return;
-
-            _deepLinkComponent = _soilCoreGameObject.AddComponent<DeepLinkHandler>();
+            gameObject.AddComponent<DeepLinkHandler>();
         }
     }
 }

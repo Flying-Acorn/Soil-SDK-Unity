@@ -36,7 +36,7 @@ namespace FlyingAcorn.Soil.Core.Data
             Application.deepLinkActivated -= DeepLinkActivated;
             Application.deepLinkActivated += DeepLinkActivated;
             DeepLinkActivated(Application.absoluteURL);
-            MyDebug.Info("DeepLinkHandler is active");
+            MyDebug.Verbose("DeepLinkHandler is active");
         }
 
         private static void DeepLinkActivated(string url)
