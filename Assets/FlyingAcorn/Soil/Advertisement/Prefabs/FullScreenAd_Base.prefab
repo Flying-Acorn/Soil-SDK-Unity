@@ -544,6 +544,7 @@ MonoBehaviour:
   adDescriptionText: {fileID: 731402523036771107}
   actionButtonText: {fileID: 263104346024781844}
   closeButton: {fileID: 6287051687217678462}
+  closeButtonImage: {fileID: 4371224992837514893}
   maxRenderTextureSize: 1024
   renderTextureFormat: 4
   adFormat: 1

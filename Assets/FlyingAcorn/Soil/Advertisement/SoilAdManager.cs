@@ -8,9 +8,9 @@ namespace FlyingAcorn.Soil.Advertisement
     {
         public static SoilAdManager Instance { get; private set; }
         [Header("Ad Placement Prefabs")]
-        public BannerAdPlacement bannerAdPlacementPrefab;
-        public InterstitialAdPlacement interstitialAdPlacementPrefab;
-        public RewardedAdPlacement rewardedAdPlacementPrefab;
+        public BannerAdPlacement bannerAdPlacement;
+        public InterstitialAdPlacement interstitialAdPlacement;
+        public RewardedAdPlacement rewardedAdPlacement;
         public Canvas canvasReference;
 
         private void Awake()

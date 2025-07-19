@@ -7,17 +7,19 @@ using FlyingAcorn.Analytics;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
+
     public class RewardedAdPlacement : MonoBehaviour, IAdPlacement
     {
+
         [Header("Rewarded Configuration")]
         [SerializeField] private string placementId = "rewarded_placement";
         [SerializeField] private string placementName = "Rewarded Ad";
         [SerializeField] private AdDisplayComponent adDisplayComponent;
-        
+
         private Ad _currentAd;
         private bool _isFormatReady = false;
         public Action OnRewardEarned { get; set; }
-        
+
         public string Id => placementId;
         public string Name => placementName;
         public AdFormat AdFormat => AdFormat.rewarded;
@@ -32,32 +34,19 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         // Public property to access the display component
         public AdDisplayComponent DisplayComponent => adDisplayComponent;
 
-        private void Awake()
+        private void OnEnable()
         {
-            // Find AdDisplayComponent if not assigned
-            if (adDisplayComponent == null)
-                adDisplayComponent = GetComponentInChildren<AdDisplayComponent>();
-                
-            // Setup ad display component
-            if (adDisplayComponent != null)
-            {
-                adDisplayComponent.adFormat = AdFormat.rewarded;
-                adDisplayComponent.showCloseButton = true;
-            }
-            
-            // Listen to format assets loaded event
+            adDisplayComponent.adFormat = AdFormat.rewarded;
+            adDisplayComponent.showCloseButton = true;
             Events.OnAdFormatAssetsLoaded += OnAdFormatAssetsLoaded;
-            
-            // Check if assets are already ready
             _isFormatReady = Advertisement.IsFormatReady(AdFormat.rewarded);
         }
-        
-        private void OnDestroy()
+
+        private void OnDisable()
         {
-            // Unsubscribe from events
             Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
         }
-        
+
         private void OnAdFormatAssetsLoaded(AdFormat loadedFormat)
         {
             if (loadedFormat == AdFormat.rewarded)
@@ -80,20 +69,20 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             // Use event-driven readiness status as primary check
             var eventReady = _isFormatReady;
-            
+
             // Fallback to cache check - must have at least one cached image asset
             var assets = Advertisement.GetCachedAssets(AdFormat.rewarded);
             var cacheReady = assets != null && assets.Any(asset => asset.AssetType == AssetType.image);
-            
+
             // Check if assets are ready
             var assetsReady = eventReady || cacheReady;
-            
+
             // For rewarded ads, also check cooldown
             if (assetsReady)
             {
                 return !Advertisement.IsRewardedAdInCooldown();
             }
-            
+
             return false;
         }
 
@@ -107,9 +96,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 {
                     // Create ad object from cached assets
                     _currentAd = CreateAdFromCachedAssets(cachedAssets);
-                    
+
                     OnLoaded?.Invoke();
-                    
+
                     var eventData = new AdEventData(AdFormat.rewarded);
                     eventData.ad = _currentAd;
                     Events.InvokeOnRewardedAdLoaded(eventData);
@@ -135,12 +124,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 Load();
             }
-            
+
             if (_currentAd != null && adDisplayComponent != null)
             {
                 adDisplayComponent.ShowAd(
                     _currentAd,
-                    onClose: () => {
+                    onClose: () =>
+                    {
                         OnAdClosed?.Invoke();
                         OnHidden?.Invoke();
                         var eventData = new AdEventData(AdFormat.rewarded);
@@ -148,19 +138,22 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         Events.InvokeOnRewardedAdClosed(eventData);
                         Advertisement.HideAd(AdFormat.rewarded);
                     },
-                    onClick: () => {
+                    onClick: () =>
+                    {
                         OnClicked?.Invoke();
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdClicked(eventData);
                     },
-                    onRewarded: () => {
+                    onRewarded: () =>
+                    {
                         OnRewardEarned?.Invoke();
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdRewarded(eventData);
                     },
-                    onShown: () => {
+                    onShown: () =>
+                    {
                         OnShown?.Invoke();
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
@@ -202,11 +195,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             {
                 id = assetWithAdData?.AdId ?? mainAsset?.Id ?? Guid.NewGuid().ToString(),
                 format = AdFormat.rewarded.ToString(),
-                main_header = !string.IsNullOrEmpty(mainHeaderText) ? new Asset { 
-                    asset_type = "text", 
-                    url = "", 
+                main_header = !string.IsNullOrEmpty(mainHeaderText) ? new Asset
+                {
+                    asset_type = "text",
+                    url = "",
                     text_content = mainHeaderText,
-                    alt_text = mainHeaderText 
+                    alt_text = mainHeaderText
                 } : null,
                 action_button = !string.IsNullOrEmpty(actionButtonText) ? new Asset
                 {
@@ -214,17 +208,19 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     url = clickUrl, // Use real click URL from campaign
                     text_content = actionButtonText,
                     alt_text = actionButtonText
-                } : new Asset {
+                } : new Asset
+                {
                     asset_type = "text",
                     url = clickUrl, // Always need the URL for click functionality
                     text_content = null,
                     alt_text = null
                 },
-                description = !string.IsNullOrEmpty(descriptionText) ? new Asset { 
-                    asset_type = "text", 
-                    url = "", 
+                description = !string.IsNullOrEmpty(descriptionText) ? new Asset
+                {
+                    asset_type = "text",
+                    url = "",
                     text_content = descriptionText,
-                    alt_text = descriptionText 
+                    alt_text = descriptionText
                 } : null,
                 main_image = imageAsset != null ? new Asset
                 {

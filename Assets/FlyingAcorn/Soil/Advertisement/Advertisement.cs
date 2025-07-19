@@ -22,64 +22,6 @@ namespace FlyingAcorn.Soil.Advertisement
 {
     public class Advertisement
     {
-        /// <summary>
-        /// Downloads a video from the given URL and caches it locally. Returns the local file path if successful, otherwise null.
-        /// </summary>
-        public static string DownloadAndCacheVideo(string id, string url)
-        {
-            try
-            {
-                // Determine cache directory
-                string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
-                if (!System.IO.Directory.Exists(cacheDir))
-                    System.IO.Directory.CreateDirectory(cacheDir);
-
-                // Determine file path
-                string fileName = id + ".mp4";
-                string filePath = System.IO.Path.Combine(cacheDir, fileName);
-
-                // If already cached, return path
-                if (System.IO.File.Exists(filePath))
-            {
-                return filePath;
-            }
-
-            // Download video
-            using (var client = new System.Net.WebClient())
-            {
-                client.DownloadFile(url, filePath);
-            }
-
-            // Verify file exists and is >0 bytes
-            if (System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0)
-            {
-                return filePath;
-            }
-            else
-            {
-                // Clean up incomplete file
-                if (System.IO.File.Exists(filePath))
-                    System.IO.File.Delete(filePath);
-                return null;
-            }
-        }
-        catch (System.Exception ex)
-        {
-            UnityEngine.Debug.LogError($"[Advertisement] DownloadAndCacheVideo failed: {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Checks if a video is already cached locally for the given id.
-    /// </summary>
-    public static bool IsVideoCached(string id)
-    {
-        string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
-        string fileName = id + ".mp4";
-        string filePath = System.IO.Path.Combine(cacheDir, fileName);
-        return System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0;
-    }
         [UsedImplicitly]
         public static bool Ready => availableCampaign != null;
         private static readonly string AdvertisementBaseUrl = $"{Core.Data.Constants.ApiUrl}/advertisement/";
@@ -98,13 +40,9 @@ namespace FlyingAcorn.Soil.Advertisement
         // Persistent canvas for all ad placements
         private static Canvas _persistentAdCanvas;
 
-        // Prefabs for ad placements (assign in inspector or via code)
-        public static BannerAdPlacement BannerAdPlacementPrefab;
-        public static InterstitialAdPlacement InterstitialAdPlacementPrefab;
-        public static RewardedAdPlacement RewardedAdPlacementPrefab;
         // Track active ad placement instances
         private static readonly Dictionary<AdFormat, GameObject> _activePlacements = new();
-        
+
         // Rewarded ad cooldown tracking
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
@@ -122,8 +60,8 @@ namespace FlyingAcorn.Soil.Advertisement
             // Create ad placement manager if it doesn't exist
             AssignAdPlacementManager();
 
-            // Load cached assets from previous session
-            AssetCache.LoadCachedAssets();
+            // Load cached assets from previous session asynchronously
+            await AssetCache.LoadCachedAssetsAsync();
 
             try
             {
@@ -144,7 +82,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 var campaignResponse = await SelectCampaignAsync();
                 if (campaignResponse == null || campaignResponse.campaign == null)
                 {
-                    ClearAssetCache();
+                    await ClearAssetCacheAsync();
                     availableCampaign = null;
                     AdvertisementPlayerPrefs.CachedCampaign = null;
                     _campaignRequested = false;
@@ -183,13 +121,9 @@ namespace FlyingAcorn.Soil.Advertisement
             if (_adPlacementManager == null)
                 throw new SoilException("SoilAdManager not found in the scene. Please add it to your scene before initializing Advertisement.",
                     SoilExceptionErrorCode.NotFound);
-            // Assign prefab references from SoilAdManager
-            BannerAdPlacementPrefab = _adPlacementManager.bannerAdPlacementPrefab;
-            InterstitialAdPlacementPrefab = _adPlacementManager.interstitialAdPlacementPrefab;
-            RewardedAdPlacementPrefab = _adPlacementManager.rewardedAdPlacementPrefab;
-            _bannerPlacement = UnityEngine.Object.FindAnyObjectByType<BannerAdPlacement>();
-            _interstitialPlacement = UnityEngine.Object.FindAnyObjectByType<InterstitialAdPlacement>();
-            _rewardedPlacement = UnityEngine.Object.FindAnyObjectByType<RewardedAdPlacement>();
+            _bannerPlacement = _adPlacementManager.bannerAdPlacement;
+            _interstitialPlacement = _adPlacementManager.interstitialAdPlacement;
+            _rewardedPlacement = _adPlacementManager.rewardedAdPlacement;
         }
 
         // Downloads and caches ads for the selected campaign.
@@ -199,7 +133,7 @@ namespace FlyingAcorn.Soil.Advertisement
             // If the campaign has changed, unload all previous caches
             if (AdvertisementPlayerPrefs.CachedCampaign == null || AdvertisementPlayerPrefs.CachedCampaign.id != availableCampaign.id)
             {
-                ClearAssetCache();
+                await ClearAssetCacheAsync();
             }
             AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
 
@@ -229,15 +163,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static async Task CacheFormatAssetsAsync(Campaign campaign, AdFormat adFormat)
         {
-            try
-            {
                 await AssetCache.CacheAssetsForFormatAsync(campaign, adFormat, OnFormatAssetsReady);
-            }
-            catch (Exception ex)
-            {
-                MyDebug.LogError($"Failed to cache assets for {adFormat} format: {ex}");
-                // Do NOT invoke the loaded event if caching failed - the format is not ready
-            }
         }
 
         /// <summary>
@@ -253,7 +179,59 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             if (IsFormatReady(adFormat))
             {
+                // Instantiate and preload the ad prefab for this format (hidden, prepared)
+                PreloadAndPrepareAdInstance(adFormat);
                 Events.InvokeOnAdFormatAssetsLoaded(adFormat);
+            }
+        }
+
+        /// <summary>
+        /// Instantiates, preloads, and prepares the ad prefab for the given format. Keeps it hidden and ready for ShowAd.
+        /// </summary>
+        private static void PreloadAndPrepareAdInstance(AdFormat adFormat)
+        {
+            if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat] != null)
+                return; // Already preloaded
+
+            GameObject instance = adFormat switch
+            {
+                AdFormat.banner => _bannerPlacement?.gameObject,
+                AdFormat.interstitial => _interstitialPlacement?.gameObject,
+                AdFormat.rewarded => _rewardedPlacement?.gameObject,
+                _ => null
+            };
+            instance.SetActive(false); // Keep hidden until ShowAd
+
+            Canvas targetCanvas = GetOrCreatePersistentAdCanvas();
+            if (targetCanvas != null)
+            {
+                instance.transform.SetParent(targetCanvas.transform, false);
+                instance.transform.SetAsLastSibling();
+                if (instance.TryGetComponent(out RectTransform rectTransform))
+                {
+                    rectTransform.anchorMin = Vector2.zero;
+                    rectTransform.anchorMax = Vector2.one;
+                    rectTransform.offsetMin = Vector2.zero;
+                    rectTransform.offsetMax = Vector2.zero;
+                }
+            }
+            _activePlacements[adFormat] = instance;
+
+            // Preload and prepare video/image asynchronously
+            if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
+            {
+                _bannerPlacement = banner;
+                _bannerPlacement.Load();
+            }
+            else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
+            {
+                _interstitialPlacement = interstitial;
+                _interstitialPlacement.Load(); // Prepares ad and video in background
+            }
+            else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
+            {
+                _rewardedPlacement = rewarded;
+                _rewardedPlacement.Load(); // Prepares ad and video in background
             }
         }
 
@@ -339,12 +317,12 @@ namespace FlyingAcorn.Soil.Advertisement
             // Create a new root GameObject for the persistent canvas
             var canvasObject = new GameObject("PersistentAdCanvas");
             UnityEngine.Object.DontDestroyOnLoad(canvasObject);
-            
+
             // Add Canvas component
             _persistentAdCanvas = canvasObject.AddComponent<Canvas>();
             _persistentAdCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
             _persistentAdCanvas.sortingOrder = 1000; // High sorting order to appear above other UI
-            
+
             // Copy canvas scaler settings from SoilAdManager's canvas reference
             var canvasScaler = canvasObject.AddComponent<CanvasScaler>();
             if (_adPlacementManager != null && _adPlacementManager.canvasReference != null)
@@ -369,13 +347,13 @@ namespace FlyingAcorn.Soil.Advertisement
                 // Fallback to default settings
                 SetDefaultCanvasScalerSettings(canvasScaler);
             }
-            
+
             // Add GraphicRaycaster for UI interactions
             canvasObject.AddComponent<GraphicRaycaster>();
-            
+
             // Start with canvas disabled
             canvasObject.SetActive(false);
-            
+
             return _persistentAdCanvas;
         }
 
@@ -398,7 +376,7 @@ namespace FlyingAcorn.Soil.Advertisement
             if (_persistentAdCanvas == null) return;
 
             bool hasActiveAds = _activePlacements.Any(kvp => kvp.Value != null && kvp.Value.activeSelf);
-            
+
             if (hasActiveAds && !_persistentAdCanvas.gameObject.activeInHierarchy)
                 _persistentAdCanvas.gameObject.SetActive(true);
             else if (!hasActiveAds && _persistentAdCanvas.gameObject.activeInHierarchy)
@@ -413,11 +391,11 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             if (_lastRewardedAdShownTime == DateTime.MinValue)
                 return false;
-                
+
             var timeSinceLastShown = (DateTime.Now - _lastRewardedAdShownTime).TotalSeconds;
             return timeSinceLastShown < RewardedAdCooldownSeconds;
         }
-        
+
         /// <summary>
         /// Gets the remaining cooldown time for rewarded ads in seconds
         /// </summary>
@@ -426,12 +404,12 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             if (_lastRewardedAdShownTime == DateTime.MinValue)
                 return 0f;
-                
+
             var timeSinceLastShown = (DateTime.Now - _lastRewardedAdShownTime).TotalSeconds;
             var remainingTime = RewardedAdCooldownSeconds - timeSinceLastShown;
             return remainingTime > 0 ? (float)remainingTime : 0f;
         }
-        
+
         /// <summary>
         /// Resets the rewarded ad cooldown timer (useful for testing or administrative purposes)
         /// </summary>
@@ -462,6 +440,30 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
+        /// <summary>
+        /// Preloads the fallback image for interstitial/rewarded ads to prevent blank moments when ShowAd is called
+        /// </summary>
+        private static void PreloadFallbackImageForAd(GameObject adInstance, AdFormat adFormat)
+        {
+            if (adInstance == null) return;
+
+            var fallbackImageAsset = GetCachedAsset(adFormat, AssetType.image);
+            if (fallbackImageAsset == null) return;
+
+            // Find the AdDisplayComponent and preload the fallback image
+            var displayComponent = adInstance.GetComponent<AdDisplayComponent>();
+            if (displayComponent != null && displayComponent.rawAssetImage != null)
+            {
+                var texture = LoadTexture(fallbackImageAsset.Id);
+                if (texture != null)
+                {
+                    displayComponent.rawAssetImage.texture = texture;
+                    displayComponent.rawAssetImage.gameObject.SetActive(true);
+                    MyDebug.Verbose($"[Advertisement] Preloaded fallback image for {adFormat} ad to prevent blank display");
+                }
+            }
+        }
+
         public static void ShowAd(AdFormat adFormat)
         {
             // Check if assets are available for this ad format
@@ -471,7 +473,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 InvokeAdErrorEvent(adFormat, errorData);
                 return;
             }
-            
+
             // Check rewarded ad cooldown
             if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
             {
@@ -480,50 +482,33 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
 
-            if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat] != null)
+            if (!_activePlacements.TryGetValue(adFormat, out GameObject instance) || instance == null)
             {
-                var existingPlacement = _activePlacements[adFormat];
-                
-                if (existingPlacement.activeInHierarchy)
-                    return;
+                // If not preloaded for some reason, preload now
+                PreloadAndPrepareAdInstance(adFormat);
+                instance = _activePlacements[adFormat];
             }
-            GameObject prefab = adFormat switch
-            {
-                AdFormat.banner => BannerAdPlacementPrefab?.gameObject,
-                AdFormat.interstitial => InterstitialAdPlacementPrefab?.gameObject,
-                AdFormat.rewarded => RewardedAdPlacementPrefab?.gameObject,
-                _ => null
-            };
-            if (prefab == null)
+            if (instance == null)
             {
                 var errorData = new AdEventData(adFormat, AdError.InternalError);
                 InvokeAdErrorEvent(adFormat, errorData);
                 return;
             }
-            if (!_activePlacements.TryGetValue(adFormat, out GameObject instance) || instance == null)
-                instance = UnityEngine.Object.Instantiate(prefab);
+            if (instance.activeInHierarchy)
+                return;
+
+            // For interstitial and rewarded ads, preload fallback image immediately to prevent blank moments
+            if (adFormat == AdFormat.interstitial || adFormat == AdFormat.rewarded)
+            {
+                PreloadFallbackImageForAd(instance, adFormat);
+            }
+
             instance.SetActive(true);
 
-            Canvas targetCanvas = GetOrCreatePersistentAdCanvas();
-
-            if (targetCanvas != null)
-            {
-                instance.transform.SetParent(targetCanvas.transform, false);
-                instance.transform.SetAsLastSibling();
-                if (instance.TryGetComponent(out RectTransform rectTransform))
-                {
-                    rectTransform.anchorMin = Vector2.zero;
-                    rectTransform.anchorMax = Vector2.one;
-                    rectTransform.offsetMin = Vector2.zero;
-                    rectTransform.offsetMax = Vector2.zero;
-                }
-            }
-            _activePlacements[adFormat] = instance;
-            
             // Update canvas visibility
             UpdatePersistentCanvasVisibility();
-            
-            // Set placement reference
+
+            // Show the already-prepared ad (play video or show image)
             if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
             {
                 _bannerPlacement = banner;
@@ -532,13 +517,12 @@ namespace FlyingAcorn.Soil.Advertisement
             else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
             {
                 _interstitialPlacement = interstitial;
-                _interstitialPlacement.Show();
+                _interstitialPlacement.Show(); // Will play video if ready, or show image
             }
             else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
             {
                 _rewardedPlacement = rewarded;
-                _rewardedPlacement.Show();
-                
+                _rewardedPlacement.Show(); // Will play video if ready, or show image
                 // Track when rewarded ad was shown for cooldown
                 _lastRewardedAdShownTime = DateTime.Now;
             }
@@ -553,28 +537,23 @@ namespace FlyingAcorn.Soil.Advertisement
                 {
                     banner.Hide();
                     _bannerPlacement = null;
-                    // For banner, do not destroy, just deactivate
                     instance.SetActive(false);
                 }
                 else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
                 {
                     interstitial.Hide();
                     _interstitialPlacement = null;
-                    UnityEngine.Object.Destroy(instance);
-                    _activePlacements[adFormat] = null;
+                    instance.SetActive(false);
                 }
                 else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
                 {
                     rewarded.Hide();
                     _rewardedPlacement = null;
-                    UnityEngine.Object.Destroy(instance);
-                    _activePlacements[adFormat] = null;
-                    
-                    // Start cooldown timer when rewarded ad is closed
+                    instance.SetActive(false);
+
                     _lastRewardedAdShownTime = DateTime.Now;
                 }
-                
-                // Update canvas visibility after hiding ad
+
                 UpdatePersistentCanvasVisibility();
             }
         }
@@ -597,12 +576,18 @@ namespace FlyingAcorn.Soil.Advertisement
             else if (adFormat == AdFormat.interstitial)
             {
                 if (_interstitialPlacement != null)
+                {
                     _interstitialPlacement.Load();
+                    // TODO: Start video preparation here if not already prepared (preload video)
+                }
             }
             else if (adFormat == AdFormat.rewarded)
             {
                 if (_rewardedPlacement != null)
+                {
                     _rewardedPlacement.Load();
+                    // TODO: Start video preparation here if not already prepared (preload video)
+                }
             }
             else
             {
@@ -610,6 +595,52 @@ namespace FlyingAcorn.Soil.Advertisement
                 InvokeAdErrorEvent(adFormat, errorData);
                 return;
             }
+        }
+        /// <summary>
+        /// Downloads a video from the given URL and caches it locally. Returns the local file path if successful, otherwise null.
+        /// </summary>
+        public static System.Collections.IEnumerator DownloadAndCacheVideoAsync(string id, string url, Action<string> onComplete)
+        {
+            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+            if (!System.IO.Directory.Exists(cacheDir))
+                System.IO.Directory.CreateDirectory(cacheDir);
+            string fileName = id + ".mp4";
+            string filePath = System.IO.Path.Combine(cacheDir, fileName);
+            if (System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0)
+            {
+                onComplete?.Invoke(filePath);
+                yield break;
+            }
+            using (var uwr = UnityEngine.Networking.UnityWebRequest.Get(url))
+            {
+                uwr.downloadHandler = new UnityEngine.Networking.DownloadHandlerFile(filePath);
+                yield return uwr.SendWebRequest();
+                if (uwr.result == UnityEngine.Networking.UnityWebRequest.Result.Success && System.IO.File.Exists(filePath))
+                {
+                    onComplete?.Invoke(filePath);
+                }
+                else
+                {
+                    if (System.IO.File.Exists(filePath))
+                        System.IO.File.Delete(filePath);
+                    onComplete?.Invoke(null);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if a video is already cached locally for the given id.
+        /// This method now runs file operations on a background thread to avoid UI freezes.
+        /// </summary>
+        public static async Task<bool> IsVideoCachedAsync(string id)
+        {
+            return await Task.Run(() =>
+            {
+                string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+                string fileName = id + ".mp4";
+                string filePath = System.IO.Path.Combine(cacheDir, fileName);
+                return System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0;
+            });
         }
 
         /// <summary>
@@ -663,11 +694,11 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Clears all cached assets
+        /// Clears all cached assets asynchronously
         /// </summary>
-        public static void ClearAssetCache()
+        public static async Task ClearAssetCacheAsync()
         {
-            AssetCache.ClearCache();
+            await AssetCache.ClearCacheAsync();
             AdvertisementPlayerPrefs.CachedAssets = new List<AssetCacheEntry>();
         }
 
@@ -691,7 +722,7 @@ namespace FlyingAcorn.Soil.Advertisement
             var asset = AssetCache.GetCachedAssetByUUID(uuid);
             if (asset == null)
                 return null;
-            
+
             if (asset.AssetType != AssetType.video)
                 return null;
 

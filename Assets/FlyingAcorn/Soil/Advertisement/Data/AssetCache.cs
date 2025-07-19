@@ -738,9 +738,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Clears all cached assets
+        /// Clears all cached assets asynchronously to avoid blocking the main thread
         /// </summary>
-        public static void ClearCache()
+        public static async Task ClearCacheAsync()
         {
             List<AssetCacheEntry> assetsToDelete;
             
@@ -751,42 +751,65 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 _currentlyDownloading.Clear();
             }
 
-            try
+            List<string> deleteErrors = new List<string>();
+            Exception clearException = null;
+
+            await Task.Run(() =>
             {
-                foreach (var asset in assetsToDelete)
+                try
                 {
-                    try
+                    foreach (var asset in assetsToDelete)
                     {
-                        if (File.Exists(asset.LocalPath))
+                        try
                         {
-                            File.Delete(asset.LocalPath);
+                            if (File.Exists(asset.LocalPath))
+                            {
+                                File.Delete(asset.LocalPath);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            deleteErrors.Add($"Failed to delete cached file {asset.LocalPath}: {ex.Message}");
                         }
                     }
-                    catch (Exception ex)
+
+                    // Clean up directory
+                    if (Directory.Exists(CacheDirectory))
                     {
-                        MyDebug.LogWarning($"Failed to delete cached file {asset.LocalPath}: {ex.Message}");
+                        try
+                        {
+                            Directory.Delete(CacheDirectory, true);
+                            Directory.CreateDirectory(CacheDirectory);
+                        }
+                        catch (Exception ex)
+                        {
+                            deleteErrors.Add($"Failed to clean cache directory: {ex.Message}");
+                        }
                     }
                 }
-
-                // Clean up directory
-                if (Directory.Exists(CacheDirectory))
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        Directory.Delete(CacheDirectory, true);
-                        Directory.CreateDirectory(CacheDirectory);
-                    }
-                    catch (Exception ex)
-                    {
-                        MyDebug.LogWarning($"Failed to clean cache directory: {ex.Message}");
-                    }
+                    clearException = ex;
                 }
+            });
 
-                MyDebug.Verbose("Cleared all cached assets");
-            }
-            catch (Exception ex)
+            // Log results back on the main thread
+            if (clearException != null)
             {
-                MyDebug.LogError($"Failed to clear cache: {ex.Message}");
+                MyDebug.LogError($"Failed to clear cache: {clearException.Message}");
+            }
+            else
+            {
+                // Log any individual file deletion errors
+                foreach (var error in deleteErrors)
+                {
+                    MyDebug.LogWarning(error);
+                }
+                
+                if (deleteErrors.Count == 0)
+                {
+                    MyDebug.Verbose("Cleared all cached assets");
+                }
             }
         }
 
@@ -878,34 +901,62 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Loads cached assets from PlayerPrefs
+        /// Loads cached assets from PlayerPrefs asynchronously to avoid blocking the main thread
         /// </summary>
-        public static void LoadCachedAssets()
+        public static async Task LoadCachedAssetsAsync()
         {
+            List<AssetCacheEntry> persistedAssets = null;
+            Exception loadException = null;
+            int loadedCount = 0;
+
+            // First, get the persisted assets on the main thread (PlayerPrefs access)
             try
             {
-                var persistedAssets = AdvertisementPlayerPrefs.CachedAssets;
-                if (persistedAssets != null && persistedAssets.Count > 0)
-                {
-                    lock (_lockObject)
-                    {
-                        // Clear current cache
-                        _cachedAssets.Clear();
-                        
-                        // Load valid assets
-                        foreach (var asset in persistedAssets.Where(a => a.IsValid))
-                        {
-                            var cacheKey = GenerateCacheKey(asset.AdFormat, asset.AssetType, asset.Id);
-                            _cachedAssets[cacheKey] = asset;
-                        }
-                    }
-                    
-                    MyDebug.Verbose($"Loaded {_cachedAssets.Count} cached assets from PlayerPrefs");
-                }
+                persistedAssets = AdvertisementPlayerPrefs.CachedAssets;
             }
             catch (Exception ex)
             {
-                MyDebug.LogError($"Failed to load cached assets: {ex.Message}");
+                MyDebug.LogError($"Failed to load cached assets from PlayerPrefs: {ex.Message}");
+                return;
+            }
+
+            // Then process them on a background thread
+            await Task.Run(() =>
+            {
+                try
+                {
+                    if (persistedAssets != null && persistedAssets.Count > 0)
+                    {
+                        lock (_lockObject)
+                        {
+                            // Clear current cache
+                            _cachedAssets.Clear();
+                            
+                            // Load valid assets
+                            foreach (var asset in persistedAssets.Where(a => a.IsValid))
+                            {
+                                var cacheKey = GenerateCacheKey(asset.AdFormat, asset.AssetType, asset.Id);
+                                _cachedAssets[cacheKey] = asset;
+                            }
+                            
+                            loadedCount = _cachedAssets.Count;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    loadException = ex;
+                }
+            });
+
+            // Finally, log the results back on the main thread
+            if (loadException != null)
+            {
+                MyDebug.LogError($"Failed to process cached assets: {loadException.Message}");
+            }
+            else if (loadedCount > 0)
+            {
+                MyDebug.Verbose($"Loaded {loadedCount} cached assets from PlayerPrefs");
             }
         }
     }
