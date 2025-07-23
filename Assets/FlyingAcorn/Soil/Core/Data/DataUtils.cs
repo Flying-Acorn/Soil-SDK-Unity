@@ -85,7 +85,9 @@ namespace FlyingAcorn.Soil.Core.Data
 
         internal static string FindApiUrl()
         {
-            switch (GetStore())
+            var store = GetStore();
+            
+            switch (store)
             {
                 case Store.CafeBazaar:
                 case Store.Myket:
