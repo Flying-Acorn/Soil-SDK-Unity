@@ -26,7 +26,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         [UsedImplicitly]
         public static JObject ExchangeRates =>
-            RemoteConfigPlayerPrefs.CachedRemoteConfigData?["exchange_rates"] as JObject;
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.ExchangeRateParentKey] as JObject;
 
         [UsedImplicitly]
         internal static JObject UserInfo =>
