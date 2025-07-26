@@ -131,23 +131,69 @@ namespace FlyingAcorn.Soil.RemoteConfig
                 RemoteConfigPlayerPrefs.CachedRemoteConfigData = JObject.Parse(responseString);
                 ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                throw new SoilException($"Failed to parse remote config data. Response: {responseString}",
-                    SoilExceptionErrorCode.InvalidResponse);
+                throw new SoilException($"Failed to parse remote config data. Response: {e} - {responseString}", SoilExceptionErrorCode.InvalidResponse);
             }
 
             try
             {
                 RemoteConfigUserInfo = null;
                 if (RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(Constants.UserInfoKey))
-                    RemoteConfigUserInfo = JsonConvert.DeserializeObject<UserInfo>(RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.UserInfoKey].ToString());
+                {
+                    object userInfoRaw = RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.UserInfoKey];
+                    if (userInfoRaw != null)
+                        RemoteConfigUserInfo = JsonConvert.DeserializeObject<UserInfo>(userInfoRaw.ToString());
+                    else
+                        Analytics.MyDebug.LogWarning("RemoteConfig: UserInfo key found but value is null");
+                }
+                else
+                {
+                    Analytics.MyDebug.LogWarning("RemoteConfig: No user_info key found in remote config response");
+                }
+
                 RemoteConfigUserInfo ??= SoilServices.UserInfo;
                 UserApiHandler.ReplaceRegionInfo(RemoteConfigUserInfo);
             }
             catch (Exception e)
             {
-                Analytics.MyDebug.LogException(e, $"Failed to parse remote config user info. Response: {responseString}");
+                try
+                {
+                    var userInfoPayload = "<Failed to get payload>";
+                    try
+                    {
+                        userInfoPayload = RemoteConfigPlayerPrefs.CachedRemoteConfigData?.ContainsKey(Constants.UserInfoKey) == true
+                            ? RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.UserInfoKey]?.ToString()
+                            : "<UserInfoKey not present>";
+                    }
+                    catch
+                    {
+                        userInfoPayload = "<Error accessing user info payload>";
+                    }
+
+                    var errorContext = "<Failed to get context>";
+                    try
+                    {
+                        errorContext = $"SoilServices.UserInfo null: {SoilServices.UserInfo == null}, " +
+                                     $"UserPlayerPrefs.UserInfo null: {UserPlayerPrefs.UserInfo == null}, " +
+                                     $"RemoteConfigUserInfo null: {RemoteConfigUserInfo == null}";
+                    }
+                    catch
+                    {
+                        errorContext = "<Error accessing context objects>";
+                    }
+
+                    Analytics.MyDebug.LogException(e, $"Failed to parse remote config user info. " +
+                        $"Exception: {e.GetType().Name}: {e.Message}\n" +
+                        $"Context: {errorContext}\n" +
+                        $"StackTrace: {e.StackTrace}\n" +
+                        $"UserInfo Payload: {userInfoPayload}\n" +
+                        $"Full Response: {responseString}");
+                }
+                catch
+                {
+                    Analytics.MyDebug.LogException(e, "Failed to parse remote config user info - logging failed");
+                }
             }
 
             try
@@ -158,10 +204,25 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
                 _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(RemoteConfigPurchasingSettings);
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(null);
-                Analytics.MyDebug.Info($"Failed to parse remote config purchasing settings. Response: {responseString}");
+                try
+                {
+                    _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(null);
+
+                    try
+                    {
+                        Analytics.MyDebug.LogError($"Failed to parse remote config purchasing settings. Exception: {e.GetType().Name}: {e.Message}");
+                    }
+                    catch
+                    {
+                        Analytics.MyDebug.LogError($"Failed to log error for remote config purchasing settings. Exception: {e}");
+                    }
+                }
+                catch
+                {
+                    Analytics.MyDebug.LogError($"Failed to set alternate purchasing settings to null. Response: {e} - {responseString}");
+                }
             }
             _fetchSuccessState = true;
         }

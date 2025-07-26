@@ -53,13 +53,15 @@ namespace FlyingAcorn.Soil.Core.User
             if (comingUser.country != null)
                 country = comingUser.country;
             var newRealtimeCountry = comingUser.RealtimeCountry();
-            if (newRealtimeCountry != null)
-                properties.flyingacorn_country_realtime = newRealtimeCountry;
+            if (newRealtimeCountry == null) return this;
+            properties ??= new Properties();
+            properties.flyingacorn_country_realtime = newRealtimeCountry;
             return this;
         }
 
         public UserInfo RecordCustomProperty(string key, object value)
         {
+            this.custom_properties ??= new Dictionary<string, object>();
             this.custom_properties[key] = value;
             return this;
         }

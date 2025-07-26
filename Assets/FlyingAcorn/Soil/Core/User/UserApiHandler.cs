@@ -156,6 +156,11 @@ namespace FlyingAcorn.Soil.Core.User
             }
             comingUser.Validate();
             
+            if (UserPlayerPrefs.UserInfo == null)
+            {
+                throw new SoilException("UserPlayerPrefs.UserInfo is null", SoilExceptionErrorCode.InvalidResponse);
+            }
+            
             UserPlayerPrefs.UserInfo = UserPlayerPrefs.UserInfo.ChangeRegionInfo(comingUser);
         }
     }
