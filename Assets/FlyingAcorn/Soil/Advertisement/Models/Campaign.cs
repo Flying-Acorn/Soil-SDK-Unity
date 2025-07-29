@@ -9,7 +9,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models
         public string name;
         public string target_country;
         public DateTime start_date;
-        public DateTime end_date;
+        public DateTime? end_date;
         public DateTime created;
         public List<AdGroup> ad_groups;
     }

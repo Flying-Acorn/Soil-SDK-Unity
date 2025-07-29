@@ -147,7 +147,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 
             if (!eligibleAdGroups.Any())
             {
-                MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
+                MyDebug.Info($"No assets found to cache for {adFormat} format");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
