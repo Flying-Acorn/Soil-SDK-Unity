@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Models;
+using FlyingAcorn.Soil.Core.User;
 using UnityEngine;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 
@@ -252,7 +253,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// <summary>
         /// Checks if an ad group has ads for the specified format
         /// </summary>
-        private static bool HasAdsForFormat(AdGroup adGroup, AdFormat adFormat)
+        public static bool HasAdsForFormat(AdGroup adGroup, AdFormat adFormat)
         {
             // Add debugging to see what we're working with
             MyDebug.Verbose($"Checking ad group for {adFormat} format:");
@@ -512,7 +513,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
                 // For images and logos, download and cache normally
                 using var client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(30);
+                client.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
 
                 var response = await client.GetAsync(resolvedUrl);
                 response.EnsureSuccessStatusCode();

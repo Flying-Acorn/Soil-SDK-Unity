@@ -47,7 +47,7 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
-        public static async void InitializeAsync(List<AdFormat> adFormats)
+        public static async Task InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)
                 throw new SoilException("Ad formats cannot be null or empty.", SoilExceptionErrorCode.InvalidRequest);
@@ -105,7 +105,8 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             GetOrCreatePersistentAdCanvas();
             Events.InvokeOnInitialized();
-            CacheAds(availableCampaign);
+            // Start asset caching in background - don't block initialization on this
+            _ = CacheAds(availableCampaign);
             _campaignRequested = false;
         }
 
@@ -128,7 +129,7 @@ namespace FlyingAcorn.Soil.Advertisement
 
         // Downloads and caches ads for the selected campaign.
         // This method caches each format separately and invokes events as each format becomes ready.
-        private static async void CacheAds(Campaign availableCampaign)
+        private static async Task CacheAds(Campaign availableCampaign)
         {
             // If the campaign has changed, unload all previous caches
             if (AdvertisementPlayerPrefs.CachedCampaign == null || AdvertisementPlayerPrefs.CachedCampaign.id != availableCampaign.id)
@@ -137,10 +138,21 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
 
-            // Cache assets for each requested format separately
+            // Pre-filter requested formats to only include those that are actually available in the campaign
+            var availableFormats = GetAvailableFormatsInCampaign(availableCampaign, _requestedFormats);
+            
+            if (!availableFormats.Any())
+            {
+                MyDebug.LogWarning("No requested ad formats are available in the selected campaign");
+                return;
+            }
+            
+            MyDebug.Verbose($"Caching assets for available formats: {string.Join(", ", availableFormats)}");
+
+            // Cache assets for each AVAILABLE format separately
             var cachingTasks = new List<Task>();
 
-            foreach (var adFormat in _requestedFormats)
+            foreach (var adFormat in availableFormats) // ← Now only processes available formats
             {
                 // Start caching task for this format
                 var formatTask = CacheFormatAssetsAsync(availableCampaign, adFormat);
@@ -157,7 +169,31 @@ namespace FlyingAcorn.Soil.Advertisement
                 MyDebug.LogError($"Error during asset caching: {ex.Message}");
             }
         }
+        
+        /// <summary>
+        /// Pre-filters requested formats to only include those that are actually available in the campaign
+        /// </summary>
+        private static List<AdFormat> GetAvailableFormatsInCampaign(Campaign campaign, List<AdFormat> requestedFormats)
+        {
+            if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
+                return new List<AdFormat>();
 
+            var availableFormats = new List<AdFormat>();
+
+            foreach (var requestedFormat in requestedFormats)
+            {
+                // Check if any ad group has ads for this format
+                
+                bool formatAvailable = campaign.ad_groups.Any(adGroup => 
+                    AssetCache.HasAdsForFormat(adGroup, requestedFormat));
+
+                if (formatAvailable)
+                    availableFormats.Add(requestedFormat);
+            }
+
+            return availableFormats;
+        }
+        
         /// <summary>
         /// Caches assets for a specific ad format and invokes the loaded event when ready
         /// </summary>
