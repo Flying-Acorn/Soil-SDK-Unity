@@ -17,8 +17,17 @@ namespace FlyingAcorn.Soil.Core
         private static Task _initTask;
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
-        [UsedImplicitly] public static bool Ready => _instance != null && _instance._instanceReady && (_initTask?.IsCompletedSuccessfully ?? false);
+
+        [UsedImplicitly]
+        public static bool Ready => _instance && _instance._instanceReady && 
+                                    (_initTask?.IsCompletedSuccessfully ?? false);
+
+        [UsedImplicitly]
+        public static bool IsNetworkAvailable => Application.internetReachability != NetworkReachability.NotReachable;
+
+
         private bool _instanceReady;
+
         private void StartInstance()
         {
             UserPlayerPrefs.ResetSetInMemoryCache();
@@ -54,6 +63,7 @@ namespace FlyingAcorn.Soil.Core
                     _instance = new GameObject(nameof(SoilServices)).AddComponent<SoilServices>();
                 _instance.StartInstance();
             }
+
             if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
                 _initTask = null;
 
@@ -80,6 +90,14 @@ namespace FlyingAcorn.Soil.Core
                 UserPlayerPrefs.SDKToken == Data.Constants.DemoAppSDKToken)
                 MyDebug.LogError(
                     $"Soil-Core: AppID or SDKToken are not set. You must create and fill {nameof(SDKSettings)}. Using demo values.");
+
+            // Fast-fail for offline scenarios during authentication
+            if (!IsNetworkAvailable)
+            {
+                throw new SoilException("No network connectivity and no cached authentication data",
+                    SoilExceptionErrorCode.Timeout);
+            }
+
             try
             {
                 _initTask ??= Authenticate.AuthenticateUser();
