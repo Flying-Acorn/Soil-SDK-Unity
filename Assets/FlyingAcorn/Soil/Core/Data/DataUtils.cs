@@ -33,6 +33,17 @@ namespace FlyingAcorn.Soil.Core.Data
 
             return build;
         }
+        
+        public static DateTime GetBuildDate()
+        {
+            _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
+            var buildTime = _buildSettings ? _buildSettings.LastBuildTime : null; // Format is "yyyy/MM/dd-HH:mm:ss"
+            var buildDate = DateTime.TryParseExact(buildTime, "yyyy/MM/dd-HH:mm:ss", null,
+                System.Globalization.DateTimeStyles.None, out var parsedDate)
+                ? parsedDate
+                : DateTime.MinValue;
+            return buildDate;
+        }
 
         public static Store GetStore()
         {

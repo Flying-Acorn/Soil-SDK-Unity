@@ -136,7 +136,7 @@ namespace FlyingAcorn.Soil.Core.User
                     { $"{KeysPrefix}platform", Application.platform.ToString() },
                     { $"{KeysPrefix}version", Application.version },
                     { $"{KeysPrefix}build", DataUtils.GetUserBuildNumber() },
-                    { $"{KeysPrefix}build_time", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
+                    { $"{KeysPrefix}build_time", DataUtils.GetBuildDate() },
                     { $"{KeysPrefix}scripting_backend", DataUtils.GetScriptingBackend() },
                     { $"{KeysPrefix}unity_version", Application.unityVersion },
                     { $"{KeysPrefix}store_name", DataUtils.GetStore().ToString() },
