@@ -15,7 +15,7 @@ namespace FlyingAcorn.Soil.Core.Data
         internal static string GetScriptingBackend()
         {
             if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
+                _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
             var scriptingBackend = "Unknown";
             if (_buildSettings && !string.IsNullOrEmpty(_buildSettings.ScriptingBackend))
                 scriptingBackend = _buildSettings.ScriptingBackend;
@@ -26,7 +26,7 @@ namespace FlyingAcorn.Soil.Core.Data
         public static string GetUserBuildNumber()
         {
             if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
+                _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
             var build = "Unknown";
             if (_buildSettings && !string.IsNullOrEmpty(_buildSettings.BuildNumber))
                 build = _buildSettings.BuildNumber;
@@ -37,7 +37,7 @@ namespace FlyingAcorn.Soil.Core.Data
         public static Store GetStore()
         {
             if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>("Build_Settings");
+                _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
             var storeName = Store.Unknown;
             if (_buildSettings && _buildSettings.StoreName != Store.Unknown)
                 storeName = _buildSettings.StoreName;

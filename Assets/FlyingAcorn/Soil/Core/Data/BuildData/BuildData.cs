@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData
 {
-    [CreateAssetMenu(fileName = "Build_Settings.asset", menuName = "FlyingAcorn/Build Settings")]
+    [CreateAssetMenu(fileName = Constants.BuildSettingsName + ".asset", menuName = "FlyingAcorn/Build Settings")]
     public class BuildData : ScriptableObject
     {
         public Constants.Store StoreName;

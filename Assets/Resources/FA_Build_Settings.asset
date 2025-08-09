@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: df22a131f7417413c989eb82bf0c02bd, type: 3}
-  m_Name: Build_Settings
+  m_Name: FA_Build_Settings
   m_EditorClassIdentifier: 
   StoreName: 0
   BuildNumber: 17
