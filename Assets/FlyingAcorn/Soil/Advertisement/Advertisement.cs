@@ -55,7 +55,7 @@ namespace FlyingAcorn.Soil.Advertisement
             if (availableCampaign != null)
                 return;
 
-            _requestedFormats = adFormats?.Distinct().ToList() ?? new List<AdFormat>();
+            _requestedFormats = adFormats.Distinct().ToList();
 
             // Create ad placement manager if it doesn't exist
             AssignAdPlacementManager();
@@ -80,7 +80,7 @@ namespace FlyingAcorn.Soil.Advertisement
             try
             {
                 var campaignResponse = await SelectCampaignAsync();
-                if (campaignResponse == null || campaignResponse.campaign == null)
+                if (campaignResponse?.campaign == null)
                 {
                     await ClearAssetCacheAsync();
                     availableCampaign = null;
@@ -226,20 +226,25 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void PreloadAndPrepareAdInstance(AdFormat adFormat)
         {
-            if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat] != null)
+            if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat])
                 return; // Already preloaded
 
-            GameObject instance = adFormat switch
+            var instance = adFormat switch
             {
                 AdFormat.banner => _bannerPlacement?.gameObject,
                 AdFormat.interstitial => _interstitialPlacement?.gameObject,
                 AdFormat.rewarded => _rewardedPlacement?.gameObject,
                 _ => null
             };
+            if (!instance)
+            {
+                MyDebug.LogError($"[Advertisement] No ad placement instance found for format: {adFormat}");
+                return;
+            }
             instance.SetActive(false); // Keep hidden until ShowAd
 
-            Canvas targetCanvas = GetOrCreatePersistentAdCanvas();
-            if (targetCanvas != null)
+            var targetCanvas = GetOrCreatePersistentAdCanvas();
+            if (targetCanvas)
             {
                 instance.transform.SetParent(targetCanvas.transform, false);
                 instance.transform.SetAsLastSibling();
@@ -269,6 +274,10 @@ namespace FlyingAcorn.Soil.Advertisement
                 _rewardedPlacement = rewarded;
                 _rewardedPlacement.Load(); // Prepares ad and video in background
             }
+
+            var layer = targetCanvas.gameObject.layer;
+            foreach (var child in instance.GetComponentsInChildren<Transform>(true))
+                child.gameObject.layer = layer;
         }
 
         private static async Task<CampaignSelectResponse> SelectCampaignAsync()
@@ -347,7 +356,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static Canvas GetOrCreatePersistentAdCanvas()
         {
-            if (_persistentAdCanvas != null)
+            if (_persistentAdCanvas)
                 return _persistentAdCanvas;
 
             // Create a new root GameObject for the persistent canvas
@@ -361,22 +370,17 @@ namespace FlyingAcorn.Soil.Advertisement
 
             // Copy canvas scaler settings from SoilAdManager's canvas reference
             var canvasScaler = canvasObject.AddComponent<CanvasScaler>();
-            if (_adPlacementManager != null && _adPlacementManager.canvasReference != null)
+            if (_adPlacementManager && _adPlacementManager.canvasReferences != null)
             {
-                var referenceScaler = _adPlacementManager.canvasReference.GetComponent<CanvasScaler>();
-                if (referenceScaler != null)
-                {
-                    canvasScaler.uiScaleMode = referenceScaler.uiScaleMode;
-                    canvasScaler.referenceResolution = referenceScaler.referenceResolution;
-                    canvasScaler.screenMatchMode = referenceScaler.screenMatchMode;
-                    canvasScaler.matchWidthOrHeight = referenceScaler.matchWidthOrHeight;
-                    canvasScaler.referencePixelsPerUnit = referenceScaler.referencePixelsPerUnit;
-                }
-                else
-                {
-                    // Fallback to default settings
-                    SetDefaultCanvasScalerSettings(canvasScaler);
-                }
+                    canvasScaler.uiScaleMode = _adPlacementManager.canvasReferences.UIScaleMode;
+                    canvasScaler.referenceResolution = _adPlacementManager.canvasReferences.ReferenceResolution;
+                    canvasScaler.screenMatchMode = _adPlacementManager.canvasReferences.ScreenMatchMode;
+                    canvasScaler.matchWidthOrHeight = _adPlacementManager.canvasReferences.MatchWidthOrHeight;
+                    canvasScaler.referencePixelsPerUnit = _adPlacementManager.canvasReferences.ReferencePixelsPerUnit;
+                
+                var layer = _adPlacementManager.canvasReferences.Layer;
+                foreach (var child in canvasObject.GetComponentsInChildren<Transform>(true))
+                    child.gameObject.layer = layer;
             }
             else
             {
