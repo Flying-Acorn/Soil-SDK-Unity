@@ -814,6 +814,51 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
         }
 
+        /// Clears old cached assets based on age (older than specified days)
+        /// </summary>
+        public static async Task ClearOldAssetsAsync(int olderThanDays = 7)
+        {
+            var cutoffDate = DateTime.Now.AddDays(-olderThanDays);
+            List<AssetCacheEntry> assetsToDelete;
+            
+            lock (_lockObject)
+            {
+                assetsToDelete = _cachedAssets.Values
+                    .Where(asset => asset.CachedAt < cutoffDate)
+                    .ToList();
+                    
+                var keysToRemove = _cachedAssets
+                    .Where(kvp => kvp.Value.CachedAt < cutoffDate)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                    
+                foreach (var key in keysToRemove)
+                {
+                    _cachedAssets.Remove(key);
+                }
+            }
+
+            await Task.Run(() =>
+            {
+                foreach (var asset in assetsToDelete)
+                {
+                    try
+                    {
+                        if (File.Exists(asset.LocalPath))
+                        {
+                            File.Delete(asset.LocalPath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MyDebug.LogWarning($"Failed to delete old cached file {asset.LocalPath}: {ex.Message}");
+                    }
+                }
+            });
+
+            MyDebug.Verbose($"Cleared {assetsToDelete.Count} old cached assets (older than {olderThanDays} days)");
+        }
+
         /// <summary>
         /// Loads texture from cached asset
         /// </summary>

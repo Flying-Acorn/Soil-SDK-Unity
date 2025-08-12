@@ -131,11 +131,15 @@ namespace FlyingAcorn.Soil.Advertisement
         // This method caches each format separately and invokes events as each format becomes ready.
         private static async Task CacheAds(Campaign availableCampaign)
         {
-            // If the campaign has changed, unload all previous caches
-            if (AdvertisementPlayerPrefs.CachedCampaign == null || AdvertisementPlayerPrefs.CachedCampaign.id != availableCampaign.id)
+            // Simple and reliable cache management
+            bool isDifferentCampaign = AdvertisementPlayerPrefs.CachedCampaign?.id != availableCampaign.id;
+            
+            if (isDifferentCampaign)
             {
+                // Clear all for different campaigns - simple and predictable
                 await ClearAssetCacheAsync();
             }
+            
             AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
 
             // Pre-filter requested formats to only include those that are actually available in the campaign
@@ -740,6 +744,19 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             await AssetCache.ClearCacheAsync();
             AdvertisementPlayerPrefs.CachedAssets = new List<AssetCacheEntry>();
+        }
+
+
+        /// <summary>
+        /// Clears old cached assets based on age (older than specified days)
+        /// </summary>
+        public static async Task ClearOldAssetsAsync(int olderThanDays = 7)
+        {
+            await AssetCache.ClearOldAssetsAsync(olderThanDays);
+            
+            // Update persisted cache
+            var remainingAssets = AssetCache.GetAllCachedAssets();
+            AdvertisementPlayerPrefs.CachedAssets = remainingAssets;
         }
 
         /// <summary>
