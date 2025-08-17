@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Models;
 using FlyingAcorn.Soil.Core.User;
 using UnityEngine;
+using UnityEngine.Networking;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 
 namespace FlyingAcorn.Soil.Advertisement.Data
@@ -512,13 +512,25 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
 
                 // For images and logos, download and cache normally
-                using var client = new HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+                using var request = UnityWebRequest.Get(resolvedUrl);
+                request.timeout = UserPlayerPrefs.RequestTimeout;
 
-                var response = await client.GetAsync(resolvedUrl);
-                response.EnsureSuccessStatusCode();
+                var tcs = new TaskCompletionSource<bool>();
+                request.SendWebRequest().completed += _ => tcs.SetResult(true);
+                
+                await tcs.Task;
 
-                var data = await response.Content.ReadAsByteArrayAsync();
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
+                    throw new Exception($"Failed to download asset from {resolvedUrl}: {errorMessage}");
+                }
+
+                var data = request.downloadHandler?.data;
+                if (data == null || data.Length == 0)
+                {
+                    throw new Exception($"Failed to download asset from {resolvedUrl}: No data received");
+                }
                 
                 // Generate unique filename with timestamp to avoid conflicts
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");

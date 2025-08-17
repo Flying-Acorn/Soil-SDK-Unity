@@ -1,6 +1,5 @@
 using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Text;
 using System.Threading.Tasks;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
@@ -8,17 +7,50 @@ using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace FlyingAcorn.Soil.Core.User
 {
     public static class UserApiHandler
     {
         private static string GetPlayerInfoUrl => $"{Authenticate.UserBaseUrl}/";
+        private static Task<UserInfo> _fetchPlayerInfoTask;
         internal static Action<bool> OnUserFilled; // True means user is changed
 
         [ItemNotNull]
         [UsedImplicitly]
         public static async Task<UserInfo> FetchPlayerInfo()
+        {
+            // Clear failed tasks to allow retry
+            if (_fetchPlayerInfoTask is { IsCompletedSuccessfully: false, IsCompleted: true })
+                _fetchPlayerInfoTask = null;
+
+            // Prevent multiple concurrent fetch operations from blocking
+            if (_fetchPlayerInfoTask == null)
+            {
+                _fetchPlayerInfoTask = FetchPlayerInfoInternal();
+            }
+            else if (!_fetchPlayerInfoTask.IsCompleted)
+            {
+                Debug.Log("Player info fetch already in progress, sharing existing request...");
+            }
+            
+            try
+            {
+                return await _fetchPlayerInfoTask;
+            }
+            catch (Exception)
+            {
+                // Clear the failed task for subsequent retry attempts
+                if (_fetchPlayerInfoTask != null && _fetchPlayerInfoTask.IsFaulted)
+                {
+                    _fetchPlayerInfoTask = null;
+                }
+                throw;
+            }
+        }
+
+        private static async Task<UserInfo> FetchPlayerInfoInternal()
         {
             Debug.Log("Fetching player info...");
 
@@ -33,43 +65,51 @@ namespace FlyingAcorn.Soil.Core.User
                 await Authenticate.RefreshTokenIfNeeded(true);
             }
 
-            using var fetchClient = new HttpClient();
-            fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            fetchClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Get, GetPlayerInfoUrl);
-
-            HttpResponseMessage response;
-            string responseString;
+            using UnityWebRequest request = UnityWebRequest.Get(GetPlayerInfoUrl);
+            request.timeout = UserPlayerPrefs.RequestTimeout;
             
-            try
-            {
-                response = await fetchClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
-            }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while fetching player info", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while fetching player info: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while fetching player info: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
+            // Set authorization header
+            var authHeader = Authenticate.GetAuthorizationHeaderString();
+            request.SetRequestHeader("Authorization", authHeader);
+            request.SetRequestHeader("Accept", "application/json");
 
-            if (!response.IsSuccessStatusCode)
+            // Use TaskCompletionSource for proper async/await with UnityWebRequest
+            var tcs = new TaskCompletionSource<bool>();
+            var operation = request.SendWebRequest();
+            operation.completed += _ => tcs.SetResult(true);
+            
+            await tcs.Task;
+
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
+                
+                if (request.result == UnityWebRequest.Result.ConnectionError)
+                {
+                    throw new SoilException($"Network error while fetching player info: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else if (request.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    var errorResponseText = request.downloadHandler?.text ?? "No response content";
+                    throw new SoilException($"Server returned error {request.responseCode}: {errorResponseText}",
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else
+                {
+                    throw new SoilException($"Unexpected error while fetching player info: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
+            }
+            
+            var responseText = request.downloadHandler?.text ?? "";
+            var fetchedUser = JsonConvert.DeserializeObject<UserInfo>(responseText);
+            if (fetchedUser == null)
+            {
+                throw new SoilException("Failed to deserialize user info response",
                     SoilExceptionErrorCode.TransportError);
             }
             
-            var fetchedUser = JsonConvert.DeserializeObject<UserInfo>(responseString);
             ReplaceUser(fetchedUser, UserPlayerPrefs.TokenData);
             Debug.Log($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
@@ -89,45 +129,56 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             var stringBody = JsonConvert.SerializeObject(legalFields);
+            byte[] bodyData = Encoding.UTF8.GetBytes(stringBody);
 
-            using var updateClient = new HttpClient();
-            updateClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            updateClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            updateClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Post, GetPlayerInfoUrl);
-            request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
-
-            HttpResponseMessage response;
-            string responseString;
+            using UnityWebRequest request = new UnityWebRequest(GetPlayerInfoUrl, "POST");
+            request.uploadHandler = new UploadHandlerRaw(bodyData);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = UserPlayerPrefs.RequestTimeout;
             
-            try
+            // Set headers
+            var authHeader = Authenticate.GetAuthorizationHeaderString();
+            request.SetRequestHeader("Authorization", authHeader);
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+
+            // Use TaskCompletionSource for proper async/await with UnityWebRequest
+            var tcs = new TaskCompletionSource<bool>();
+            var operation = request.SendWebRequest();
+            operation.completed += _ => tcs.SetResult(true);
+            
+            await tcs.Task;
+
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                response = await updateClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
-            }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while updating player info", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while updating player info: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while updating player info: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
+                
+                if (request.result == UnityWebRequest.Result.ConnectionError)
+                {
+                    throw new SoilException($"Network error while updating player info: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else if (request.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    var errorResponseText = request.downloadHandler?.text ?? "No response content";
+                    throw new SoilException($"Server returned error {request.responseCode}: {errorResponseText}",
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else
+                {
+                    throw new SoilException($"Unexpected error while updating player info: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
             }
 
-            if (!response.IsSuccessStatusCode)
+            var responseText = request.downloadHandler?.text ?? "";
+            var updatedUser = JsonConvert.DeserializeObject<UserInfo>(responseText);
+            if (updatedUser == null)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                throw new SoilException("Failed to deserialize updated user info response",
                     SoilExceptionErrorCode.TransportError);
             }
-
-            var updatedUser = JsonConvert.DeserializeObject<UserInfo>(responseString);
+            
             ReplaceUser(updatedUser, UserPlayerPrefs.TokenData);
             Debug.Log($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;

@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Threading.Tasks;
+using UnityEngine.Networking;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
@@ -292,61 +290,76 @@ namespace FlyingAcorn.Soil.Advertisement
                     SoilExceptionErrorCode.NotReady);
             }
 
-            using var campaignRequest = new HttpClient();
-            campaignRequest.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            campaignRequest.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            campaignRequest.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Post, CampaignsSelectUrl);
-
             var body = new
             {
                 previous_campaigns = new List<string>() // TODO: Get previous campaigns from user preferences or session
             };
 
-            request.Content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
+            var jsonBody = JsonConvert.SerializeObject(body);
 
-            HttpResponseMessage response;
-            string content;
+            using var request = UnityWebRequest.PostWwwForm(CampaignsSelectUrl, "");
+            if (request.uploadHandler != null)
+            {
+                request.uploadHandler.Dispose();
+            }
+            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody));
+            request.timeout = UserPlayerPrefs.RequestTimeout;
+            
+            var authHeader = Authenticate.GetAuthorizationHeaderString();
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                request.SetRequestHeader("Authorization", authHeader);
+            }
+            request.SetRequestHeader("Accept", "application/json");
+            request.SetRequestHeader("Content-Type", "application/json");
 
-            try
-            {
-                response = await campaignRequest.SendAsync(request);
-                content = await response.Content.ReadAsStringAsync();
-            }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while selecting campaign",
-                    SoilExceptionErrorCode.Timeout);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while selecting campaign: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while selecting campaign: {ex.Message}",
-                    SoilExceptionErrorCode.Unknown);
-            }
+            var tcs = new TaskCompletionSource<bool>();
+            request.SendWebRequest().completed += _ => tcs.SetResult(true);
+            
+            await tcs.Task;
 
-            if (!response.IsSuccessStatusCode)
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                var errorCode = response.StatusCode switch
+                var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
+                
+                if (request.result == UnityWebRequest.Result.ConnectionError)
                 {
-                    System.Net.HttpStatusCode.Unauthorized => SoilExceptionErrorCode.InvalidToken,
-                    System.Net.HttpStatusCode.Forbidden => SoilExceptionErrorCode.Forbidden,
-                    System.Net.HttpStatusCode.NotFound => SoilExceptionErrorCode.NotFound,
-                    System.Net.HttpStatusCode.BadRequest => SoilExceptionErrorCode.InvalidRequest,
-                    System.Net.HttpStatusCode.ServiceUnavailable => SoilExceptionErrorCode.ServiceUnavailable,
-                    _ => SoilExceptionErrorCode.TransportError
-                };
+                    throw new SoilException("Request timed out while selecting campaign",
+                        SoilExceptionErrorCode.Timeout);
+                }
+                else if (request.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    var errorCode = (System.Net.HttpStatusCode)request.responseCode switch
+                    {
+                        System.Net.HttpStatusCode.Unauthorized => SoilExceptionErrorCode.InvalidToken,
+                        System.Net.HttpStatusCode.Forbidden => SoilExceptionErrorCode.Forbidden,
+                        System.Net.HttpStatusCode.NotFound => SoilExceptionErrorCode.NotFound,
+                        System.Net.HttpStatusCode.BadRequest => SoilExceptionErrorCode.InvalidRequest,
+                        System.Net.HttpStatusCode.ServiceUnavailable => SoilExceptionErrorCode.ServiceUnavailable,
+                        _ => SoilExceptionErrorCode.TransportError
+                    };
 
-                throw new SoilException($"Failed to select campaign: {response.StatusCode} - {content}", errorCode);
+                    var responseText = request.downloadHandler?.text ?? "No response content";
+                    throw new SoilException($"Failed to select campaign: {request.responseCode} - {responseText}", errorCode);
+                }
+                else
+                {
+                    throw new SoilException($"Unexpected error while selecting campaign: {errorMessage}",
+                        SoilExceptionErrorCode.Unknown);
+                }
             }
+
+            var content = request.downloadHandler?.text ?? "";
 
             try
             {
-                return JsonConvert.DeserializeObject<CampaignSelectResponse>(content);
+                var result = JsonConvert.DeserializeObject<CampaignSelectResponse>(content);
+                if (result == null)
+                {
+                    throw new SoilException("Response deserialization returned null while selecting campaign",
+                        SoilExceptionErrorCode.InvalidResponse);
+                }
+                return result;
             }
             catch (Exception)
             {

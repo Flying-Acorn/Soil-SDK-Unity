@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,6 +8,8 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
+using UnityEngine;
+using UnityEngine.Networking;
 using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.Authentication
@@ -86,46 +87,56 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             var bearerToken = JwtUtils.GenerateJwt(payload, sdkToken);
             var body = UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties();
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", body } });
-            using var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            var request = new HttpRequestMessage(HttpMethod.Post, RegisterPlayerUrl);
-            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
+            byte[] bodyData = Encoding.UTF8.GetBytes(stringBody);
             
-            HttpResponseMessage response;
-            string responseString;
+            using UnityWebRequest request = new UnityWebRequest(RegisterPlayerUrl, "POST");
+            request.uploadHandler = new UploadHandlerRaw(bodyData);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = UserPlayerPrefs.RequestTimeout;
             
-            try
+            // Set headers
+            request.SetRequestHeader("Authorization", $"Bearer {bearerToken}");
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+
+            // Use TaskCompletionSource for proper async/await with UnityWebRequest
+            var tcs = new TaskCompletionSource<bool>();
+            var operation = request.SendWebRequest();
+            operation.completed += _ => tcs.SetResult(true);
+            
+            await tcs.Task;
+
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                response = await client.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
-            }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while registering player", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while registering player: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while registering player: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
+                
+                if (request.result == UnityWebRequest.Result.ConnectionError)
+                {
+                    throw new SoilException($"Network error while registering player: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else if (request.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    var errorResponseText = request.downloadHandler?.text ?? "No response content";
+                    throw new SoilException($"Server returned error {request.responseCode}: {errorResponseText}",
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else
+                {
+                    throw new SoilException($"Unexpected error while registering player: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
             }
 
-
-            if (!response.IsSuccessStatusCode)
+            var responseString = request.downloadHandler?.text ?? "";
+            var tokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            if (tokenData == null)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                throw new SoilException("Failed to deserialize token data from registration response",
                     SoilExceptionErrorCode.TransportError);
             }
-
-            UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            
+            UserPlayerPrefs.TokenData = tokenData;
             MyDebug.Info($"Player registered successfully. Response: {responseString}");
             OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
         }
@@ -148,45 +159,55 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             {
                 { "refresh", UserPlayerPrefs.TokenData.Refresh }
             });
+            byte[] bodyData = Encoding.UTF8.GetBytes(stringBody);
 
-            using var refreshClient = new HttpClient();
-            refreshClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            refreshClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            var request = new HttpRequestMessage(HttpMethod.Post, RefreshTokenUrl);
-            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
+            using UnityWebRequest request = new UnityWebRequest(RefreshTokenUrl, "POST");
+            request.uploadHandler = new UploadHandlerRaw(bodyData);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = UserPlayerPrefs.RequestTimeout;
             
-            HttpResponseMessage response;
-            string responseString;
+            // Set headers
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+
+            // Use TaskCompletionSource for proper async/await with UnityWebRequest
+            var tcs = new TaskCompletionSource<bool>();
+            var operation = request.SendWebRequest();
+            operation.completed += _ => tcs.SetResult(true);
             
-            try
+            await tcs.Task;
+
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                response = await refreshClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
-            }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while refreshing tokens", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while refreshing tokens: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while refreshing tokens: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
+                
+                if (request.result == UnityWebRequest.Result.ConnectionError)
+                {
+                    throw new SoilException($"Network error while refreshing tokens: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else if (request.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    var errorResponseText = request.downloadHandler?.text ?? "No response content";
+                    throw new SoilException($"Server returned error {request.responseCode}: {errorResponseText}",
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else
+                {
+                    throw new SoilException($"Unexpected error while refreshing tokens: {errorMessage}", 
+                        SoilExceptionErrorCode.TransportError);
+                }
             }
 
-            if (!response.IsSuccessStatusCode)
+            var responseString = request.downloadHandler?.text ?? "";
+            var tokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            if (tokenData == null)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
+                throw new SoilException("Failed to deserialize token data from refresh response",
                     SoilExceptionErrorCode.TransportError);
             }
-
-            UserPlayerPrefs.TokenData = JsonConvert.DeserializeObject<TokenData>(responseString);
+            
+            UserPlayerPrefs.TokenData = tokenData;
             MyDebug.Info($"Tokens refreshed successfully. Response: {responseString}");
             OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);
         }
@@ -194,6 +215,11 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
         internal static AuthenticationHeaderValue GetAuthorizationHeader()
         {
             return new AuthenticationHeaderValue("Bearer", UserPlayerPrefs.TokenData.Access);
+        }
+
+        internal static string GetAuthorizationHeaderString()
+        {
+            return $"Bearer {UserPlayerPrefs.TokenData.Access}";
         }
     }
 }

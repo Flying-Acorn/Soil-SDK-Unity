@@ -50,7 +50,7 @@ namespace FlyingAcorn.Soil.CloudSave
             await Initialize();
 
             var stringBody = JsonConvert.SerializeObject(payload, Formatting.None);
-            
+
             using var saveClient = new HttpClient();
             saveClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             saveClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -60,30 +60,26 @@ namespace FlyingAcorn.Soil.CloudSave
 
             HttpResponseMessage response;
             string responseString;
-
             try
             {
                 response = await saveClient.SendAsync(request);
                 responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            catch (TaskCanceledException)
             {
-                throw new SoilException("Request timed out while saving data", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException("Request timed out while saving data", SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while saving data: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Network error while saving data: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while saving data: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while saving data: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -117,29 +113,25 @@ namespace FlyingAcorn.Soil.CloudSave
             if (extraScopes is { Count: > 0 })
                 query += $"&extra_scopes={string.Join(",", extraScopes.Distinct())}";
             var request = new HttpRequestMessage(HttpMethod.Get, $"{CloudSaveUrl}{query}");
-            
+
             HttpResponseMessage response;
             string responseString;
-            
             try
             {
                 response = await loadClient.SendAsync(request);
                 responseString = await response.Content.ReadAsStringAsync();
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            catch (TaskCanceledException)
             {
-                throw new SoilException("Request timed out while loading data", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException("Request timed out while loading data", SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while loading data: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Network error while loading data: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while loading data: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while loading data: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -149,7 +141,7 @@ namespace FlyingAcorn.Soil.CloudSave
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", 
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
                     SoilExceptionErrorCode.TransportError);
             }
 
