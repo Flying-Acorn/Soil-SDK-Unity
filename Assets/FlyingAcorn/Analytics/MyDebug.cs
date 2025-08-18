@@ -94,7 +94,7 @@ namespace FlyingAcorn.Analytics
         public static void LogException(Exception exception, string extraMessage = "")
         {
             if (GetLogLevel() > FlyingAcornErrorSeverity.CriticalSeverity) return;
-            var message = $"{extraMessage} {exception.Message} {exception.StackTrace}";
+            var message = $"{exception.Message} {extraMessage} {exception.StackTrace}";
             AnalyticsManager.ErrorEvent(FlyingAcornErrorSeverity.CriticalSeverity, message);
         }
     }
