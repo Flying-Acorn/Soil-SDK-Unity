@@ -65,7 +65,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 }
                 catch (Exception e)
                 {
-                    if (playerInfoIsMissing)
+                    if (playerInfoIsMissing || forceFetchPlayerInfo)
                         throw new Exception($"Failed to fetch player info: {e.Message}, abandoning the process.");
                     MyDebug.Info($"Failed to fetch player info: {e.Message}, continuing with the existing info.");
                 }

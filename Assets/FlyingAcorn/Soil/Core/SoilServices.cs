@@ -42,6 +42,7 @@ namespace FlyingAcorn.Soil.Core
         private static SoilServices _instance;
         private static bool _readyBroadcasted;
         private static Task _initTask;
+    private static readonly object _initLock = new object();
         private static readonly List<QueuedInitRequest> _queuedInitRequests = new List<QueuedInitRequest>();
         private static readonly object _queueLock = new object();
         private const int MaxQueuedRequests = 200;
@@ -52,13 +53,12 @@ namespace FlyingAcorn.Soil.Core
         private static int _retryAttempts = 0;
         private static DateTime _lastFailureTime = DateTime.MinValue;
         private static readonly TimeSpan[] _retryIntervals = {
-            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(3),
             TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
             TimeSpan.FromSeconds(15),
-            TimeSpan.FromSeconds(30),
-            TimeSpan.FromMinutes(1),
-            TimeSpan.FromMinutes(1),
-            TimeSpan.FromMinutes(1)
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromSeconds(25),
         };
 
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
@@ -95,10 +95,12 @@ namespace FlyingAcorn.Soil.Core
 
         private void StartInstance()
         {
+            _isShuttingDown = false;
             UserPlayerPrefs.ResetSetInMemoryCache();
             _instance.transform.SetParent(null);
             _initTask = null;
             _readyBroadcasted = false;
+            _sessionAuthSuccess = false;
             _retryAttempts = 0;
             _lastFailureTime = DateTime.MinValue;
             lock (_queueLock) _queuedInitRequests.Clear();
@@ -183,9 +185,15 @@ namespace FlyingAcorn.Soil.Core
                 }
             }
 
-            if (_initTask != null && !_initTask.IsCompleted)
+            Task runningInit;
+            lock (_initLock)
             {
-                await AwaitWithDeadline(_initTask, deadline, "existing initialization");
+                runningInit = _initTask;
+            }
+
+            if (runningInit != null && !runningInit.IsCompleted)
+            {
+                await AwaitWithDeadline(runningInit, deadline, "existing initialization");
                 return;
             }
 
@@ -197,8 +205,11 @@ namespace FlyingAcorn.Soil.Core
                 _instance.StartInstance();
             }
 
-            if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
-                _initTask = null;
+            lock (_initLock)
+            {
+                if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
+                    _initTask = null;
+            }
 
             switch (Ready)
             {
@@ -226,24 +237,44 @@ namespace FlyingAcorn.Soil.Core
                 throw exception;
             }
 
-            if (_initTask == null)
+            lock (_initLock)
             {
-                _initTask = PerformAuthentication();
-                _ = _initTask.ContinueWith(t =>
+                if (_initTask == null)
                 {
-                    if (t.IsCompletedSuccessfully)
+                    if (!_instance._sessionAuthSuccess)
                     {
-                        RunOnUnityContext(OnInitializationSuccess);
+                        var authValid = IsAuthenticationCurrentlyValid();
+                        _initTask = authValid
+                            ? PerformAuthentication(forceFetchPlayerInfo: true)
+                            : PerformAuthentication(forceRefresh: true);
                     }
-                    else if (t.IsFaulted)
+                    else
                     {
-                        var ex = t.Exception?.InnerException ?? t.Exception;
-                        RunOnUnityContext(() => HandleInitializationFailure(ex));
+                        _initTask = PerformAuthentication();
                     }
-                }, TaskContinuationOptions.ExecuteSynchronously);
+                }
             }
 
-            await AwaitWithDeadline(_initTask, deadline, "authentication");
+            Task initTaskSnapshot;
+            lock (_initLock)
+            {
+                initTaskSnapshot = _initTask;
+            }
+
+            _ = initTaskSnapshot.ContinueWith(t =>
+            {
+                if (t.IsCompletedSuccessfully)
+                {
+                    RunOnUnityContext(OnInitializationSuccess);
+                }
+                else if (t.IsFaulted)
+                {
+                    var ex = t.Exception?.InnerException ?? t.Exception;
+                    RunOnUnityContext(() => HandleInitializationFailure(ex));
+                }
+            }, TaskContinuationOptions.ExecuteSynchronously);
+
+            await AwaitWithDeadline(initTaskSnapshot, deadline, "authentication");
         }
 
         private static TimeSpan GetCurrentRetryInterval()
@@ -275,14 +306,21 @@ namespace FlyingAcorn.Soil.Core
                         _retryScheduled = false;
                         if (!_isShuttingDown)
                         {
-                            RunOnUnityContext(() =>
+                            if (_unityContext == null)
                             {
-                                if (_lastFailureTime != DateTime.MinValue && !Ready)
+                                MyDebug.Verbose("Soil-Core: Skipping background retry due to missing Unity context");
+                            }
+                            else
+                            {
+                                RunOnUnityContext(() =>
                                 {
-                                    MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
-                                    _ = Initialize();
-                                }
-                            });
+                                    if (_lastFailureTime != DateTime.MinValue && !Ready)
+                                    {
+                                        MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
+                                        _ = Initialize();
+                                    }
+                                });
+                            }
                         }
                     }
                 });
@@ -304,9 +342,9 @@ namespace FlyingAcorn.Soil.Core
             }
         }
 
-        private static Task PerformAuthentication(bool forceRefresh = false)
+        private static Task PerformAuthentication(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
-            return Authenticate.AuthenticateUser(forceRefresh: forceRefresh);
+            return Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
         }
 
         private static void HandleInitializationFailure(Exception exception)
@@ -318,14 +356,7 @@ namespace FlyingAcorn.Soil.Core
             MyDebug.LogError($"Soil-Core: Initialization failed (attempt #{_retryAttempts}). " +
                            $"Next retry in {retryInterval.TotalSeconds}s. Error: {exception.Message}");
 
-            if (_retryAttempts >= _retryIntervals.Length)
-            {
-                MyDebug.LogError($"Soil-Core: Reached max retry attempts ({_retryIntervals.Length}). No further retries will be scheduled.");
-            }
-            else
-            {
-                ScheduleRetryAfterCooldown(retryInterval);
-            }
+            ScheduleRetryAfterCooldown(retryInterval);
 
             List<string> completedRequests;
             lock (_queueLock)
