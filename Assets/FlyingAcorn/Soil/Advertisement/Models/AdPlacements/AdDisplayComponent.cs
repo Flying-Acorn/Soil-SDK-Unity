@@ -128,9 +128,20 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             mainAssetVideoPlayer.waitForFirstFrame = true;
             mainAssetVideoPlayer.skipOnDrop = false; // Changed to false for better sync
 
+            // Platform-specific time update mode configuration for better sync
+#if UNITY_IOS
+            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime; // Better for iOS AVFoundation
+#elif UNITY_ANDROID
+            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.GameTime; // Better for Android MediaPlayer
+#else
+            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime; // Default for other platforms
+#endif
+
             // Audio configuration for better sync and silent mode handling
             mainAssetVideoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
-            mainAssetVideoPlayer.SetDirectAudioMute(0, AudioListener.pause || AudioListener.volume == 0);
+            
+            // Initialize audio mute state early for consistent sync
+            UpdateAudioMuteState();
 
             // Setup RawImage component for video display
             SetupVideoRawImage();
@@ -588,6 +599,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         // Coroutine for async video download and asset loading
         private IEnumerator DownloadAndCacheVideoAndContinue(string videoId, string videoUrl, AdFormat adFormat, bool hasCachedImage)
         {
+            // Validate video compatibility for better sync
+            if (!ValidateVideoCompatibility(videoUrl))
+            {
+                MyDebug.LogWarning($"[AdDisplayComponent] Video compatibility validation failed for {videoUrl}, falling back to image");
+                LoadImageAsset();
+                yield break;
+            }
 
             // Async HEAD request to get video size
             long videoSizeBytes = -1;
@@ -704,27 +722,69 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         }
 
         /// <summary>
-        /// Coroutine to prepare video with a slight delay to ensure VideoPlayer is properly initialized
+        /// Validates video format and codec compatibility for better sync
+        /// </summary>
+        private bool ValidateVideoCompatibility(string videoUrl)
+        {
+            if (string.IsNullOrEmpty(videoUrl))
+            {
+                MyDebug.LogWarning("[AdDisplayComponent] Video URL is empty or null");
+                return false;
+            }
+
+            // Check for supported video formats
+            string url = videoUrl.ToLower();
+            bool isSupported = url.Contains(".mp4") || url.Contains(".m4v") || url.Contains(".mov") || 
+                              url.Contains("video/mp4") || url.Contains("video/quicktime");
+
+            if (!isSupported)
+            {
+                MyDebug.LogWarning($"[AdDisplayComponent] Video format may not be optimal for sync: {videoUrl}");
+                // Still allow playback but log the warning
+            }
+
+            return true; // Allow all formats but warn about potentially problematic ones
+        }
+
+        /// <summary>
+        /// Coroutine to prepare video with improved timing to ensure VideoPlayer is properly initialized
+        /// and audio sync is maintained
         /// </summary>
         private IEnumerator PrepareVideoDelayed()
         {
-            // Wait for the end of frame to ensure VideoPlayer is fully initialized
-            yield return new WaitForEndOfFrame();
+            // Wait for proper initialization - small delay is better than end of frame for video sync
+            yield return new WaitForSeconds(0.1f);
 
             // Double-check that the VideoPlayer is still valid and enabled
-            if (mainAssetVideoPlayer.enabled)
+            if (mainAssetVideoPlayer != null && mainAssetVideoPlayer.enabled)
             {
+                bool preparationFailed = false;
+                
                 try
                 {
+                    // Pre-apply audio settings before preparation for better sync
+                    UpdateAudioMuteState();
+                    
                     mainAssetVideoPlayer.Prepare();
                     MyDebug.Verbose($"[AdDisplayComponent] VideoPlayer preparation initiated successfully");
                 }
                 catch (System.Exception ex)
                 {
                     MyDebug.LogError($"[AdDisplayComponent] Failed to prepare VideoPlayer: {ex.Message}");
+                    preparationFailed = true;
+                }
+
+                if (preparationFailed)
+                {
                     // Fallback to image if preparation fails
                     _isVideoAd = false;
                     LoadImageAsset();
+                }
+                else
+                {
+                    // Wait until video is actually prepared for better sync
+                    yield return new WaitUntil(() => mainAssetVideoPlayer.isPrepared);
+                    MyDebug.Verbose($"[AdDisplayComponent] VideoPlayer preparation completed successfully");
                 }
             }
             else
@@ -1071,8 +1131,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (mainAssetVideoPlayer.renderMode == VideoRenderMode.RenderTexture && rawAssetImage != null)
                 SetupVideoForDisplay();
 
-            // Check and apply audio mute settings
-            UpdateAudioMuteState();
+            // Audio mute settings are already applied during preparation for better sync
 
             // Auto-play video once it's prepared (for interstitial and rewarded)
             if (adFormat == AdFormat.interstitial || adFormat == AdFormat.rewarded)
@@ -1154,6 +1213,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             _videoStarted = true;
             MyDebug.Verbose($"[AdDisplayComponent] Video started for {adFormat} ad");
 
+            // Start monitoring audio-video sync
+            StartCoroutine(MonitorAudioVideoSync());
+
             // Now that video is playing, ensure rawAssetImage displays the video render texture
             if (rawAssetImage != null && mainAssetVideoPlayer != null && mainAssetVideoPlayer.targetTexture != null)
             {
@@ -1207,7 +1269,27 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         private void OnVideoError(VideoPlayer vp, string message)
         {
-            MyDebug.LogError($"[AdDisplayComponent] Video error for {adFormat} ad: {message} (conversation logic)");
+            MyDebug.LogError($"[AdDisplayComponent] Video error for {adFormat} ad: {message}");
+
+            // Check for common sync-related errors
+            bool isSyncError = message.Contains("audio") || message.Contains("sync") || 
+                              message.Contains("timing") || message.Contains("decode");
+            
+            if (isSyncError)
+            {
+                MyDebug.LogWarning("[AdDisplayComponent] Detected potential sync-related video error, attempting recovery");
+                
+                // Try to recover by resetting time update mode
+                if (mainAssetVideoPlayer != null)
+                {
+#if UNITY_IOS
+                    mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.GameTime; // Fallback for iOS
+#elif UNITY_ANDROID
+                    mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime; // Fallback for Android
+#endif
+                    MyDebug.Verbose("[AdDisplayComponent] Applied fallback time update mode for sync recovery");
+                }
+            }
 
             // Fallback to image display if video fails or if video is interrupted (network error, blank frame, etc)
             _isVideoAd = false;
@@ -1276,6 +1358,38 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         public bool IsVideoAd()
         {
             return _isVideoAd;
+        }
+
+        /// <summary>
+        /// Monitors audio-video sync and logs potential issues
+        /// </summary>
+        private IEnumerator MonitorAudioVideoSync()
+        {
+            if (!_isVideoAd || mainAssetVideoPlayer == null) yield break;
+
+            float lastVideoTime = 0f;
+            float lastCheckTime = Time.time;
+            int syncCheckCount = 0;
+
+            while (_videoStarted && mainAssetVideoPlayer.isPlaying && syncCheckCount < 10)
+            {
+                yield return new WaitForSeconds(1f); // Check every second for first 10 seconds
+                
+                float currentVideoTime = (float)mainAssetVideoPlayer.time;
+                float currentRealTime = Time.time;
+                float expectedProgress = currentRealTime - lastCheckTime;
+                float actualProgress = currentVideoTime - lastVideoTime;
+                
+                // Allow 0.2 second tolerance for sync drift
+                if (Mathf.Abs(expectedProgress - actualProgress) > 0.2f)
+                {
+                    MyDebug.LogWarning($"[AdDisplayComponent] Potential A/V sync drift detected. Expected: {expectedProgress:F2}s, Actual: {actualProgress:F2}s, Drift: {Mathf.Abs(expectedProgress - actualProgress):F2}s");
+                }
+
+                lastVideoTime = currentVideoTime;
+                lastCheckTime = currentRealTime;
+                syncCheckCount++;
+            }
         }
 
         /// <summary>

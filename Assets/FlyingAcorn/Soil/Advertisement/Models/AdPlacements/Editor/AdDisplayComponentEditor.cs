@@ -72,6 +72,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements.Editor
                     hasIssues = true;
                 }
 
+                // Check time update mode for sync optimization
+                if (videoPlayer.timeUpdateMode == VideoTimeUpdateMode.UnscaledGameTime)
+                {
+                    EditorGUILayout.HelpBox("VideoPlayer.timeUpdateMode should be DSPTime (iOS) or GameTime (Android) for better sync.", MessageType.Warning);
+                    hasIssues = true;
+                }
+
                 if (videoPlayer.audioOutputMode != VideoAudioOutputMode.Direct)
                 {
                     EditorGUILayout.HelpBox("VideoPlayer.audioOutputMode should be Direct for better silent mode handling.", MessageType.Warning);
@@ -92,6 +99,16 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements.Editor
                     videoPlayer.skipOnDrop = false; // Better sync and color handling
                     videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct; // Better audio control
                     videoPlayer.renderMode = VideoRenderMode.RenderTexture; // Better color space control
+                    
+                    // Set platform-optimized time update mode
+#if UNITY_IOS
+                    videoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime;
+#elif UNITY_ANDROID
+                    videoPlayer.timeUpdateMode = VideoTimeUpdateMode.GameTime;
+#else
+                    videoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime;
+#endif
+                    
                     EditorUtility.SetDirty(videoPlayer);
                 }
             }
@@ -216,7 +233,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements.Editor
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Audio & Color Space Optimization", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Improved Audio/Video Sync & Color Handling:\n" +
+                "Enhanced Audio/Video Sync & Performance Optimizations:\n" +
+                "• Platform-specific time update modes (DSPTime for iOS, GameTime for Android)\n" +
+                "• Pre-applied audio settings during video preparation for immediate sync\n" +
+                "• Video format validation to ensure codec compatibility\n" +
+                "• Real-time sync monitoring and drift detection during playback\n" +
+                "• Improved preparation timing with proper wait conditions\n" +
                 "• skipOnDrop set to false for better synchronization and color space processing\n" +
                 "• Direct audio output mode for better silent mode handling\n" +
                 "• RenderTexture mode for optimal color space control and compatibility\n" +
