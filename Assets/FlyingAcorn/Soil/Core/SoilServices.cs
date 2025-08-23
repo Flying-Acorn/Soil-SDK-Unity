@@ -52,6 +52,8 @@ namespace FlyingAcorn.Soil.Core
         private bool _sessionAuthSuccess;
         private static int _retryAttempts = 0;
         private static DateTime _lastFailureTime = DateTime.MinValue;
+        private static Exception _lastInitFailureException;
+        
         private static readonly TimeSpan[] _retryIntervals = {
             TimeSpan.FromSeconds(3),
             TimeSpan.FromSeconds(5),
@@ -152,7 +154,14 @@ namespace FlyingAcorn.Soil.Core
             }
             catch (Exception ex)
             {
-                OnInitializationFailed?.Invoke(new SoilException($"Initialization failed: {ex.Message}", SoilExceptionErrorCode.Unknown));
+                try
+                {
+                    HandleInitializationFailure(ex);
+                }
+                catch (Exception e)
+                {
+                    OnInitializationFailed?.Invoke(new SoilException($"Initialization failed: {e.Message}", SoilExceptionErrorCode.Unknown));
+                }
             }
         }
 
@@ -251,10 +260,8 @@ namespace FlyingAcorn.Soil.Core
 
             if (!IsNetworkAvailable)
             {
-                var exception = new SoilException("No network connectivity and no cached authentication data",
+                throw new SoilException("No network connectivity and no cached authentication data",
                     SoilExceptionErrorCode.Timeout);
-                HandleInitializationFailure(exception);
-                throw exception;
             }
 
             lock (_initLock)
@@ -286,11 +293,6 @@ namespace FlyingAcorn.Soil.Core
                 if (t.IsCompletedSuccessfully)
                 {
                     RunOnUnityContext(OnInitializationSuccess);
-                }
-                else if (t.IsFaulted)
-                {
-                    var ex = t.Exception?.InnerException ?? t.Exception;
-                    RunOnUnityContext(() => HandleInitializationFailure(ex));
                 }
             }, TaskContinuationOptions.ExecuteSynchronously);
 
@@ -369,6 +371,12 @@ namespace FlyingAcorn.Soil.Core
 
         private static void HandleInitializationFailure(Exception exception)
         {
+            if (ReferenceEquals(exception, _lastInitFailureException))
+            {
+                return;
+            }
+            _lastInitFailureException = exception;
+
             _retryAttempts++;
             _lastFailureTime = DateTime.UtcNow;
 
@@ -394,6 +402,16 @@ namespace FlyingAcorn.Soil.Core
             }
             if (completedRequests.Count > 0)
                 MyDebug.Verbose($"Soil-Core: Completed {completedRequests.Count} queued requests with exception: [{string.Join(", ", completedRequests)}]");
+
+            try
+            {
+                var soilEx = exception as SoilException ?? new SoilException($"Initialization failed: {exception.Message}", DetermineInitializationFailureCode(exception));
+                RunOnUnityContext(() => OnInitializationFailed?.Invoke(soilEx));
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogError($"Soil-Core: Failed to invoke OnInitializationFailed: {ex.Message}");
+            }
         }
 
         private static void OnInitializationSuccess()
@@ -568,6 +586,61 @@ namespace FlyingAcorn.Soil.Core
             if (GetComponent<DeepLinkHandler>())
                 return;
             gameObject.AddComponent<DeepLinkHandler>();
+        }
+
+        private static SoilExceptionErrorCode DetermineInitializationFailureCode(Exception exception)
+        {
+            try
+            {
+                if (exception == null) return SoilExceptionErrorCode.Unknown;
+
+                if (exception is SoilException se)
+                    return se.ErrorCode;
+
+                if (exception is OperationCanceledException)
+                    return SoilExceptionErrorCode.Canceled;
+
+                if (exception is TimeoutException || exception is TaskCanceledException)
+                    return SoilExceptionErrorCode.Timeout;
+
+                if (!IsNetworkAvailable)
+                    return SoilExceptionErrorCode.TransportError;
+
+                var msg = exception.Message ?? string.Empty;
+                var lower = msg.ToLowerInvariant();
+
+                if (lower.Contains("timeout"))
+                    return SoilExceptionErrorCode.Timeout;
+                if (lower.Contains("network") || lower.Contains("connection") || lower.Contains("unreachable"))
+                    return SoilExceptionErrorCode.TransportError;
+                if (lower.Contains("service unavailable") || lower.Contains("temporarily unavailable"))
+                    return SoilExceptionErrorCode.ServiceUnavailable;
+                if (lower.Contains("too many requests") || lower.Contains("rate limit"))
+                    return SoilExceptionErrorCode.TooManyRequests;
+                if (lower.Contains("forbidden") || lower.Contains("access denied"))
+                    return SoilExceptionErrorCode.Forbidden;
+                if (lower.Contains("not found"))
+                    return SoilExceptionErrorCode.NotFound;
+                if (lower.Contains("conflict"))
+                    return SoilExceptionErrorCode.Conflict;
+                if (lower.Contains("invalid token"))
+                    return SoilExceptionErrorCode.InvalidToken;
+                if (lower.Contains("expired token") || lower.Contains("token expired"))
+                    return SoilExceptionErrorCode.TokenExpired;
+                if (lower.Contains("invalid request") || lower.Contains("bad request"))
+                    return SoilExceptionErrorCode.InvalidRequest;
+                if (lower.Contains("misconfig") || lower.Contains("config") || lower.Contains("configuration"))
+                    return SoilExceptionErrorCode.MisConfiguration;
+
+                if (!Ready)
+                    return SoilExceptionErrorCode.NotReady;
+
+                return SoilExceptionErrorCode.Unknown;
+            }
+            catch
+            {
+                return SoilExceptionErrorCode.Unknown;
+            }
         }
     }
 }
