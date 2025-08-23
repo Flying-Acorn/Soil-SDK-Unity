@@ -67,7 +67,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
 
         private void InitializeAndFetchTest()
         {
-            fetchedDataText.text = "Fetching remote config...";
+            fetchedDataText.text = "Working...";
             
             RemoteConfig.OnServerAnswer -= HandleReceivedConfigs;
             RemoteConfig.OnServerAnswer += HandleReceivedConfigs;

@@ -4,7 +4,6 @@ using JWT;
 using JWT.Algorithms;
 using JWT.Exceptions;
 using JWT.Serializers;
-using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.JWTTools
 {
@@ -46,17 +45,14 @@ namespace FlyingAcorn.Soil.Core.JWTTools
             }
             catch (TokenNotYetValidException)
             {
-                Debug.Log("Token is not valid yet");
                 return false;
             }
             catch (TokenExpiredException)
             {
-                Debug.Log("Token has expired");
                 return false;
             }
             catch (SignatureVerificationException)
             {
-                Debug.Log("Token has invalid signature");
                 return false;
             }
         }

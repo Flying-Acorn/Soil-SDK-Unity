@@ -42,7 +42,7 @@ namespace FlyingAcorn.Soil.Core
         private static SoilServices _instance;
         private static bool _readyBroadcasted;
         private static Task _initTask;
-    private static readonly object _initLock = new object();
+        private static readonly object _initLock = new object();
         private static readonly List<QueuedInitRequest> _queuedInitRequests = new List<QueuedInitRequest>();
         private static readonly object _queueLock = new object();
         private const int MaxQueuedRequests = 200;
@@ -63,7 +63,7 @@ namespace FlyingAcorn.Soil.Core
 
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
-        [UsedImplicitly] public static Action<Exception> OnInitializationFailed;
+        [UsedImplicitly] public static Action<SoilException> OnInitializationFailed;
 
         [UsedImplicitly]
         public static bool Ready
@@ -75,10 +75,11 @@ namespace FlyingAcorn.Soil.Core
                 var sessionAuthValid = _instance?._sessionAuthSuccess ?? false;
                 var initTaskCompleted = _initTask?.IsCompletedSuccessfully ?? false;
                 var authValid = IsAuthenticationCurrentlyValid();
+                var userInfoValid = UserPlayerPrefs.UserInfoInstance != null && !string.IsNullOrEmpty(UserPlayerPrefs.UserInfoInstance.uuid);
 
-                var result = hasInstance && instanceReady && initTaskCompleted && authValid && sessionAuthValid;
+                var result = hasInstance && instanceReady && initTaskCompleted && authValid && sessionAuthValid && userInfoValid;
 
-                MyDebug.Verbose($"Soil-Core Ready check: Instance={hasInstance}, InstanceReady={instanceReady}, InitCompleted={initTaskCompleted}, AuthValid={authValid}, SessionAuthValid={sessionAuthValid} => {result}");
+                MyDebug.Verbose($"Soil-Core Ready check: Instance={hasInstance}, InstanceReady={instanceReady}, InitCompleted={initTaskCompleted}, AuthValid={authValid}, SessionAuthValid={sessionAuthValid}, UserInfoValid={userInfoValid} => {result}");
 
                 return result;
             }
@@ -151,26 +152,8 @@ namespace FlyingAcorn.Soil.Core
             }
             catch (Exception ex)
             {
-                OnInitializationFailed?.Invoke(ex);
+                OnInitializationFailed?.Invoke(new SoilException($"Initialization failed: {ex.Message}", SoilExceptionErrorCode.Unknown));
             }
-        }
-
-        [UsedImplicitly]
-        [System.Obsolete("InitializeAndWait() is deprecated for external use. Use InitializeAsync() with event-based approach instead. Subscribe to OnServicesReady and OnInitializationFailed events.", false)]
-        public static Task<bool> InitializeAndWait()
-        {
-            return Task.Run(async () =>
-            {
-                try
-                {
-                    await Initialize();
-                    return true;
-                }
-                catch (Exception)
-                {
-                    return false;
-                }
-            });
         }
 
         private static async Task Initialize()

@@ -22,16 +22,14 @@ namespace FlyingAcorn.Soil.Socialization
         private static readonly string FriendsUrl = $"{SocializationBaseUrl}friends/";
         private static readonly string FriendsLeaderboardUrl = $"{SocializationBaseUrl}v2/getfriendleaderboard/";
 
-        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
-        public static async Task Initialize()
-        {
-            await SoilServices.InitializeAndWait();
-        }
-
         public static async Task<FriendsResponse> GetFriends()
         {
-            await SoilServices.InitializeAndWait();
-            
+            if (!Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot get friends.", 
+                    SoilExceptionErrorCode.NotReady);
+            }
+
             using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             friendshipClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -91,9 +89,13 @@ namespace FlyingAcorn.Soil.Socialization
         {
             if (string.IsNullOrEmpty(uuid))
                 throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
-            
-            await SoilServices.InitializeAndWait();
-            
+
+            if (!SoilServices.Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot add friend.", 
+                    SoilExceptionErrorCode.NotReady);
+            }
+
             using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             friendshipClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -156,9 +158,13 @@ namespace FlyingAcorn.Soil.Socialization
         {
             if (string.IsNullOrEmpty(uuid))
                 throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
-            
-            await SoilServices.InitializeAndWait();
-            
+
+            if (!SoilServices.Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot remove friend.", 
+                    SoilExceptionErrorCode.NotReady);
+            }
+
             using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             friendshipClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -222,7 +228,11 @@ namespace FlyingAcorn.Soil.Socialization
             if (string.IsNullOrEmpty(leaderboardId))
                 throw new SoilException("Leaderboard ID cannot be null or empty",
                     SoilExceptionErrorCode.InvalidRequest);
-            await SoilServices.InitializeAndWait();
+            if (!SoilServices.Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot get friends leaderboard.",
+                    SoilExceptionErrorCode.NotReady);
+            }
             var payload = new Dictionary<string, object>
             {
                 { "leaderboard_identifier", leaderboardId },

@@ -25,9 +25,11 @@ namespace FlyingAcorn.Soil.Advertisement
         private static readonly string AdvertisementBaseUrl = $"{Core.Data.Constants.ApiUrl}/advertisement/";
         private static readonly string CampaignsUrl = $"{AdvertisementBaseUrl}campaigns/";
         private static readonly string CampaignsSelectUrl = $"{CampaignsUrl}select/";
-        private static bool _campaignRequested;
+    private static bool _campaignRequested;
+    private static bool _isInitializing;
         private static Campaign availableCampaign = null;
         private static List<AdFormat> _requestedFormats;
+        private static Task _cachedAssetsTask;
 
         // Ad placement instances
         private static SoilAdManager _adPlacementManager;
@@ -45,7 +47,7 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
-        public static async void InitializeAsync(List<AdFormat> adFormats)
+        public static void InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)
             {
@@ -56,26 +58,69 @@ namespace FlyingAcorn.Soil.Advertisement
             if (availableCampaign != null)
                 return;
 
+            if (_isInitializing)
+                return;
+
+            _isInitializing = true;
             _requestedFormats = adFormats.Distinct().ToList();
 
             // Create ad placement manager if it doesn't exist
             AssignAdPlacementManager();
 
-            // Load cached assets from previous session asynchronously
-            await AssetCache.LoadCachedAssetsAsync();
+            // Start loading cached assets in background; we'll await inside the success handler
+            _cachedAssetsTask = AssetCache.LoadCachedAssetsAsync();
 
-            try
+            // If SoilServices already ready, proceed immediately
+            if (SoilServices.Ready)
             {
-                await SoilServices.InitializeAndWait();
-            }
-            catch (Exception e)
-            {
-                Events.InvokeOnInitializeFailed(e.Message);
+                // run the continuation on the thread pool to avoid blocking caller
+                _ = HandleServicesReadyAsync(_cachedAssetsTask);
                 return;
+            }
+
+            // Otherwise subscribe to services events
+            UnlistenCore();
+            SoilServices.OnInitializationFailed += SoilInitFailed;
+            SoilServices.OnServicesReady += SoilInitSuccess;
+
+            // Trigger services initialization if not already started
+            SoilServices.InitializeAsync();
+        }
+
+        private static void UnlistenCore()
+        {
+            SoilServices.OnInitializationFailed -= SoilInitFailed;
+            SoilServices.OnServicesReady -= SoilInitSuccess;
+        }
+
+        private static void SoilInitFailed(Exception exception)
+        {
+            UnlistenCore();
+            _isInitializing = false;
+            _campaignRequested = false;
+            Events.InvokeOnInitializeFailed(exception?.Message ?? "Initialization failed");
+        }
+
+        private static async void SoilInitSuccess()
+        {
+            // Now we can pass the stored cached assets task
+            await HandleServicesReadyAsync(_cachedAssetsTask);
+        }
+
+        private static async Task HandleServicesReadyAsync(Task cachedAssetsTask)
+        {
+            UnlistenCore();
+
+            if (cachedAssetsTask != null)
+            {
+                try { await cachedAssetsTask; } catch { /* ignore cached asset load failures */ }
             }
 
             if (_campaignRequested)
+            {
+                _isInitializing = false;
                 return;
+            }
 
             _campaignRequested = true;
             try
@@ -87,6 +132,7 @@ namespace FlyingAcorn.Soil.Advertisement
                     availableCampaign = null;
                     AdvertisementPlayerPrefs.CachedCampaign = null;
                     _campaignRequested = false;
+                    _isInitializing = false;
                     Events.InvokeOnInitialized();
                     return;
                 }
@@ -95,12 +141,14 @@ namespace FlyingAcorn.Soil.Advertisement
             catch (SoilException ex)
             {
                 _campaignRequested = false;
+                _isInitializing = false;
                 Events.InvokeOnInitializeFailed($"Failed to select campaign: {ex.Message} - {ex.ErrorCode}");
                 return;
             }
             catch (Exception ex)
             {
                 _campaignRequested = false;
+                _isInitializing = false;
                 Events.InvokeOnInitializeFailed($"Unexpected error selecting campaign: {ex.Message}");
                 return;
             }
@@ -109,6 +157,7 @@ namespace FlyingAcorn.Soil.Advertisement
             // Start asset caching in background - don't block initialization on this
             _ = CacheAds(availableCampaign);
             _campaignRequested = false;
+            _isInitializing = false;
         }
 
         /// <summary>

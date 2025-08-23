@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Threading.Tasks;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
 using FlyingAcorn.Soil.Core.User.Authentication;
@@ -32,7 +33,7 @@ namespace FlyingAcorn.Soil.Core.User
             }
             else if (!_fetchPlayerInfoTask.IsCompleted)
             {
-                Debug.Log("Player info fetch already in progress, sharing existing request...");
+                MyDebug.Verbose("Player info fetch already in progress, sharing existing request...");
             }
             
             try
@@ -52,7 +53,7 @@ namespace FlyingAcorn.Soil.Core.User
 
         private static async Task<UserInfo> FetchPlayerInfoInternal()
         {
-            Debug.Log("Fetching player info...");
+            MyDebug.Verbose("Fetching player info...");
 
             if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
             {
@@ -61,7 +62,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access)) // Because Authenticate is dependent on this
             {
-                Debug.LogWarning("Access token is not valid. Trying to refresh tokens...");
+                MyDebug.LogWarning("Access token is not valid. Trying to refresh tokens...");
                 await Authenticate.RefreshTokenIfNeeded(true);
             }
 
@@ -106,7 +107,7 @@ namespace FlyingAcorn.Soil.Core.User
             }
             
             ReplaceUser(fetchedUser, UserPlayerPrefs.TokenData);
-            Debug.Log($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
+            MyDebug.Verbose($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
@@ -114,12 +115,16 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly]
         public static async Task<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
         {
-            await SoilServices.InitializeAndWait();
+            if (!SoilServices.Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot update player info.", 
+                    SoilExceptionErrorCode.NotReady);
+            }
 
             var legalFields = UserPlayerPrefs.UserInfo.GetChangedFields(userInfo);
             if (legalFields.Count == 0)
             {
-                Debug.Log("No legal fields to update.");
+                MyDebug.Verbose("No legal fields to update.");
                 return userInfo;
             }
 
@@ -170,7 +175,7 @@ namespace FlyingAcorn.Soil.Core.User
             }
             
             ReplaceUser(updatedUser, UserPlayerPrefs.TokenData);
-            Debug.Log($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
+            MyDebug.Verbose($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 

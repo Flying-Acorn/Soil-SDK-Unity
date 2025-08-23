@@ -19,37 +19,29 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
         private void Start()
         {
             Failed("Initializing Soil SDK...");
-            SoilServices.OnServicesReady += OnSoilServicesReady;
+            Purchasing.OnPurchasingInitialized += OnPurchasingInitialized;
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
-            
+
             Purchasing.OnItemsReceived += FillItems;
             Purchasing.OnPurchaseSuccessful += OnPurchaseSuccessful;
             Purchasing.OnPurchaseStart += OnPurchaseStart;
             verifyButton.onClick.AddListener(VerifyAllPurchases);
 
-            if (SoilServices.Ready)
+            if (!Purchasing.Ready)
             {
-                OnSoilServicesReady();
+                Purchasing.Initialize(verifyOnInitialize: true);
             }
-            else
-            {
-                SoilServices.InitializeAsync();
-            }
-        }
-        
-        private void OnDestroy()
-        {
-            if (SoilServices.OnServicesReady != null)
-                SoilServices.OnServicesReady -= OnSoilServicesReady;
-            if (SoilServices.OnInitializationFailed != null)
-                SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
         }
 
-        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
-        private void OnSoilServicesReady()
+        private void OnPurchasingInitialized()
         {
-            Failed("Soil SDK ready. Initializing Purchasing...");
-            _ = Purchasing.Initialize();
+            Failed("Purchasing initialized");
+        }
+
+        private void OnDestroy()
+        {
+            Purchasing.OnPurchasingInitialized -= OnPurchasingInitialized;
+            SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
         }
 
         private void OnSoilServicesInitializationFailed(Exception exception)
@@ -93,8 +85,9 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             }
         }
 
-        private static void BuyItem(string sku)
+        private void BuyItem(string sku)
         {
+            Failed($"Purchasing {sku}...");
             _ = Purchasing.BuyItem(sku);
         }
 

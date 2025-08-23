@@ -50,11 +50,23 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             UpdateButtons();
         }
 
-        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
         private void OnSoilServicesReady()
         {
             statusText.text = "Soil SDK ready. Initializing Social Authentication...";
-            _ = SocialAuthentication.Initialize(mySettings);
+            SocialAuthentication.OnInitializationSuccess += OnSocialAuthenticationInitialized;
+            SocialAuthentication.OnInitializationFailed += OnSocialAuthenticationFailed;
+            SocialAuthentication.Initialize(mySettings);
+        }
+
+        private void OnSocialAuthenticationFailed(SoilException exception)
+        {
+            statusText.text = "Social Authentication initialization failed: " + exception.Message;
+        }
+
+        private void OnSocialAuthenticationInitialized()
+        {
+            statusText.text = "Social Authentication initialized successfully.";
+            UpdateButtons();
         }
 
         protected override void OnEnable()
@@ -94,31 +106,35 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             SocialAuthentication.Update();
         }
 
-        private static void GetLinks()
+        private void GetLinks()
         {
+            statusText.text = "Getting all links...";
             SocialAuthentication.GetLinks();
         }
 
-        private static void Unlink()
+        private void Unlink()
         {
             var link = LinkingPlayerPrefs.Links.FirstOrDefault();
             if (link == null)
             {
-                Debug.LogError("No link found to unlink");
+                statusText.text = "No link found to unlink";
                 return;
             }
 
+            statusText.text = $"Unlinking {link.detail.app_party.party}...";
             SocialAuthentication.Unlink(link.detail.app_party.party);
             
         }
 
-        private static void LinkGoogle()
+        private void LinkGoogle()
         {
+            statusText.text = "Linking Google account...";
             SocialAuthentication.Link(Constants.ThirdParty.google);
         }
 
-        private static void LinkApple()
+        private void LinkApple()
         {
+            statusText.text = "Linking Apple account...";
             SocialAuthentication.Link(Constants.ThirdParty.apple);
         }
 

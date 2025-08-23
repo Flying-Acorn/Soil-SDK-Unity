@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
@@ -14,11 +13,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
     public abstract class SocialAuthentication
     {
-        private static bool Initialized =>
-            _thirdPartySettings != null && _initTask is { IsCompletedSuccessfully: true };
+        private static bool Initialized => SoilServices.Ready && _initialized;
 
-        private static Task _initTask;
         private static List<ThirdPartySettings> _thirdPartySettings;
+        public static Action OnInitializationSuccess { get; set; }
+        public static Action<SoilException> OnInitializationFailed { get; set; }
         public static Action<LinkPostResponse> OnLinkSuccessCallback { get; set; }
         public static Action<UnlinkResponse> OnUnlinkSuccessCallback { get; set; }
         public static Action<LinkGetResponse> OnGetAllLinksSuccessCallback { get; set; }
@@ -28,39 +27,55 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public static Action<Constants.ThirdParty, SoilException> OnGetAllLinksFailureCallback { get; set; }
 
         private static List<IPlatformAuthentication> _availableHandlers = new();
+        protected static bool _isInitializing;
+        protected static bool _initialized;
 
-        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
-        public static async Task Initialize(List<ThirdPartySettings> thirdPartySettings = null)
+        public static void Initialize(List<ThirdPartySettings> thirdPartySettings = null)
         {
             if (Initialized)
                 return;
-
-            if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
-                _initTask = null;
-
-            if (_initTask != null)
-            {
-                await _initTask;
+            if (_isInitializing)
                 return;
-            }
+
+            _isInitializing = true;
+            _initialized = false;
 
             _thirdPartySettings = thirdPartySettings;
-            _initTask = await InitializeInternal();
+            
+            if (SoilServices.Ready)
+            {
+                SoilInitSuccess();
+                return;
+            }
+            UnlistenCore();
+            SoilServices.OnInitializationFailed += SoilInitFailed;
+            SoilServices.OnServicesReady += SoilInitSuccess;
         }
 
-        private static async Task<Task> InitializeInternal()
+        private static void UnlistenCore()
         {
-            MyDebug.Info("Initializing Social Authentication");
-            await SoilServices.InitializeAndWait();
+            SoilServices.OnInitializationFailed -= SoilInitFailed;
+            SoilServices.OnServicesReady -= SoilInitSuccess;
+        }
+
+        private static void SoilInitFailed(Exception exception)
+        {
+            UnlistenCore();
+            _isInitializing = false;
+            var soilEx = exception as SoilException ?? new SoilException(exception?.Message ?? "Initialization failed");
+            FireInitFailed(soilEx);
+        }
+
+        private static void SoilInitSuccess()
+        {
+            UnlistenCore();
             if (_thirdPartySettings == null)
             {
                 _thirdPartySettings = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();
                 if (_thirdPartySettings.Count == 0)
-                    throw new SoilException("No third party settings found",
-                        SoilExceptionErrorCode.ServiceUnavailable);
+                    FireInitFailed(new SoilException("No Third Party Settings found", SoilExceptionErrorCode.NotReady));
             }
 
-            await UserApiHandler.FetchPlayerInfo();
             foreach (var party in LinkingPlayerPrefs.SilentUnlinkQueue)
                 Unlink(party);
 
@@ -74,7 +89,22 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             IPlatformAuthentication.OnSignInFailureCallback += OnLinkFailureCallback;
             IPlatformAuthentication.OnAccessRevoked += AccessRevoked;
             IPlatformAuthentication.OnSignInSuccessCallback += OnSigninSuccess;
-            return Task.CompletedTask;
+
+            FireInitSuccess();
+        }
+
+        private static void FireInitFailed(SoilException soilException)
+        {
+            _isInitializing = false;
+            _initialized = false;
+            OnInitializationFailed?.Invoke(soilException);
+        }
+
+        private static void FireInitSuccess()
+        {
+            _isInitializing = false;
+            _initialized = true;
+            OnInitializationSuccess?.Invoke();
         }
 
         private static void AccessRevoked(ThirdPartySettings obj)

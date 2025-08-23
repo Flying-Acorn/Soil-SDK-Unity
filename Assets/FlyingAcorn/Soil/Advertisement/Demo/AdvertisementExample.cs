@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Data;
@@ -29,7 +28,7 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             showInterstitialButton.interactable = false;
             showRewardedButton.interactable = false;
 
-            getCampaignButton.onClick.AddListener(Init);
+            getCampaignButton.onClick.AddListener(GetCampaignButtonListener);
             showBannerButton.onClick.AddListener(BannerButtonListener);
             showInterstitialButton.onClick.AddListener(InterstitialButtonListener);
             showRewardedButton.onClick.AddListener(RewardedButtonListener);
@@ -178,7 +177,7 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
                 OnInitialized();
                 return;
             }
-            
+
             Advertisement.InitializeAsync(new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded });
         }
 
@@ -211,8 +210,32 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             Advertisement.LoadAd(AdFormat.rewarded);
         }
 
-        private void BannerButtonListener() => Advertisement.ShowAd(AdFormat.banner);
-        private void InterstitialButtonListener() => Advertisement.ShowAd(AdFormat.interstitial);
-        private void RewardedButtonListener() => Advertisement.ShowAd(AdFormat.rewarded);
+        private void GetCampaignButtonListener()
+        {
+            if (statusText != null) statusText.text += "\nGetCampaign button clicked.";
+            getCampaignButton.interactable = false;
+            Init();
+        }
+
+        private void BannerButtonListener()
+        {
+            if (statusText != null) statusText.text += "\nShow Banner clicked. Showing...";
+            showBannerButton.interactable = false;
+            Advertisement.ShowAd(AdFormat.banner);
+        }
+
+        private void InterstitialButtonListener()
+        {
+            if (statusText != null) statusText.text += "\nShow Interstitial clicked. Showing...";
+            showInterstitialButton.interactable = false;
+            Advertisement.ShowAd(AdFormat.interstitial);
+        }
+
+        private void RewardedButtonListener()
+        {
+            if (statusText != null) statusText.text += "\nShow Rewarded clicked. Showing...";
+            showRewardedButton.interactable = false;
+            Advertisement.ShowAd(AdFormat.rewarded);
+        }
     }
 }

@@ -46,12 +46,6 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         private static readonly string FetchUrl = $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
 
-
-        private static async Task Initialize()
-        {
-            await SoilServices.InitializeAndWait();
-        }
-
         public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
         {
             if (_fetching) return;
@@ -84,7 +78,10 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         private static async Task FetchRemoteConfig()
         {
-            await Initialize();
+            if (!SoilServices.Ready)
+            {
+                throw new SoilException("Soil services are not ready", SoilExceptionErrorCode.NotReady);
+            }
 
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
                 { { "properties", GetPlayerProperties() } });

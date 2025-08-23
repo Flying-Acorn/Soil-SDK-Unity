@@ -38,11 +38,9 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
                 SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
         }
         
-        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
         private void OnSoilServicesReady()
         {
             statusText.text = "Soil SDK ready. Initializing CloudSave...";
-            _ = CloudSave.Initialize();
             LoadAll();
         }
         
@@ -53,14 +51,15 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
 
         private async void Save()
         {
+            statusText.text = "Saving data...";
             try
             {
                 await CloudSave.SaveAsync(keyInput.text, valueInput.text);
-                statusText.text = "";
+                statusText.text = "Data saved successfully";
             }
             catch (Exception e)
             {
-                statusText.text = e.Message;
+                statusText.text = $"Save failed: {e.Message}";
             }
 
             LoadAll();
@@ -68,15 +67,16 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
 
         private async void Load()
         {
+            statusText.text = "Loading data...";
             try
             {
                 var value = await CloudSave.LoadAsync(keyInput.text);
                 MyDebug.Info($"Loaded {value.key}: {value.value}");
-                statusText.text = "";
+                statusText.text = "Data loaded successfully";
             }
             catch (Exception e)
             {
-                statusText.text = e.Message;
+                statusText.text = $"Load failed: {e.Message}";
             }
 
             LoadAll();

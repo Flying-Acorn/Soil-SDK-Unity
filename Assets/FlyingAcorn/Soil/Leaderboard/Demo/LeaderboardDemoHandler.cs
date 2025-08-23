@@ -51,20 +51,10 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
                 SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
         }
 
-        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
-        private async void OnSoilServicesReady()
+        private void OnSoilServicesReady()
         {
-            Failed("Soil SDK ready. Initializing Leaderboard...");
-            try
-            {
-                await Leaderboard.Initialize();
-                Failed("Leaderboard ready. Press Get Leaderboard");
-                SetYourScore();
-            }
-            catch (Exception e)
-            {
-                Failed($"Failed to initialize Leaderboard: {e.Message}");
-            }
+            Failed("Leaderboard ready. Press Get Leaderboard");
+            SetYourScore();
         }
 
         private void SetYourScore()
@@ -79,20 +69,22 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
         private async void ReportScore()
         {
-
+            Failed("Reporting score...");
             try
             {
                 var userScore = await Leaderboard.ReportScore(score, "demo_dec_manual");
+                Failed("Score reported successfully");
                 GetLeaderboard(userScore);
             }
             catch (Exception e)
             {
-                Failed(e.Message);
+                Failed($"Report score failed: {e.Message}");
             }
         }
 
         private async void GetLeaderboard(UserScore userScore)
         {
+            Failed("Fetching leaderboard...");
             try
             {
                 var leaderboard = await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount, _relativeMode);
@@ -100,7 +92,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             }
             catch (Exception e)
             {
-                Failed(e.Message);
+                Failed($"Get leaderboard failed: {e.Message}");
             }
         }
 

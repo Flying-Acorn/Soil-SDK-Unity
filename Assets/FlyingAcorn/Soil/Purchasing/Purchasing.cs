@@ -21,7 +21,9 @@ namespace FlyingAcorn.Soil.Purchasing
 {
     public static class Purchasing
     {
-        private static bool _eventsSubscribed;
+        private static bool _isInitializing;
+        private static bool _initialized;
+        public static bool Ready => _initialized && SoilServices.Ready;
         private static string PurchasingAPIUrl => PurchasingPlayerPrefs.SavedSettings?.api ?? Constants.ApiUrl;
         private static string PurchaseBaseUrl => $"{PurchasingAPIUrl}/purchase";
         private static string ItemsUrl => $"{PurchasingAPIUrl}/items/";
@@ -32,49 +34,80 @@ namespace FlyingAcorn.Soil.Purchasing
 
         [UsedImplicitly] public static Action<Item> OnPurchaseStart;
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
+        [UsedImplicitly] public static Action<SoilException> OnItemsFailed;
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
         [UsedImplicitly] public static Action OnPurchasingInitialized;
+        [UsedImplicitly] public static Action<SoilException> OnInitializationFailed;
         [UsedImplicitly] public static Action<Dictionary<string, string>> OnDeeplinkActivated;
         private static Task _verifyTask;
+        private static bool _verifyOnInitialize;
 
         [UsedImplicitly]
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
 
-        public static bool Ready { get; private set; }
-
-        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
-        public static async Task Initialize(bool verifyOnInitialize = true)
+        public static void Initialize(bool verifyOnInitialize = true)
         {
-            await SoilServices.InitializeAndWait();
-
-            if (_eventsSubscribed)
+            if (Ready || _isInitializing)
                 return;
-            _eventsSubscribed = true;
+            _isInitializing = true;
+
+            _verifyOnInitialize = verifyOnInitialize;
+
+            if (SoilServices.Ready)
+            {
+                InitializeInternal();
+                return;
+            }
+            UnsubscribeFromCore();
+            SoilServices.OnServicesReady += InitializeInternal;
+            SoilServices.OnInitializationFailed += InitFailed;
+            SoilServices.InitializeAsync();
+        }
+
+        private static void InitFailed(SoilException exception)
+        {
+            _isInitializing = false;
+            MyDebug.LogWarning($"FlyingAcorn ====> Purchasing initialization failed: {exception.Message}");
+            UnsubscribeFromCore();
+            OnInitializationFailed?.Invoke(exception);
+        }
+
+        private static void OnPurchasingInitializeFailed(SoilException exception)
+        {
+            InitFailed(exception);
+        }
+
+        private static void UnsubscribeFromCore()
+        {
+            SoilServices.OnServicesReady -= InitializeInternal;
+            SoilServices.OnInitializationFailed -= InitFailed;
+        }
+
+        private static void InitializeInternal()
+        {
+            UnsubscribeFromCore();
             OnPaymentDeeplinkActivated -= OpenInvoice;
             OnPaymentDeeplinkActivated += OpenInvoice;
-            if (verifyOnInitialize)
+            if (_verifyOnInitialize)
             {
                 OnPurchasingInitialized -= SafeVerifyAllPurchases;
                 OnPurchasingInitialized += SafeVerifyAllPurchases;
             }
 
+            OnItemsFailed -= OnPurchasingInitializeFailed;
+            OnItemsFailed += OnPurchasingInitializeFailed;
             OnItemsReceived -= PurchasingInitialized;
             OnItemsReceived += PurchasingInitialized;
-            try
-            {
-                await QueryItems();
-            }
-            catch (Exception e)
-            {
-                _eventsSubscribed = false;
-                throw new SoilException($"Failed to initialize purchasing: {e.Message}",
-                    SoilExceptionErrorCode.ServiceUnavailable);
-            }
+            _ = QueryItems();
         }
 
         public static void DeInitialize()
         {
-            _eventsSubscribed = false;
+            UnsubscribeFromCore();
+            _isInitializing = false;
+            _initialized = false;
+            _verifyTask = null;
+            _verifyOnInitialize = false;
             OnPaymentDeeplinkActivated = null;
             OnPurchasingInitialized = null;
             OnItemsReceived = null;
@@ -90,7 +123,9 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void PurchasingInitialized(List<Item> items)
         {
             OnItemsReceived -= PurchasingInitialized;
-            Ready = true;
+            // mark initialization complete
+            _isInitializing = false;
+            _initialized = true;
             OnPurchasingInitialized?.Invoke();
         }
 

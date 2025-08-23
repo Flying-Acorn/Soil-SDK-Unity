@@ -20,13 +20,7 @@ namespace FlyingAcorn.Soil.CloudSave
     public static class CloudSave
     {
         private static readonly string CloudSaveUrl = $"{Constants.ApiUrl}/cloudsave/";
-
-        [UsedImplicitly]
-        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
-        public static async Task Initialize()
-        {
-            await SoilServices.InitializeAndWait();
-        }
+        public static bool Ready => SoilServices.Ready;
 
         public static async Task SaveAsync(string key, object value, bool isPublic = false)
         {
@@ -40,7 +34,6 @@ namespace FlyingAcorn.Soil.CloudSave
                 throw new SoilException("Value cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
 
-
             var payload = new Dictionary<string, object>()
             {
                 { "key", key },
@@ -48,7 +41,11 @@ namespace FlyingAcorn.Soil.CloudSave
                 { "is_public", isPublic }
             };
 
-            await SoilServices.InitializeAndWait();
+            if (!Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot save data.",
+                    SoilExceptionErrorCode.NotReady);
+            }
 
             var stringBody = JsonConvert.SerializeObject(payload, Formatting.None);
 
@@ -102,7 +99,11 @@ namespace FlyingAcorn.Soil.CloudSave
                 throw new SoilException("Key cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
 
-            await SoilServices.InitializeAndWait();
+            if (!Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot load data.",
+                    SoilExceptionErrorCode.NotReady);
+            }
 
             using var loadClient = new HttpClient();
             loadClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
