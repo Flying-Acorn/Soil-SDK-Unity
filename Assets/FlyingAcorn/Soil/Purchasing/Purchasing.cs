@@ -42,9 +42,10 @@ namespace FlyingAcorn.Soil.Purchasing
 
         public static bool Ready { get; private set; }
 
+        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
         public static async Task Initialize(bool verifyOnInitialize = true)
         {
-            await SoilServices.Initialize();
+            await SoilServices.InitializeAndWait();
 
             if (_eventsSubscribed)
                 return;

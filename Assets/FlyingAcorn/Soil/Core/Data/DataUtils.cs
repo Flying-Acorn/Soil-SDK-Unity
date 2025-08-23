@@ -135,5 +135,24 @@ namespace FlyingAcorn.Soil.Core.Data
             MyDebug.Verbose($"Using country-specific API URL for region {regionEnum}: {settingForCountry.ApiUrl}");
             return settingForCountry.ApiUrl ?? FallBackApiUrl;
         }
+        
+        public static async System.Threading.Tasks.Task ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
+        {
+            var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
+            var operation = request.SendWebRequest();
+            operation.completed += _ => tcs.SetResult(true);
+            
+            var timeoutTask = System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
+            var completedTask = await System.Threading.Tasks.Task.WhenAny(tcs.Task, timeoutTask);
+            
+            if (completedTask == timeoutTask)
+            {
+                request.Abort();
+                throw new SoilException($"Request timeout after {timeoutSeconds}s", 
+                    SoilExceptionErrorCode.Timeout);
+            }
+            
+            await tcs.Task;
+        }
     }
 }

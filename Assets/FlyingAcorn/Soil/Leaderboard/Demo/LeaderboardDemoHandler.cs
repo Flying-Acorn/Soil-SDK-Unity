@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Leaderboard.Models;
+// ...existing code...
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,22 +22,49 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         private List<LeaderboardRow> _rows = new();
         private bool _relativeMode;
 
-        private async void Start()
+        private void Start()
         {
             SetRelativeText();
-            Failed("Press Get Leaderboard");
-            try
+            Failed("Initializing Soil SDK...");
+
+            SoilServices.OnServicesReady += OnSoilServicesReady;
+            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
+
+            if (SoilServices.Ready)
             {
-                await Leaderboard.Initialize();
-                SetYourScore();
+                OnSoilServicesReady();
             }
-            catch
+            else
             {
-                Debug.LogError("Failed to initialize SoilServices");
+                SoilServices.InitializeAsync();
             }
 
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
+        }
+        
+        private void OnDestroy()
+        {
+            if (SoilServices.OnServicesReady != null)
+                SoilServices.OnServicesReady -= OnSoilServicesReady;
+            if (SoilServices.OnInitializationFailed != null)
+                SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+        }
+
+        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
+        private async void OnSoilServicesReady()
+        {
+            Failed("Soil SDK ready. Initializing Leaderboard...");
+            try
+            {
+                await Leaderboard.Initialize();
+                Failed("Leaderboard ready. Press Get Leaderboard");
+                SetYourScore();
+            }
+            catch (Exception e)
+            {
+                Failed($"Failed to initialize Leaderboard: {e.Message}");
+            }
         }
 
         private void SetYourScore()
@@ -79,6 +107,11 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         private void Failed(string error)
         {
             resultText.text = error;
+        }
+
+        private void OnSoilServicesInitializationFailed(Exception exception)
+        {
+            Failed($"SDK initialization failed: {exception.Message}");
         }
 
         private void GetLeaderboardSuccess(List<UserScore> rows)

@@ -28,15 +28,33 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         protected override void Awake()
         {
             base.Awake();
-            _ = SocialAuthentication.Initialize(mySettings);
+            
+            // Initialize Soil SDK first
+            statusText.text = "Initializing Soil SDK...";
+            SoilServices.OnServicesReady += OnSoilServicesReady;
+            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
 
-            statusText.text = "";
+            if (SoilServices.Ready)
+            {
+                OnSoilServicesReady();
+            }
+            else
+            {
+                SoilServices.InitializeAsync();
+            }
 
             linkGoogleButton.onClick.AddListener(LinkGoogle);
             linkAppleButton.onClick.AddListener(LinkApple);
             unlinkButton.onClick.AddListener(Unlink);
             getAllLinksButton.onClick.AddListener(GetLinks);
             UpdateButtons();
+        }
+
+        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
+        private void OnSoilServicesReady()
+        {
+            statusText.text = "Soil SDK ready. Initializing Social Authentication...";
+            _ = SocialAuthentication.Initialize(mySettings);
         }
 
         protected override void OnEnable()
@@ -54,6 +72,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         protected override void OnDisable()
         {
             base.OnDisable();
+            SoilServices.OnServicesReady -= OnSoilServicesReady;
+            SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
             SocialAuthentication.OnLinkSuccessCallback -= OnLinkSuccess;
             SocialAuthentication.OnLinkFailureCallback -= OnFailure;
             SocialAuthentication.OnUnlinkSuccessCallback -= OnUnlinkSuccess;
@@ -106,6 +126,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         {
             statusText.text = $"Get all links success: {JsonConvert.SerializeObject(linkGetResponse)}";
             UpdateButtons();
+        }
+
+        private void OnSoilServicesInitializationFailed(Exception exception)
+        {
+            statusText.text = $"SDK initialization failed: {exception.Message}";
         }
 
         private void OnUnlinkSuccess(UnlinkResponse obj)

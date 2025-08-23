@@ -73,12 +73,7 @@ namespace FlyingAcorn.Soil.Core.User
             request.SetRequestHeader("Authorization", authHeader);
             request.SetRequestHeader("Accept", "application/json");
 
-            // Use TaskCompletionSource for proper async/await with UnityWebRequest
-            var tcs = new TaskCompletionSource<bool>();
-            var operation = request.SendWebRequest();
-            operation.completed += _ => tcs.SetResult(true);
-            
-            await tcs.Task;
+            await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -119,7 +114,7 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly]
         public static async Task<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
         {
-            await SoilServices.Initialize();
+            await SoilServices.InitializeAndWait();
 
             var legalFields = UserPlayerPrefs.UserInfo.GetChangedFields(userInfo);
             if (legalFields.Count == 0)
@@ -142,12 +137,7 @@ namespace FlyingAcorn.Soil.Core.User
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Accept", "application/json");
 
-            // Use TaskCompletionSource for proper async/await with UnityWebRequest
-            var tcs = new TaskCompletionSource<bool>();
-            var operation = request.SendWebRequest();
-            operation.completed += _ => tcs.SetResult(true);
-            
-            await tcs.Task;
+            await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
 
             if (request.result != UnityWebRequest.Result.Success)
             {

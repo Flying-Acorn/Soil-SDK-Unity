@@ -63,6 +63,7 @@ namespace FlyingAcorn.Soil.Core
 
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
         [UsedImplicitly] public static Action OnServicesReady;
+        [UsedImplicitly] public static Action<Exception> OnInitializationFailed;
 
         [UsedImplicitly]
         public static bool Ready
@@ -121,7 +122,7 @@ namespace FlyingAcorn.Soil.Core
             _lastFailureTime = DateTime.MinValue;
             CompleteAndClearQueuedRequests(new SoilException("Initialization canceled due to user change", SoilExceptionErrorCode.Canceled));
 
-            _ = Initialize();
+            InitializeAsync();
         }
 
         private void OnDestroy()
@@ -131,14 +132,50 @@ namespace FlyingAcorn.Soil.Core
             _initTask = null;
             _readyBroadcasted = false;
             OnServicesReady = null;
+            OnInitializationFailed = null;
             UserApiHandler.OnUserFilled -= OnUserChanged;
 
             CompleteAndClearQueuedRequests(new SoilException("SoilServices was destroyed", SoilExceptionErrorCode.Canceled));
         }
 
-        internal static async Task Initialize()
+        public static void InitializeAsync()
         {
-            var deadline = DateTime.UtcNow.AddSeconds(Math.Max(1, UserPlayerPrefs.RequestTimeout));
+            _ = InitializeOnMainThreadAsync();
+        }
+
+        private static async Task InitializeOnMainThreadAsync()
+        {
+            try
+            {
+                await Initialize();
+            }
+            catch (Exception ex)
+            {
+                OnInitializationFailed?.Invoke(ex);
+            }
+        }
+
+        [UsedImplicitly]
+        [System.Obsolete("InitializeAndWait() is deprecated for external use. Use InitializeAsync() with event-based approach instead. Subscribe to OnServicesReady and OnInitializationFailed events.", false)]
+        public static Task<bool> InitializeAndWait()
+        {
+            return Task.Run(async () =>
+            {
+                try
+                {
+                    await Initialize();
+                    return true;
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            });
+        }
+
+        private static async Task Initialize()
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(UserPlayerPrefs.RequestTimeout);
             CleanupExpiredRequests();
 
             if (_lastFailureTime != DateTime.MinValue)
@@ -317,7 +354,7 @@ namespace FlyingAcorn.Soil.Core
                                     if (_lastFailureTime != DateTime.MinValue && !Ready)
                                     {
                                         MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
-                                        _ = Initialize();
+                                        InitializeAsync();
                                     }
                                 });
                             }
@@ -338,7 +375,7 @@ namespace FlyingAcorn.Soil.Core
             if (_lastFailureTime != DateTime.MinValue && !Ready)
             {
                 MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
-                _ = Initialize();
+                InitializeAsync();
             }
         }
 
@@ -353,7 +390,7 @@ namespace FlyingAcorn.Soil.Core
             _lastFailureTime = DateTime.UtcNow;
 
             var retryInterval = GetCurrentRetryInterval();
-            MyDebug.LogError($"Soil-Core: Initialization failed (attempt #{_retryAttempts}). " +
+            MyDebug.Info($"Soil-Core: Initialization failed (attempt #{_retryAttempts}). " +
                            $"Next retry in {retryInterval.TotalSeconds}s. Error: {exception.Message}");
 
             ScheduleRetryAfterCooldown(retryInterval);

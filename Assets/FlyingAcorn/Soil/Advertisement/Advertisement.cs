@@ -66,7 +66,7 @@ namespace FlyingAcorn.Soil.Advertisement
 
             try
             {
-                await SoilServices.Initialize();
+                await SoilServices.InitializeAndWait();
             }
             catch (Exception e)
             {

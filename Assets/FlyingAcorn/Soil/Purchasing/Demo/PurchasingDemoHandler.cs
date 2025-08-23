@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Purchasing.Models;
 using TMPro;
 using UnityEngine;
@@ -16,12 +18,43 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
 
         private void Start()
         {
-            Failed("Getting items...");
+            Failed("Initializing Soil SDK...");
+            SoilServices.OnServicesReady += OnSoilServicesReady;
+            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
+            
             Purchasing.OnItemsReceived += FillItems;
             Purchasing.OnPurchaseSuccessful += OnPurchaseSuccessful;
             Purchasing.OnPurchaseStart += OnPurchaseStart;
             verifyButton.onClick.AddListener(VerifyAllPurchases);
+
+            if (SoilServices.Ready)
+            {
+                OnSoilServicesReady();
+            }
+            else
+            {
+                SoilServices.InitializeAsync();
+            }
+        }
+        
+        private void OnDestroy()
+        {
+            if (SoilServices.OnServicesReady != null)
+                SoilServices.OnServicesReady -= OnSoilServicesReady;
+            if (SoilServices.OnInitializationFailed != null)
+                SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+        }
+
+        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
+        private void OnSoilServicesReady()
+        {
+            Failed("Soil SDK ready. Initializing Purchasing...");
             _ = Purchasing.Initialize();
+        }
+
+        private void OnSoilServicesInitializationFailed(Exception exception)
+        {
+            Failed($"SDK initialization failed: {exception.Message}");
         }
 
         private void OnApplicationFocus(bool focusStatus)

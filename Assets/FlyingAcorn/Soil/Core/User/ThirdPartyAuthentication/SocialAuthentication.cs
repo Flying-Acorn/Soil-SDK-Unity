@@ -29,6 +29,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
         private static List<IPlatformAuthentication> _availableHandlers = new();
 
+        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
         public static async Task Initialize(List<ThirdPartySettings> thirdPartySettings = null)
         {
             if (Initialized)
@@ -50,7 +51,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         private static async Task<Task> InitializeInternal()
         {
             MyDebug.Info("Initializing Social Authentication");
-            await SoilServices.Initialize();
+            await SoilServices.InitializeAndWait();
             if (_thirdPartySettings == null)
             {
                 _thirdPartySettings = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();

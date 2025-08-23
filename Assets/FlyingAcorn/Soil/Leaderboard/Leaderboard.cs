@@ -22,9 +22,10 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
+        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
         public static async Task Initialize()
         {
-            await SoilServices.Initialize();
+            await SoilServices.InitializeAndWait();
         }
 
         [UsedImplicitly]
@@ -68,7 +69,9 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         private static async Task<UserScore> ReportScore(Dictionary<string, object> payload)
         {
-            await Initialize();
+#pragma warning disable CS0618 // Type or member is obsolete
+            await SoilServices.InitializeAndWait();
+#pragma warning restore CS0618 // Type or member is obsolete
             var stringBody = JsonConvert.SerializeObject(payload);
 
             using var reportScoreClient = new HttpClient();
@@ -113,7 +116,7 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         public static async Task DeleteScore(string leaderboardId)
         {
-            await Initialize();
+            await SoilServices.InitializeAndWait();
             var payload = new Dictionary<string, object>
             {
                 { "leaderboard_identifier", leaderboardId },
@@ -160,7 +163,7 @@ namespace FlyingAcorn.Soil.Leaderboard
         public static async Task<List<UserScore>> FetchLeaderboardAsync(string leaderboardId, int count = 10,
             bool relative = false)
         {
-            await Initialize();
+            await SoilServices.InitializeAndWait();
 
             var payload = new Dictionary<string, object>
             {

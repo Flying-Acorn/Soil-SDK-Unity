@@ -22,14 +22,15 @@ namespace FlyingAcorn.Soil.Socialization
         private static readonly string FriendsUrl = $"{SocializationBaseUrl}friends/";
         private static readonly string FriendsLeaderboardUrl = $"{SocializationBaseUrl}v2/getfriendleaderboard/";
 
+        [System.Obsolete("Initialize() is deprecated. Use event-based approach with SoilServices.InitializeAsync() instead. Subscribe to SoilServices.OnServicesReady and SoilServices.OnInitializationFailed events.", true)]
         public static async Task Initialize()
         {
-            await SoilServices.Initialize();
+            await SoilServices.InitializeAndWait();
         }
 
         public static async Task<FriendsResponse> GetFriends()
         {
-            await Initialize();
+            await SoilServices.InitializeAndWait();
             
             using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
@@ -91,7 +92,7 @@ namespace FlyingAcorn.Soil.Socialization
             if (string.IsNullOrEmpty(uuid))
                 throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             
-            await Initialize();
+            await SoilServices.InitializeAndWait();
             
             using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
@@ -156,7 +157,7 @@ namespace FlyingAcorn.Soil.Socialization
             if (string.IsNullOrEmpty(uuid))
                 throw new SoilException("UUID cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             
-            await Initialize();
+            await SoilServices.InitializeAndWait();
             
             using var friendshipClient = new HttpClient();
             friendshipClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
@@ -221,7 +222,7 @@ namespace FlyingAcorn.Soil.Socialization
             if (string.IsNullOrEmpty(leaderboardId))
                 throw new SoilException("Leaderboard ID cannot be null or empty",
                     SoilExceptionErrorCode.InvalidRequest);
-            await Initialize();
+            await SoilServices.InitializeAndWait();
             var payload = new Dictionary<string, object>
             {
                 { "leaderboard_identifier", leaderboardId },

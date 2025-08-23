@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using FlyingAcorn.Soil.Core;
 using Newtonsoft.Json;
 using TMPro;
 using UnityEngine;
@@ -24,16 +26,53 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
         private void Start()
         {
             SetDevButton();
+            fetchedDataText.text = "Initializing Soil SDK...";
+            
+            SoilServices.OnServicesReady += OnSoilServicesReady;
+
+            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
+
+            if (SoilServices.Ready)
+            {
+                OnSoilServicesReady();
+            }
+            else
+            {
+                SoilServices.InitializeAsync();
+            }
 
             setDevButton.onClick.AddListener(SetDevMode);
             fetchButton.onClick.AddListener(InitializeAndFetchTest);
+        }
+        
+        private void OnDestroy()
+        {
+            if (SoilServices.OnServicesReady != null)
+                SoilServices.OnServicesReady -= OnSoilServicesReady;
+            if (SoilServices.OnInitializationFailed != null)
+                SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+        }
+        
+        private void OnSoilServicesReady()
+        {
+            fetchedDataText.text = "Soil SDK ready. Press Fetch to get remote config.";
+        }
+
+        private void OnSoilServicesInitializationFailed(Exception exception)
+        {
+            fetchedDataText.text = $"SDK initialization failed: {exception.Message}";
         }
 
         #region remote config usage
 
         private void InitializeAndFetchTest()
         {
-            FetchTest();
+            fetchedDataText.text = "Fetching remote config...";
+            
+            RemoteConfig.OnServerAnswer -= HandleReceivedConfigs;
+            RemoteConfig.OnServerAnswer += HandleReceivedConfigs;
+            RemoteConfig.FetchConfig(new Dictionary<string, object>
+                { { "devmode", DevMode ? "1" : "0" } });
         }
 
         private void FetchTest()

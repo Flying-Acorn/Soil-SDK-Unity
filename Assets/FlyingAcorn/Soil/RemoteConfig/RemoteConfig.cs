@@ -49,7 +49,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         private static async Task Initialize()
         {
-            await SoilServices.Initialize();
+            await SoilServices.InitializeAndWait();
         }
 
         public static async void FetchConfig(Dictionary<string, object> extraProperties = null)

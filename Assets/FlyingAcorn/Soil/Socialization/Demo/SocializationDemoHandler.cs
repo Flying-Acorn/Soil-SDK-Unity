@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Leaderboard.Demo;
 using FlyingAcorn.Soil.Leaderboard.Models;
 using FlyingAcorn.Soil.Socialization.Models;
@@ -32,24 +33,52 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         private void Start()
         {
             SetRelativeText();
-            headerText.text = "Press something";
+            headerText.text = "Initializing Soil SDK...";
+            statusText.text = "Initializing...";
             Reset();
 
-            _ = Socialization.Initialize();
+            SoilServices.OnServicesReady += OnSoilServicesReady;
+            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
+            
             addButton.onClick.AddListener(AddFriend);
             removeButton.onClick.AddListener(RemoveFriend);
             friendsButton.onClick.AddListener(LoadFriends);
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
+            
+            if (SoilServices.Ready)
+            {
+                OnSoilServicesReady();
+            }
+            else
+            {
+                SoilServices.InitializeAsync();
+            }
         }
 
         private void OnDestroy()
         {
+            if (SoilServices.OnServicesReady != null)
+                SoilServices.OnServicesReady -= OnSoilServicesReady;
+            if (SoilServices.OnInitializationFailed != null)
+                SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+                
             addButton.onClick.RemoveListener(AddFriend);
             removeButton.onClick.RemoveListener(RemoveFriend);
             friendsButton.onClick.RemoveListener(LoadFriends);
             setRelativeButton.onClick.RemoveListener(SetRelativeMode);
             getLeaderboardButton.onClick.RemoveListener(ReportScore);
+        }
+        
+        private void OnSoilServicesReady()
+        {
+            headerText.text = "Soil SDK ready. Press something";
+            statusText.text = "Ready";
+        }
+
+        private void OnSoilServicesInitializationFailed(Exception exception)
+        {
+            statusText.text = $"SDK initialization failed: {exception.Message}";
         }
 
         private async void ReportScore()

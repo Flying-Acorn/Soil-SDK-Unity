@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
+using FlyingAcorn.Soil.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -20,10 +21,34 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
 
         private void Start()
         {
-            _ = CloudSave.Initialize();
-            LoadAll();
+            statusText.text = "Initializing Soil SDK...";
+            SoilServices.OnServicesReady += OnSoilServicesReady;
+            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
+            SoilServices.InitializeAsync();
+            
             saveButton.onClick.AddListener(Save);
             loadButton.onClick.AddListener(Load);
+        }
+        
+        private void OnDestroy()
+        {
+            if (SoilServices.OnServicesReady != null)
+                SoilServices.OnServicesReady -= OnSoilServicesReady;
+            if (SoilServices.OnInitializationFailed != null)
+                SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+        }
+        
+        [Obsolete("Use OnSoilServicesInitializationFailed instead")]
+        private void OnSoilServicesReady()
+        {
+            statusText.text = "Soil SDK ready. Initializing CloudSave...";
+            _ = CloudSave.Initialize();
+            LoadAll();
+        }
+        
+        private void OnSoilServicesInitializationFailed(Exception exception)
+        {
+            statusText.text = $"SDK initialization failed: {exception.Message}";
         }
 
         private async void Save()
