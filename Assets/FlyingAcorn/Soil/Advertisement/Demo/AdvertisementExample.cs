@@ -171,23 +171,15 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             }
         }
 
-        private async void Init()
+        private void Init()
         {
             if (Advertisement.Ready)
             {
                 OnInitialized();
                 return;
             }
-            try
-            {
-                await Advertisement.InitializeAsync(new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded });
-            }
-            catch (System.Exception ex)
-            {
-                OnInitializeFailed($"Initialization failed: {ex.Message}");
-            }
-            getCampaignButton.interactable = false;
-            statusText.text = "Initializing...";
+            
+            Advertisement.InitializeAsync(new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded });
         }
 
         private void OnInitializeFailed(string error)

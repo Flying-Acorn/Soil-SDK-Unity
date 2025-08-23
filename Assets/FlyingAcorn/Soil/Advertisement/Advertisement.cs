@@ -45,10 +45,13 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
-        public static async Task InitializeAsync(List<AdFormat> adFormats)
+        public static async void InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)
-                throw new SoilException("Ad formats cannot be null or empty.", SoilExceptionErrorCode.InvalidRequest);
+            {
+                Events.InvokeOnInitializeFailed("No ad formats specified for initialization");
+                return;
+            }
 
             if (availableCampaign != null)
                 return;
