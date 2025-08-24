@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
+using UnityEngine.Networking;
 using System.Text;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
@@ -77,7 +77,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
             return properties;
         }
 
-        private static async Task FetchRemoteConfig()
+        private static async UniTask FetchRemoteConfig()
         {
             if (!SoilServices.Ready)
             {
@@ -87,41 +87,31 @@ namespace FlyingAcorn.Soil.RemoteConfig
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object>
                 { { "properties", GetPlayerProperties() } });
 
-            using var fetchClient = new HttpClient();
-            fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            var request = new HttpRequestMessage(HttpMethod.Post, FetchUrl);
-            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-
-            HttpResponseMessage response;
-            string responseString;
+            string responseString = null;
+            using var request = new UnityWebRequest(FetchUrl, UnityWebRequest.kHttpVerbPOST)
+            {
+                uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(stringBody)),
+                downloadHandler = new DownloadHandlerBuffer()
+            };
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
 
             try
             {
-                response = await fetchClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                responseString = request.downloadHandler?.text;
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while fetching remote config",
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while fetching remote config: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
-            }
+            catch (SoilException) { throw; }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while fetching remote config: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while fetching remote config: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            if (response is not { IsSuccessStatusCode: true })
+            if (request.responseCode < 200 || request.responseCode >= 300)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {(System.Net.HttpStatusCode)request.responseCode}: {responseString}", SoilExceptionErrorCode.TransportError);
             }
 
             try

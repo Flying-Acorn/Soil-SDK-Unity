@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using UnityEngine.Networking;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
@@ -29,7 +29,7 @@ namespace FlyingAcorn.Soil.Advertisement
         private static bool _isInitializing;
         private static Campaign availableCampaign = null;
         private static List<AdFormat> _requestedFormats;
-        private static Task _cachedAssetsTask;
+        private static UniTask _cachedAssetsTask;
 
         // Ad placement instances
         private static SoilAdManager _adPlacementManager;
@@ -107,14 +107,12 @@ namespace FlyingAcorn.Soil.Advertisement
             await HandleServicesReadyAsync(_cachedAssetsTask);
         }
 
-        private static async Task HandleServicesReadyAsync(Task cachedAssetsTask)
+        private static async UniTask HandleServicesReadyAsync(UniTask cachedAssetsTask)
         {
             UnlistenCore();
 
-            if (cachedAssetsTask != null)
-            {
-                try { await cachedAssetsTask; } catch { /* ignore cached asset load failures */ }
-            }
+            // Await cached assets task (ignore failures) without unnecessary null check
+            try { await cachedAssetsTask; } catch { /* ignore cached asset load failures */ }
 
             if (_campaignRequested)
             {
@@ -179,7 +177,7 @@ namespace FlyingAcorn.Soil.Advertisement
 
         // Downloads and caches ads for the selected campaign.
         // This method caches each format separately and invokes events as each format becomes ready.
-        private static async Task CacheAds(Campaign availableCampaign)
+        private static async UniTask CacheAds(Campaign availableCampaign)
         {
             // Simple and reliable cache management
             bool isDifferentCampaign = AdvertisementPlayerPrefs.CachedCampaign?.id != availableCampaign.id;
@@ -204,7 +202,7 @@ namespace FlyingAcorn.Soil.Advertisement
             MyDebug.Verbose($"Caching assets for available formats: {string.Join(", ", availableFormats)}");
 
             // Cache assets for each AVAILABLE format separately
-            var cachingTasks = new List<Task>();
+            var cachingTasks = new List<UniTask>();
 
             foreach (var adFormat in availableFormats) // ← Now only processes available formats
             {
@@ -216,7 +214,7 @@ namespace FlyingAcorn.Soil.Advertisement
             // Wait for all formats to complete (though each will fire events individually)
             try
             {
-                await Task.WhenAll(cachingTasks);
+                await UniTask.WhenAll(cachingTasks);
             }
             catch (Exception ex)
             {
@@ -251,7 +249,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Caches assets for a specific ad format and invokes the loaded event when ready
         /// </summary>
-        private static async Task CacheFormatAssetsAsync(Campaign campaign, AdFormat adFormat)
+        private static async UniTask CacheFormatAssetsAsync(Campaign campaign, AdFormat adFormat)
         {
                 await AssetCache.CacheAssetsForFormatAsync(campaign, adFormat, OnFormatAssetsReady);
         }
@@ -334,89 +332,66 @@ namespace FlyingAcorn.Soil.Advertisement
                 child.gameObject.layer = layer;
         }
 
-        private static async Task<CampaignSelectResponse> SelectCampaignAsync()
+        private static async UniTask<CampaignSelectResponse> SelectCampaignAsync()
         {
             if (!SoilServices.Ready)
-            {
-                throw new SoilException("Soil services are not ready. Please initialize Soil first.",
-                    SoilExceptionErrorCode.NotReady);
-            }
+                throw new SoilException("Soil services are not ready. Please initialize Soil first.", SoilExceptionErrorCode.NotReady);
 
-            var body = new
-            {
-                previous_campaigns = new List<string>() // TODO: Get previous campaigns from user preferences or session
-            };
-
+            var body = new { previous_campaigns = new List<string>() }; // TODO: Populate from prefs/session
             var jsonBody = JsonConvert.SerializeObject(body);
 
-            using var request = UnityWebRequest.PostWwwForm(CampaignsSelectUrl, "");
-            if (request.uploadHandler != null)
+            using var request = new UnityWebRequest(CampaignsSelectUrl, UnityWebRequest.kHttpVerbPOST)
             {
-                request.uploadHandler.Dispose();
-            }
-            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody));
-            request.timeout = UserPlayerPrefs.RequestTimeout;
-            
+                uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
+                downloadHandler = new DownloadHandlerBuffer()
+            };
             var authHeader = Authenticate.GetAuthorizationHeaderString();
-            if (!string.IsNullOrEmpty(authHeader))
-            {
-                request.SetRequestHeader("Authorization", authHeader);
-            }
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
             request.SetRequestHeader("Accept", "application/json");
             request.SetRequestHeader("Content-Type", "application/json");
 
-            var tcs = new TaskCompletionSource<bool>();
-            request.SendWebRequest().completed += _ => tcs.SetResult(true);
-            
-            await tcs.Task;
-
-            if (request.result != UnityWebRequest.Result.Success)
+            try
             {
-                var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
-                
-                if (request.result == UnityWebRequest.Result.ConnectionError)
-                {
-                    throw new SoilException("Request timed out while selecting campaign",
-                        SoilExceptionErrorCode.Timeout);
-                }
-                else if (request.result == UnityWebRequest.Result.ProtocolError)
-                {
-                    var errorCode = (System.Net.HttpStatusCode)request.responseCode switch
-                    {
-                        System.Net.HttpStatusCode.Unauthorized => SoilExceptionErrorCode.InvalidToken,
-                        System.Net.HttpStatusCode.Forbidden => SoilExceptionErrorCode.Forbidden,
-                        System.Net.HttpStatusCode.NotFound => SoilExceptionErrorCode.NotFound,
-                        System.Net.HttpStatusCode.BadRequest => SoilExceptionErrorCode.InvalidRequest,
-                        System.Net.HttpStatusCode.ServiceUnavailable => SoilExceptionErrorCode.ServiceUnavailable,
-                        _ => SoilExceptionErrorCode.TransportError
-                    };
-
-                    var responseText = request.downloadHandler?.text ?? "No response content";
-                    throw new SoilException($"Failed to select campaign: {request.responseCode} - {responseText}", errorCode);
-                }
-                else
-                {
-                    throw new SoilException($"Unexpected error while selecting campaign: {errorMessage}",
-                        SoilExceptionErrorCode.Unknown);
-                }
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+            }
+            catch (SoilException sx)
+            {
+                // Preserve specific SoilException types
+                throw sx.ErrorCode == SoilExceptionErrorCode.Timeout ? sx : sx;
+            }
+            catch (Exception ex)
+            {
+                throw new SoilException($"Unexpected error while selecting campaign: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            var content = request.downloadHandler?.text ?? "";
+            // Map non-success status codes
+            if (request.responseCode < 200 || request.responseCode >= 300)
+            {
+                var responseText = request.downloadHandler?.text ?? "No response content";
+                var errorCode = (System.Net.HttpStatusCode)request.responseCode switch
+                {
+                    System.Net.HttpStatusCode.Unauthorized => SoilExceptionErrorCode.InvalidToken,
+                    System.Net.HttpStatusCode.Forbidden => SoilExceptionErrorCode.Forbidden,
+                    System.Net.HttpStatusCode.NotFound => SoilExceptionErrorCode.NotFound,
+                    System.Net.HttpStatusCode.BadRequest => SoilExceptionErrorCode.InvalidRequest,
+                    System.Net.HttpStatusCode.ServiceUnavailable => SoilExceptionErrorCode.ServiceUnavailable,
+                    _ => SoilExceptionErrorCode.TransportError
+                };
+                throw new SoilException($"Failed to select campaign: {request.responseCode} - {responseText}", errorCode);
+            }
 
+            var content = request.downloadHandler?.text ?? string.Empty;
             try
             {
                 var result = JsonConvert.DeserializeObject<CampaignSelectResponse>(content);
                 if (result == null)
-                {
-                    throw new SoilException("Response deserialization returned null while selecting campaign",
-                        SoilExceptionErrorCode.InvalidResponse);
-                }
+                    throw new SoilException("Response deserialization returned null while selecting campaign", SoilExceptionErrorCode.InvalidResponse);
                 return result;
             }
+            catch (SoilException) { throw; }
             catch (Exception)
             {
-                throw new SoilException($"Invalid response format while selecting campaign. Response: {content}",
-                    SoilExceptionErrorCode.InvalidResponse);
+                throw new SoilException($"Invalid response format while selecting campaign. Response: {content}", SoilExceptionErrorCode.InvalidResponse);
             }
         }
 
@@ -741,9 +716,9 @@ namespace FlyingAcorn.Soil.Advertisement
         /// Checks if a video is already cached locally for the given id.
         /// This method now runs file operations on a background thread to avoid UI freezes.
         /// </summary>
-        public static async Task<bool> IsVideoCachedAsync(string id)
+        public static async UniTask<bool> IsVideoCachedAsync(string id)
         {
-            return await Task.Run(() =>
+            return await UniTask.RunOnThreadPool(() =>
             {
                 string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
                 string fileName = id + ".mp4";
@@ -805,7 +780,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Clears all cached assets asynchronously
         /// </summary>
-        public static async Task ClearAssetCacheAsync()
+        public static async UniTask ClearAssetCacheAsync()
         {
             await AssetCache.ClearCacheAsync();
             AdvertisementPlayerPrefs.CachedAssets = new List<AssetCacheEntry>();
@@ -815,7 +790,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Clears old cached assets based on age (older than specified days)
         /// </summary>
-        public static async Task ClearOldAssetsAsync(int olderThanDays = 7)
+        public static async UniTask ClearOldAssetsAsync(int olderThanDays = 7)
         {
             await AssetCache.ClearOldAssetsAsync(olderThanDays);
             

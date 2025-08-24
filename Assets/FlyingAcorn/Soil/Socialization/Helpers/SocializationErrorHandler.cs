@@ -1,7 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Http;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Socialization.Data;
 
@@ -13,7 +13,7 @@ namespace FlyingAcorn.Soil.Socialization.Helpers
         {
             return exception switch
             {
-                TaskCanceledException ex when ex.InnerException is TimeoutException => 
+                OperationCanceledException ex when ex.InnerException is TimeoutException => 
                     new SocializationException($"Request timed out while {GetOperationDescription(operation)}", 
                         operation, SoilExceptionErrorCode.Timeout),
                 

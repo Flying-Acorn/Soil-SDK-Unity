@@ -92,7 +92,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _ = ReportScoreAsync();
         }
 
-        private async System.Threading.Tasks.Task ReportScoreAsync()
+        private async Cysharp.Threading.Tasks.UniTask ReportScoreAsync()
         {
             statusText.text = "Reporting score...";
             try
@@ -123,7 +123,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _ = GetLeaderboardAsync(userScore);
         }
 
-        private async System.Threading.Tasks.Task GetLeaderboardAsync(UserScore userScore)
+        private async Cysharp.Threading.Tasks.UniTask GetLeaderboardAsync(UserScore userScore)
         {
             Reset();
             statusText.text = "Working...";
@@ -159,7 +159,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _ = AddFriendAsync();
         }
 
-        private async System.Threading.Tasks.Task AddFriendAsync()
+        private async Cysharp.Threading.Tasks.UniTask AddFriendAsync()
         {
             statusText.text = "Working...";
             FriendsResponse response;
@@ -189,7 +189,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _ = RemoveFriendAsync();
         }
 
-        private async System.Threading.Tasks.Task RemoveFriendAsync()
+        private async Cysharp.Threading.Tasks.UniTask RemoveFriendAsync()
         {
             statusText.text = "Working...";
             FriendsResponse response;
@@ -231,7 +231,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _ = LoadFriendsAsync();
         }
 
-        private async System.Threading.Tasks.Task LoadFriendsAsync()
+        private async Cysharp.Threading.Tasks.UniTask LoadFriendsAsync()
         {
             // Clear existing rows so repeated requests don't append duplicates
             Reset();

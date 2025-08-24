@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Models;
 using FlyingAcorn.Soil.Core.User;
+using FlyingAcorn.Soil.Core.Data; // DataUtils
+using FlyingAcorn.Soil.Core; // SoilException
 using UnityEngine;
 using UnityEngine.Networking;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
@@ -80,12 +82,12 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// <summary>
         /// Caches assets from a campaign, ensuring only one asset of each type per ad format (random ad group/ad)
         /// </summary>
-        public static async Task CacheAssetsAsync(Campaign campaign, List<AdFormat> requestedFormats)
+        public static async UniTask CacheAssetsAsync(Campaign campaign, List<AdFormat> requestedFormats)
         {
             if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
                 return;
 
-            var cachingTasks = new List<Task>();
+            var cachingTasks = new List<UniTask>();
             var random = new System.Random();
 
             foreach (var adFormat in requestedFormats)
@@ -117,14 +119,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                 }
             }
-            await Task.WhenAll(cachingTasks);
+            await UniTask.WhenAll(cachingTasks);
         }
 
         /// <summary>
         /// Caches assets for a specific ad format from multiple ads within the same ad group to ensure comprehensive asset coverage.
         /// This approach ensures that video ads have image fallbacks by caching from both video and image ads in the same group.
         /// </summary>
-        public static async Task CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
+        public static async UniTask CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
             MyDebug.Verbose($"Starting CacheAssetsForFormatAsync for {adFormat}");
             
@@ -166,7 +168,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return;
             }
             
-            var cachingTasks = new List<Task>();
+            var cachingTasks = new List<UniTask>();
             
             // NEW APPROACH: Cache assets from multiple ads in the same ad group to ensure we have both video and image fallbacks
             // This ensures that even if one ad only has video, another ad in the same group provides the image fallback
@@ -235,7 +237,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             
             if (cachingTasks.Count > 0)
             {
-                await Task.WhenAll(cachingTasks);
+                await UniTask.WhenAll(cachingTasks);
                 MyDebug.Verbose($"Successfully cached assets for {adFormat} format");
             }
             else
@@ -451,7 +453,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// <summary>
         /// Caches a single asset
         /// </summary>
-        private static async Task CacheAssetAsync(string cacheKey, Asset asset, AssetType assetType, AdFormat adFormat, string clickUrl = null, Ad ad = null)
+        private static async UniTask CacheAssetAsync(string cacheKey, Asset asset, AssetType assetType, AdFormat adFormat, string clickUrl = null, Ad ad = null)
         {
             try
             {
@@ -513,17 +515,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
                 // For images and logos, download and cache normally
                 using var request = UnityWebRequest.Get(resolvedUrl);
-                request.timeout = UserPlayerPrefs.RequestTimeout;
-
-                var tcs = new TaskCompletionSource<bool>();
-                request.SendWebRequest().completed += _ => tcs.SetResult(true);
-                
-                await tcs.Task;
-
-                if (request.result != UnityWebRequest.Result.Success)
+                request.downloadHandler = new DownloadHandlerBuffer();
+                try
                 {
-                    var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
-                    throw new Exception($"Failed to download asset from {resolvedUrl}: {errorMessage}");
+                    await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                }
+                catch (SoilException sx)
+                {
+                    throw new Exception($"Failed to download asset from {resolvedUrl}: {sx.Message}");
                 }
 
                 var data = request.downloadHandler?.data;
@@ -597,7 +596,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// <summary>
         /// Writes a file with retry logic to handle sharing violations
         /// </summary>
-        private static async Task WriteFileWithRetry(string filePath, byte[] data, int maxRetries = 3)
+        private static async UniTask WriteFileWithRetry(string filePath, byte[] data, int maxRetries = 3)
         {
             for (int attempt = 0; attempt < maxRetries; attempt++)
             {
@@ -614,7 +613,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                     
                     // Wait before retry with exponential backoff
-                    await Task.Delay(100 * (attempt + 1));
+                    await UniTask.Delay(100 * (attempt + 1));
                 }
             }
         }
@@ -753,7 +752,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// <summary>
         /// Clears all cached assets asynchronously to avoid blocking the main thread
         /// </summary>
-        public static async Task ClearCacheAsync()
+        public static async UniTask ClearCacheAsync()
         {
             List<AssetCacheEntry> assetsToDelete;
             
@@ -767,7 +766,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             List<string> deleteErrors = new List<string>();
             Exception clearException = null;
 
-            await Task.Run(() =>
+            await UniTask.RunOnThreadPool(() =>
             {
                 try
                 {
@@ -828,7 +827,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
         /// Clears old cached assets based on age (older than specified days)
         /// </summary>
-        public static async Task ClearOldAssetsAsync(int olderThanDays = 7)
+        public static async UniTask ClearOldAssetsAsync(int olderThanDays = 7)
         {
             var cutoffDate = DateTime.Now.AddDays(-olderThanDays);
             List<AssetCacheEntry> assetsToDelete;
@@ -850,7 +849,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
             }
 
-            await Task.Run(() =>
+            await UniTask.RunOnThreadPool(() =>
             {
                 foreach (var asset in assetsToDelete)
                 {
@@ -961,7 +960,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// <summary>
         /// Loads cached assets from PlayerPrefs asynchronously to avoid blocking the main thread
         /// </summary>
-        public static async Task LoadCachedAssetsAsync()
+        public static async UniTask LoadCachedAssetsAsync()
         {
             List<AssetCacheEntry> persistedAssets = null;
             Exception loadException = null;
@@ -979,7 +978,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
 
             // Then process them on a background thread
-            await Task.Run(() =>
+            await UniTask.RunOnThreadPool(() =>
             {
                 try
                 {

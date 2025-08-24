@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Data;
+using FlyingAcorn.Soil.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -69,8 +70,11 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 
         private void OnDestroy()
         {
+            // Clean up SoilServices event subscription
+            SoilServices.OnServicesReady -= OnSoilServicesReady;
+            
             // Unsubscribe from all events to prevent memory leaks
-            getCampaignButton.onClick.RemoveListener(Init);
+            getCampaignButton.onClick.RemoveListener(GetCampaignButtonListener);
             showBannerButton.onClick.RemoveListener(BannerButtonListener);
             showInterstitialButton.onClick.RemoveListener(InterstitialButtonListener);
             showRewardedButton.onClick.RemoveListener(RewardedButtonListener);
@@ -185,6 +189,36 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
                 return;
             }
 
+            statusText.text = "Initializing...";
+            
+            // Always initialize SoilServices first if not ready, then Advertisement
+            if (!SoilServices.Ready)
+            {
+                statusText.text = "Initializing Soil SDK...";
+                // Subscribe to SoilServices events to know when it's ready
+                SoilServices.OnServicesReady -= OnSoilServicesReady;
+                SoilServices.OnServicesReady += OnSoilServicesReady;
+                SoilServices.InitializeAsync();
+            }
+            else
+            {
+                // SoilServices is ready, proceed with Advertisement initialization
+                InitializeAdvertisement();
+            }
+        }
+
+        private void OnSoilServicesReady()
+        {
+            // Unsubscribe to avoid multiple calls
+            SoilServices.OnServicesReady -= OnSoilServicesReady;
+            
+            // Now that SoilServices is ready, initialize Advertisement
+            InitializeAdvertisement();
+        }
+
+        private void InitializeAdvertisement()
+        {
+            statusText.text = "Initializing Advertisement...";
             Advertisement.InitializeAsync(new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded });
         }
 

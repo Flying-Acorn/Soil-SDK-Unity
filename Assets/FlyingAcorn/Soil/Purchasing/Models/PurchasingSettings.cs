@@ -1,6 +1,6 @@
 using System;
 using System.Net.Http;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 
 namespace FlyingAcorn.Soil.Purchasing.Models
 {
@@ -14,7 +14,7 @@ namespace FlyingAcorn.Soil.Purchasing.Models
             api = apiUrl;
         }
 
-        internal static async Task Validate(PurchasingSettings settingsToValidate)
+        internal static async UniTask Validate(PurchasingSettings settingsToValidate)
         {
             if (settingsToValidate == null)
                 throw new ArgumentNullException(nameof(settingsToValidate), "incoming purchasing settings cannot be null.");

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
@@ -25,7 +25,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
         [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
-        internal static async Task AuthenticateUser(bool forceRegister = false,
+        internal static async UniTask AuthenticateUser(bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
             var userIsMissing = UserPlayerPrefs.TokenData == null ||
@@ -74,7 +74,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             OnUserReady?.Invoke(UserPlayerPrefs.UserInfoInstance);
         }
 
-        private static async Task RegisterPlayer()
+        private static async UniTask RegisterPlayer()
         {
             MyDebug.Verbose("Registering player...");
             var appID = UserPlayerPrefs.AppID;
@@ -99,7 +99,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Accept", "application/json");
 
-            // Use TaskCompletionSource for proper async/await with UnityWebRequest
+            // Use UniTaskCompletionSource for proper async/await with UnityWebRequest
             await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
 
             if (request.result != UnityWebRequest.Result.Success)
@@ -137,7 +137,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
         }
 
-        internal static async Task RefreshTokenIfNeeded(bool force = false)
+        internal static async UniTask RefreshTokenIfNeeded(bool force = false)
         {
             if (!force && JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
             {

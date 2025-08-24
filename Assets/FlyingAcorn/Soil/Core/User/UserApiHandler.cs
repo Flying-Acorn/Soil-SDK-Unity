@@ -1,6 +1,6 @@
 using System;
 using System.Text;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.JWTTools;
@@ -15,19 +15,19 @@ namespace FlyingAcorn.Soil.Core.User
     public static class UserApiHandler
     {
         private static string GetPlayerInfoUrl => $"{Authenticate.UserBaseUrl}/";
-        private static Task<UserInfo> _fetchPlayerInfoTask;
+        private static UniTask<UserInfo>? _fetchPlayerInfoTask;
         internal static Action<bool> OnUserFilled; // True means user is changed
 
         [ItemNotNull]
         [UsedImplicitly]
-        public static async Task<UserInfo> FetchPlayerInfo(bool allowDuringInitialization = false)
+        public static async UniTask<UserInfo> FetchPlayerInfo(bool allowDuringInitialization = false)
         {
             // Permit during core initialization when tokens are being established
             if (!SoilServices.Ready && !allowDuringInitialization)
                 throw new SoilException("SoilServices is not initialized. Cannot fetch player info.", SoilExceptionErrorCode.NotReady);
 
             // Clear failed tasks to allow retry
-            if (_fetchPlayerInfoTask is { IsCompletedSuccessfully: false, IsCompleted: true })
+            if (_fetchPlayerInfoTask?.AsTask() is { IsCompletedSuccessfully: false, IsCompleted: true })
                 _fetchPlayerInfoTask = null;
 
             // Prevent multiple concurrent fetch operations from blocking
@@ -35,19 +35,19 @@ namespace FlyingAcorn.Soil.Core.User
             {
                 _fetchPlayerInfoTask = FetchPlayerInfoInternal();
             }
-            else if (!_fetchPlayerInfoTask.IsCompleted)
+            else if (!_fetchPlayerInfoTask?.AsTask().IsCompleted ?? false)
             {
                 MyDebug.Verbose("Player info fetch already in progress, sharing existing request...");
             }
 
             try
             {
-                return await _fetchPlayerInfoTask;
+                return await _fetchPlayerInfoTask.Value;
             }
             catch (Exception)
             {
                 // Clear the failed task for subsequent retry attempts
-                if (_fetchPlayerInfoTask != null && _fetchPlayerInfoTask.IsFaulted)
+                if (_fetchPlayerInfoTask?.AsTask() != null && _fetchPlayerInfoTask.Value.AsTask().IsFaulted)
                 {
                     _fetchPlayerInfoTask = null;
                 }
@@ -55,7 +55,7 @@ namespace FlyingAcorn.Soil.Core.User
             }
         }
 
-        private static async Task<UserInfo> FetchPlayerInfoInternal()
+        private static async UniTask<UserInfo> FetchPlayerInfoInternal()
         {
             MyDebug.Verbose("Fetching player info...");
 
@@ -117,7 +117,7 @@ namespace FlyingAcorn.Soil.Core.User
 
         [ItemNotNull]
         [UsedImplicitly]
-        public static async Task<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
+        public static async UniTask<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
         {
             if (!SoilServices.Ready)
             {

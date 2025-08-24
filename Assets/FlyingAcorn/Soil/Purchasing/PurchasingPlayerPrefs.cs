@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
@@ -82,7 +82,7 @@ namespace FlyingAcorn.Soil.Purchasing
             return uri.ToString();
         }
 
-        internal static async Task SetAlternateSettings(PurchasingSettings alternateSettings)
+        internal static async UniTask SetAlternateSettings(PurchasingSettings alternateSettings)
         {
             if (alternateSettings == null)
             {

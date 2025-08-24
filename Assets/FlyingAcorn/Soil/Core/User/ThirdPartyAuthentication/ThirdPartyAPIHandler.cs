@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Threading.Tasks;
+using UnityEngine.Networking;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
@@ -42,50 +42,44 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         }
 
         [UsedImplicitly]
-        internal static async Task<LinkPostResponse> Link(LinkAccountInfo thirdPartyUser,
-            ThirdPartySettings settings)
+        internal static async UniTask<LinkPostResponse> Link(LinkAccountInfo thirdPartyUser,
+            ThirdPartySettings settings, CancellationToken cancellationToken = default)
         {
             var payload = GetLinkUserPayload(thirdPartyUser, settings);
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            using var linkClient = new HttpClient();
-            linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Post, LinkUserUrl);
-            request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
+            using var request = new UnityWebRequest(LinkUserUrl, UnityWebRequest.kHttpVerbPOST)
+            {
+                uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(stringBody)),
+                downloadHandler = new DownloadHandlerBuffer()
+            };
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
 
-            HttpResponseMessage response;
-            string responseString;
-
+            using var reg = cancellationToken.CanBeCanceled ? cancellationToken.Register(() => { if (!request.isDone) request.Abort(); }) : default;
             try
             {
-                response = await linkClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            catch (SoilException sx)
             {
-                throw new SoilException("Request timed out while linking account",
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while linking account: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Request failed while linking account: {sx.Message}", sx.ErrorCode);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while linking account: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                if (cancellationToken.IsCancellationRequested)
+                    throw new SoilException("Linking canceled", SoilExceptionErrorCode.Canceled);
+                throw new SoilException($"Unexpected error while linking account: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            if (!response.IsSuccessStatusCode)
+            if (request.responseCode < 200 || request.responseCode >= 300)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {(HttpStatusCode)request.responseCode}: {request.downloadHandler?.text}", SoilExceptionErrorCode.TransportError);
             }
 
-            var linkResponse = JsonConvert.DeserializeObject<LinkPostResponse>(responseString);
+            var linkResponse = JsonConvert.DeserializeObject<LinkPostResponse>(request.downloadHandler.text);
             if (linkResponse == null)
             {
                 throw new SoilException("Link response is null", SoilExceptionErrorCode.InvalidResponse);
@@ -119,42 +113,32 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         }
 
         [UsedImplicitly]
-        internal static async Task<LinkGetResponse> GetLinks()
+    internal static async UniTask<LinkGetResponse> GetLinks(CancellationToken cancellationToken = default)
         {
-            using var linkClient = new HttpClient();
-            linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Get, LinkUserUrl);
-
-            HttpResponseMessage response;
-            string responseString;
-
+            using var request = UnityWebRequest.Get(LinkUserUrl);
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
+            request.SetRequestHeader("Accept", "application/json");
+            using var reg = cancellationToken.CanBeCanceled ? cancellationToken.Register(() => { if (!request.isDone) request.Abort(); }) : default;
             try
             {
-                response = await linkClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            catch (SoilException sx)
             {
-                throw new SoilException("Request timed out while getting links",
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while getting links: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Request failed while getting links: {sx.Message}", sx.ErrorCode);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while getting links: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                if (cancellationToken.IsCancellationRequested)
+                    throw new SoilException("Get links canceled", SoilExceptionErrorCode.Canceled);
+                throw new SoilException($"Unexpected error while getting links: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            if (response.StatusCode == HttpStatusCode.NotFound)
+            if (request.responseCode == (long)HttpStatusCode.NotFound)
             {
                 LinkingPlayerPrefs.Links = new List<LinkPostResponse>();
-                return new LinkGetResponse()
+                return new LinkGetResponse
                 {
                     detail = new LinkStatusResponse
                     {
@@ -165,62 +149,56 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 };
             }
 
-            if (!response.IsSuccessStatusCode)
+            if (request.responseCode < 200 || request.responseCode >= 300)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {(HttpStatusCode)request.responseCode}: {request.downloadHandler?.text}", SoilExceptionErrorCode.TransportError);
             }
 
-            var getLinksResponse = JsonConvert.DeserializeObject<LinkGetResponse>(responseString);
+            var getLinksResponse = JsonConvert.DeserializeObject<LinkGetResponse>(request.downloadHandler.text);
             LinkingPlayerPrefs.Links = getLinksResponse.linked_accounts;
             return getLinksResponse;
         }
 
         [UsedImplicitly]
-        internal static async Task<UnlinkResponse> Unlink(ThirdPartySettings settings)
+    internal static async UniTask<UnlinkResponse> Unlink(ThirdPartySettings settings, CancellationToken cancellationToken = default)
         {
             var body = new Dictionary<string, object>
             {
                 { "app_party", GetParty(settings).id }
             };
-
             var stringBody = JsonConvert.SerializeObject(body);
 
-            using var linkClient = new HttpClient();
-            linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            var request = new HttpRequestMessage(HttpMethod.Post, UnlinkUserUrl);
-            request.Content = new StringContent(stringBody, System.Text.Encoding.UTF8, "application/json");
+            using var request = new UnityWebRequest(UnlinkUserUrl, UnityWebRequest.kHttpVerbPOST)
+            {
+                uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(stringBody)),
+                downloadHandler = new DownloadHandlerBuffer()
+            };
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
 
-            HttpResponseMessage response;
-            string responseString;
-
+            using var reg = cancellationToken.CanBeCanceled ? cancellationToken.Register(() => { if (!request.isDone) request.Abort(); }) : default;
             try
             {
-                response = await linkClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            catch (SoilException sx)
             {
-                throw new SoilException("Request timed out while unlinking account",
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while unlinking account: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Request failed while unlinking account: {sx.Message}", sx.ErrorCode);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while unlinking account: {ex.Message}",
-                    SoilExceptionErrorCode.TransportError);
+                if (cancellationToken.IsCancellationRequested)
+                    throw new SoilException("Unlinking canceled", SoilExceptionErrorCode.Canceled);
+                throw new SoilException($"Unexpected error while unlinking account: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            if (response.StatusCode != HttpStatusCode.NotFound && !response.IsSuccessStatusCode)
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
-            var unlinkResponse = JsonConvert.DeserializeObject<UnlinkResponse>(responseString);
+            if (request.responseCode != (long)HttpStatusCode.NotFound && (request.responseCode < 200 || request.responseCode >= 300))
+            {
+                throw new SoilException($"Server returned error {(HttpStatusCode)request.responseCode}: {request.downloadHandler?.text}", SoilExceptionErrorCode.TransportError);
+            }
+            var unlinkResponse = JsonConvert.DeserializeObject<UnlinkResponse>(request.downloadHandler.text);
             LinkingPlayerPrefs.RemoveLink(unlinkResponse);
             return unlinkResponse;
         }

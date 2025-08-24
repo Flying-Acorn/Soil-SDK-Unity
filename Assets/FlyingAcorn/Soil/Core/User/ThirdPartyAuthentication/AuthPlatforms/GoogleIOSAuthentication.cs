@@ -1,7 +1,7 @@
 using System;
 using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using Cdm.Authentication.Browser;
 using Cdm.Authentication.Clients;
 using Cdm.Authentication.OAuth2;
@@ -117,7 +117,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             }
         }
 
-        private async Task<LinkAccountInfo> GetUserInfoAsync()
+        private async UniTask<LinkAccountInfo> GetUserInfoAsync()
         {
             if (_authenticationSession == null)
             {

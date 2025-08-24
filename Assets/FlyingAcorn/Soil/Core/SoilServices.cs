@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using System.Threading;
 using System.Collections;
 using FlyingAcorn.Analytics;
@@ -23,14 +24,14 @@ namespace FlyingAcorn.Soil.Core
 
     public class QueuedInitRequest
     {
-        public TaskCompletionSource<bool> TaskSource { get; }
+        public UniTaskCompletionSource<bool> TaskSource { get; }
         public InitRequestType RequestType { get; }
         public DateTime QueuedTime { get; }
         public string RequestId { get; }
 
         public QueuedInitRequest(InitRequestType requestType)
         {
-            TaskSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskSource = new UniTaskCompletionSource<bool>();
             RequestType = requestType;
             QueuedTime = DateTime.UtcNow;
             RequestId = Guid.NewGuid().ToString("N")[..8];
@@ -41,11 +42,12 @@ namespace FlyingAcorn.Soil.Core
     {
         private static SoilServices _instance;
         private static bool _readyBroadcasted;
-        private static Task _initTask;
+        private static UniTask? _initTask;
         private static readonly object _initLock = new object();
         private static readonly List<QueuedInitRequest> _queuedInitRequests = new List<QueuedInitRequest>();
         private static readonly object _queueLock = new object();
         private const int MaxQueuedRequests = 200;
+        private static bool _initSucceeded; // stable success flag
         private static bool _retryScheduled;
         private static bool _isShuttingDown;
         private static SynchronizationContext _unityContext;
@@ -75,7 +77,7 @@ namespace FlyingAcorn.Soil.Core
                 var hasInstance = _instance != null;
                 var instanceReady = _instance?._instanceReady ?? false;
                 var sessionAuthValid = _instance?._sessionAuthSuccess ?? false;
-                var initTaskCompleted = _initTask?.IsCompletedSuccessfully ?? false;
+                var initTaskCompleted = _initSucceeded;
                 var authValid = IsAuthenticationCurrentlyValid();
                 var userInfoValid = UserPlayerPrefs.UserInfoInstance != null && !string.IsNullOrEmpty(UserPlayerPrefs.UserInfoInstance.uuid);
 
@@ -103,6 +105,7 @@ namespace FlyingAcorn.Soil.Core
             UserPlayerPrefs.ResetSetInMemoryCache();
             _instance.transform.SetParent(null);
             _initTask = null;
+            _initSucceeded = false;
             _readyBroadcasted = false;
             _sessionAuthSuccess = false;
             _retryAttempts = 0;
@@ -121,6 +124,7 @@ namespace FlyingAcorn.Soil.Core
         {
             if (!userChanged) return;
             _readyBroadcasted = false;
+            _initSucceeded = false;
             _retryAttempts = 0;
             _lastFailureTime = DateTime.MinValue;
             CompleteAndClearQueuedRequests(new SoilException("Initialization canceled due to user change", SoilExceptionErrorCode.Canceled));
@@ -133,6 +137,7 @@ namespace FlyingAcorn.Soil.Core
             _isShuttingDown = true;
             _instance = null;
             _initTask = null;
+            _initSucceeded = false;
             _readyBroadcasted = false;
             OnServicesReady = null;
             OnInitializationFailed = null;
@@ -146,7 +151,7 @@ namespace FlyingAcorn.Soil.Core
             _ = InitializeOnMainThreadAsync();
         }
 
-        private static async Task InitializeOnMainThreadAsync()
+        private static async UniTask InitializeOnMainThreadAsync()
         {
             try
             {
@@ -154,6 +159,7 @@ namespace FlyingAcorn.Soil.Core
             }
             catch (Exception ex)
             {
+                _initSucceeded = false; // starting new cycle
                 try
                 {
                     HandleInitializationFailure(ex);
@@ -165,7 +171,7 @@ namespace FlyingAcorn.Soil.Core
             }
         }
 
-        private static async Task Initialize()
+        private static async UniTask Initialize()
         {
             var deadline = DateTime.UtcNow.AddSeconds(UserPlayerPrefs.RequestTimeout);
             CleanupExpiredRequests();
@@ -203,26 +209,28 @@ namespace FlyingAcorn.Soil.Core
                         throw new SoilException("Initialization timed out before retry", SoilExceptionErrorCode.Timeout);
                     }
 
-                    var completed = await Task.WhenAny(queuedRequest.TaskSource.Task, Task.Delay(remaining));
-                    if (completed != queuedRequest.TaskSource.Task)
+                    var (isResult, _) = await UniTask.WhenAny(queuedRequest.TaskSource.Task, UniTask.Delay(remaining));
+                    if (!isResult)
                     {
                         lock (_queueLock) _queuedInitRequests.Remove(queuedRequest);
                         throw new SoilException("Initialization timed out during cooldown wait", SoilExceptionErrorCode.Timeout);
                     }
-                    await queuedRequest.TaskSource.Task;
+                    // Don't await queuedRequest.TaskSource.Task again - WhenAny already completed it
                     return;
                 }
             }
 
-            Task runningInit;
+            UniTask? runningInit;
             lock (_initLock)
             {
-                runningInit = _initTask;
+                runningInit = _initTask; // may be null
             }
 
-            if (runningInit != null && !runningInit.IsCompleted)
+            if (runningInit.HasValue && !runningInit.Value.AsTask().IsCompleted)
             {
-                await AwaitWithDeadline(runningInit, deadline, "existing initialization");
+                // Convert to Task and back to UniTask to avoid double-await issues
+                var taskCopy = runningInit.Value.AsTask();
+                await AwaitWithDeadline(taskCopy.AsUniTask(), deadline, "existing initialization");
                 return;
             }
 
@@ -236,8 +244,12 @@ namespace FlyingAcorn.Soil.Core
 
             lock (_initLock)
             {
-                if (_initTask is { IsCompletedSuccessfully: false, IsCompleted: true })
-                    _initTask = null;
+                if (_initTask.HasValue)
+                {
+                    var t = _initTask.Value.AsTask();
+                    if (!t.IsCompletedSuccessfully && t.IsCompleted)
+                        _initTask = null;
+                }
             }
 
             switch (Ready)
@@ -282,21 +294,21 @@ namespace FlyingAcorn.Soil.Core
                 }
             }
 
-            Task initTaskSnapshot;
+            UniTask initTaskSnapshot;
             lock (_initLock)
             {
-                initTaskSnapshot = _initTask;
+                if (!_initTask.HasValue)
+                    return; // safety guard
+                initTaskSnapshot = _initTask.Value;
             }
 
-            _ = initTaskSnapshot.ContinueWith(t =>
-            {
-                if (t.IsCompletedSuccessfully)
-                {
-                    RunOnUnityContext(OnInitializationSuccess);
-                }
-            }, TaskContinuationOptions.ExecuteSynchronously);
+            // Convert to Task to allow multi-await safely (UniTask source may not support multiple awaiters)
+            var initTaskAsTask = initTaskSnapshot.AsTask();
 
-            await AwaitWithDeadline(initTaskSnapshot, deadline, "authentication");
+            // Attach success callback (only on success, failures handled by outer catch)
+            _ = AttachInitializationSuccessCallback(initTaskAsTask); // fire-and-forget
+
+            await AwaitWithDeadline(initTaskAsTask.AsUniTask(), deadline, "authentication");
         }
 
         private static TimeSpan GetCurrentRetryInterval()
@@ -316,11 +328,11 @@ namespace FlyingAcorn.Soil.Core
             }
             else
             {
-                _ = Task.Run(async () =>
+                _ = UniTask.RunOnThreadPool(async () =>
                 {
                     try
                     {
-                        await Task.Delay(delay);
+                        await UniTask.Delay(delay);
                     }
                     catch { }
                     finally
@@ -349,6 +361,47 @@ namespace FlyingAcorn.Soil.Core
             }
         }
 
+        private IEnumerator DelayedBroadcastCheck()
+        {
+            // Wait a bit for all async operations to complete
+            yield return new WaitForSecondsRealtime(0.1f);
+
+            // Check a few times with small delays
+            for (int i = 0; i < 5 && !_readyBroadcasted; i++)
+            {
+                MyDebug.Verbose($"DelayedBroadcastCheck attempt {i + 1}: Ready = {Ready}");
+                if (Ready)
+                {
+                    BroadcastReady();
+                    yield break;
+                }
+                yield return new WaitForSecondsRealtime(0.1f);
+            }
+
+            if (!_readyBroadcasted)
+            {
+                // Force verbose logging to show what's wrong
+                var hasInstance = _instance != null;
+                var instanceReady = _instance?._instanceReady ?? false;
+                var sessionAuthValid = _instance?._sessionAuthSuccess ?? false;
+                var initTaskCompleted = _initTask?.AsTask().IsCompletedSuccessfully ?? false;
+                var authValid = IsAuthenticationCurrentlyValid();
+                var userInfoValid = UserPlayerPrefs.UserInfoInstance != null && !string.IsNullOrEmpty(UserPlayerPrefs.UserInfoInstance.uuid);
+
+                MyDebug.LogWarning($"SoilServices: Ready state did not become true after initialization success. " +
+                                 $"Instance={hasInstance}, InstanceReady={instanceReady}, InitCompleted={initTaskCompleted}, " +
+                                 $"AuthValid={authValid}, SessionAuthValid={sessionAuthValid}, UserInfoValid={userInfoValid}");
+
+                // If we have instance, session auth, and user info, but just the init task state is wrong, force broadcast
+                if (hasInstance && instanceReady && sessionAuthValid && authValid && userInfoValid)
+                {
+                    MyDebug.LogWarning("SoilServices: Force broadcasting ready state despite initTask completion issue");
+                    _readyBroadcasted = true;
+                    OnServicesReady?.Invoke();
+                }
+            }
+        }
+
         private IEnumerator RetryAfterCooldownCoroutine(float seconds)
         {
             if (seconds > 0f)
@@ -364,7 +417,7 @@ namespace FlyingAcorn.Soil.Core
             }
         }
 
-        private static Task PerformAuthentication(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+        private static UniTask PerformAuthentication(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
             return Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
         }
@@ -392,11 +445,8 @@ namespace FlyingAcorn.Soil.Core
                 completedRequests = new List<string>(_queuedInitRequests.Count);
                 foreach (var request in _queuedInitRequests)
                 {
-                    if (!request.TaskSource.Task.IsCompleted)
-                    {
-                        request.TaskSource.TrySetException(exception);
+                    if (request.TaskSource.TrySetException(exception))
                         completedRequests.Add(request.RequestId);
-                    }
                 }
                 _queuedInitRequests.Clear();
             }
@@ -416,7 +466,9 @@ namespace FlyingAcorn.Soil.Core
 
         private static void OnInitializationSuccess()
         {
-            _instance._sessionAuthSuccess = true;
+            if (_instance != null)
+                _instance._sessionAuthSuccess = true;
+            _initSucceeded = true; // mark completion
             _retryAttempts = 0;
             _lastFailureTime = DateTime.MinValue;
 
@@ -426,18 +478,22 @@ namespace FlyingAcorn.Soil.Core
                 completedRequests = new List<string>(_queuedInitRequests.Count);
                 foreach (var request in _queuedInitRequests)
                 {
-                    if (!request.TaskSource.Task.IsCompleted)
-                    {
-                        request.TaskSource.TrySetResult(true);
+                    if (request.TaskSource.TrySetResult(true))
                         completedRequests.Add(request.RequestId);
-                    }
                 }
                 _queuedInitRequests.Clear();
             }
             if (completedRequests.Count > 0)
                 MyDebug.Verbose($"Soil-Core: Completed {completedRequests.Count} queued requests successfully: [{string.Join(", ", completedRequests)}]");
 
+            // Try broadcasting immediately, but also schedule a delayed check in case Ready isn't true yet
             BroadcastReady();
+
+            // If broadcasting failed (Ready was false), schedule a retry
+            if (!_readyBroadcasted && _instance != null)
+            {
+                _instance.StartCoroutine(_instance.DelayedBroadcastCheck());
+            }
         }
 
         private static void CompleteAndClearQueuedRequests(Exception exception)
@@ -449,11 +505,8 @@ namespace FlyingAcorn.Soil.Core
                 completed = new List<string>(_queuedInitRequests.Count);
                 foreach (var request in _queuedInitRequests)
                 {
-                    if (!request.TaskSource.Task.IsCompleted)
-                    {
-                        request.TaskSource.TrySetException(exception);
+                    if (request.TaskSource.TrySetException(exception))
                         completed.Add(request.RequestId);
-                    }
                 }
                 _queuedInitRequests.Clear();
             }
@@ -519,12 +572,9 @@ namespace FlyingAcorn.Soil.Core
                 expiredRequests = _queuedInitRequests.Where(r => r.QueuedTime < expiredThreshold).ToList();
                 foreach (var expired in expiredRequests)
                 {
-                    if (!expired.TaskSource.Task.IsCompleted)
-                    {
-                        expired.TaskSource.TrySetException(new SoilException(
-                            $"Initialization request expired after 5 minutes (ID: {expired.RequestId})",
-                            SoilExceptionErrorCode.Timeout));
-                    }
+                    expired.TaskSource.TrySetException(new SoilException(
+                        $"Initialization request expired after 5 minutes (ID: {expired.RequestId})",
+                        SoilExceptionErrorCode.Timeout));
                     _queuedInitRequests.Remove(expired);
                 }
             }
@@ -535,22 +585,41 @@ namespace FlyingAcorn.Soil.Core
         private static void BroadcastReady()
         {
             if (_readyBroadcasted) return;
+
+            // Double-check that Ready property is actually true before broadcasting
+            if (!Ready)
+            {
+                MyDebug.Verbose("BroadcastReady called but Ready property is false, skipping broadcast");
+                return;
+            }
+
             MyDebug.Info($"Soil-Core: Services are ready - {UserInfo?.uuid}");
             _readyBroadcasted = true;
             OnServicesReady?.Invoke();
         }
 
-        private static async Task AwaitWithDeadline(Task task, DateTime deadline, string stage)
+        private static async UniTask AwaitWithDeadline(UniTask task, DateTime deadline, string stage)
         {
             var remaining = deadline - DateTime.UtcNow;
             if (remaining <= TimeSpan.Zero)
                 throw new SoilException($"Initialization timed out during {stage}", SoilExceptionErrorCode.Timeout);
 
-            var completed = await Task.WhenAny(task, Task.Delay(remaining));
-            if (completed != task)
+            var completed = await UniTask.WhenAny(task, UniTask.Delay(remaining));
+            if (completed != 0)
                 throw new SoilException($"Initialization timed out during {stage}", SoilExceptionErrorCode.Timeout);
+        }
 
-            await task;
+        private static async UniTaskVoid AttachInitializationSuccessCallback(Task task)
+        {
+            try
+            {
+                await task;
+                RunOnUnityContext(OnInitializationSuccess);
+            }
+            catch
+            {
+                // failure handled elsewhere
+            }
         }
 
         private static bool IsAuthenticationCurrentlyValid()
@@ -600,7 +669,7 @@ namespace FlyingAcorn.Soil.Core
                 if (exception is OperationCanceledException)
                     return SoilExceptionErrorCode.Canceled;
 
-                if (exception is TimeoutException || exception is TaskCanceledException)
+                if (exception is TimeoutException || exception is OperationCanceledException)
                     return SoilExceptionErrorCode.Timeout;
 
                 if (!IsNetworkAvailable)

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using FlyingAcorn.Analytics;
 using UnityEngine;
+using Cysharp.Threading.Tasks;
 using static FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.Data
@@ -136,22 +137,21 @@ namespace FlyingAcorn.Soil.Core.Data
             return settingForCountry.ApiUrl ?? FallBackApiUrl;
         }
         
-        public static async System.Threading.Tasks.Task ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
+        public static async UniTask ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
         {
-            var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
+            var tcs = new UniTaskCompletionSource<bool>();
             var operation = request.SendWebRequest();
-            operation.completed += _ => tcs.SetResult(true);
-            
-            var timeoutTask = System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
-            var completedTask = await System.Threading.Tasks.Task.WhenAny(tcs.Task, timeoutTask);
-            
-            if (completedTask == timeoutTask)
+            operation.completed += _ => tcs.TrySetResult(true);
+
+            var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds));
+            var (hasResultLeft, _) = await UniTask.WhenAny(tcs.Task, timeoutTask);
+
+            if (!hasResultLeft)
             {
                 request.Abort();
-                throw new SoilException($"Request timeout after {timeoutSeconds}s", 
-                    SoilExceptionErrorCode.Timeout);
+                throw new SoilException($"Request timeout after {timeoutSeconds}s", SoilExceptionErrorCode.Timeout);
             }
-            
+
             await tcs.Task;
         }
     }

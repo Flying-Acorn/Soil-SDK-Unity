@@ -19,7 +19,6 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
 
         private void Start()
         {
-            Failed("Initializing Soil SDK...");
             Purchasing.OnPurchasingInitialized += OnPurchasingInitialized;
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
 
@@ -31,9 +30,11 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             if (Purchasing.Ready)
             {
                 OnPurchasingInitialized();
+                FillItems(Purchasing.AvailableItems);
             }
             else
             {
+                Failed("Initializing Soil SDK...");
                 Purchasing.Initialize(verifyOnInitialize: true);
             }
         }

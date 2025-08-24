@@ -53,7 +53,17 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
 
         private void OnSoilServicesReady()
         {
+            // Double-check that SoilServices is actually ready
+            if (!SoilServices.Ready)
+            {
+                MyDebug.LogWarning("OnSoilServicesReady called but SoilServices.Ready is still false. Retrying...");
+                // Wait a frame and check again
+                Invoke(nameof(OnSoilServicesReady), 0.1f);
+                return;
+            }
+            
             statusText.text = "Soil SDK ready. Initializing CloudSave...";
+            MyDebug.Info($"CloudSave demo - SoilServices.Ready: {SoilServices.Ready}");
             LoadAll();
         }
 
@@ -64,12 +74,25 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
 
         private void Save()
         {
+            if (string.IsNullOrEmpty(keyInput.text) || string.IsNullOrEmpty(valueInput.text))
+            {
+                statusText.text = "Please enter both key and value";
+                return;
+            }
+            
+            if (!SoilServices.Ready)
+            {
+                statusText.text = "Soil SDK is not ready yet. Please wait...";
+                return;
+            }
+            
             _ = SaveAsync();
         }
 
-        private async System.Threading.Tasks.Task SaveAsync()
+        private async Cysharp.Threading.Tasks.UniTask SaveAsync()
         {
             statusText.text = "Saving data...";
+            MyDebug.Info($"CloudSave SaveAsync - SoilServices.Ready: {SoilServices.Ready}, CloudSave.Ready: {CloudSave.Ready}");
             try
             {
                 await CloudSave.SaveAsync(keyInput.text, valueInput.text);
@@ -77,6 +100,7 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
             }
             catch (Exception e)
             {
+                MyDebug.LogError($"CloudSave SaveAsync failed: {e.Message}");
                 statusText.text = $"Save failed: {e.Message}";
             }
 
@@ -85,12 +109,25 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
 
         private void Load()
         {
+            if (string.IsNullOrEmpty(keyInput.text))
+            {
+                statusText.text = "Please enter a key to load";
+                return;
+            }
+            
+            if (!SoilServices.Ready)
+            {
+                statusText.text = "Soil SDK is not ready yet. Please wait...";
+                return;
+            }
+            
             _ = LoadAsync();
         }
 
-        private async System.Threading.Tasks.Task LoadAsync()
+        private async Cysharp.Threading.Tasks.UniTask LoadAsync()
         {
             statusText.text = "Loading data...";
+            MyDebug.Info($"CloudSave LoadAsync - SoilServices.Ready: {SoilServices.Ready}, CloudSave.Ready: {CloudSave.Ready}");
             try
             {
                 var value = await CloudSave.LoadAsync(keyInput.text);
@@ -99,6 +136,7 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
             }
             catch (Exception e)
             {
+                MyDebug.LogError($"CloudSave LoadAsync failed: {e.Message}");
                 statusText.text = $"Load failed: {e.Message}";
             }
 

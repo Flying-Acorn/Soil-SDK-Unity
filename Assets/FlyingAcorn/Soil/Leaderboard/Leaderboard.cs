@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
-using System.Net.Http;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
@@ -25,7 +25,7 @@ namespace FlyingAcorn.Soil.Leaderboard
 
 
         [UsedImplicitly]
-        public static async Task<UserScore> ReportScore(double score, string leaderboardId)
+        public static async UniTask<UserScore> ReportScore(double score, string leaderboardId, CancellationToken cancellationToken = default)
         {
             var payload = new Dictionary<string, object>
             {
@@ -33,25 +33,19 @@ namespace FlyingAcorn.Soil.Leaderboard
                 { "leaderboard_identifier", leaderboardId },
                 { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
             };
-            return await ReportScore(payload);
+            return await ReportScore(payload, cancellationToken);
         }
 
         ///<summary>
         ///Report a score to the leaderboard, when your scores are too big to be parsed as a double.
         ///</summary>
         [UsedImplicitly]
-        public static async Task<UserScore> ReportScore(string score, string leaderboardId)
+        public static async UniTask<UserScore> ReportScore(string score, string leaderboardId, CancellationToken cancellationToken = default)
         {
-            try
+            // Prefer TryParse to avoid exception cost; fall back to string payload only when truly non-double or overflow
+            if (double.TryParse(score, out var parsed))
             {
-                var doubleScore = double.Parse(score);
-                return await ReportScore(doubleScore, leaderboardId);
-            }
-            catch (Exception e)
-            {
-                if (e is not OverflowException)
-                    throw new SoilException($"Failed to report score. Error: {e.Message}", 
-                        SoilExceptionErrorCode.InvalidRequest);
+                return await ReportScore(parsed, leaderboardId, cancellationToken);
             }
 
             var payload = new Dictionary<string, object>
@@ -60,57 +54,55 @@ namespace FlyingAcorn.Soil.Leaderboard
                 { "leaderboard_identifier", leaderboardId },
                 { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
             };
-            return await ReportScore(payload);
+            return await ReportScore(payload, cancellationToken);
         }
 
-        private static async Task<UserScore> ReportScore(Dictionary<string, object> payload)
+        private static async UniTask<UserScore> ReportScore(Dictionary<string, object> payload, CancellationToken cancellationToken)
         {
             if (!SoilServices.Ready)
                 throw new SoilException("Soil SDK is not ready", SoilExceptionErrorCode.InvalidRequest);
 
             var stringBody = JsonConvert.SerializeObject(payload);
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            using var request = new UnityEngine.Networking.UnityWebRequest(ReportScoreUrl, UnityEngine.Networking.UnityWebRequest.kHttpVerbPOST);
+            var bodyRaw = Encoding.UTF8.GetBytes(stringBody);
+            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
 
-            using var reportScoreClient = new HttpClient();
-            reportScoreClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            reportScoreClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            var request = new HttpRequestMessage(HttpMethod.Post, ReportScoreUrl);
-            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
-            HttpResponseMessage response;
-            string responseString;
-            
+            // Cancellation support
+            using var reg = cancellationToken.CanBeCanceled
+                ? cancellationToken.Register(() => { if (!request.isDone) request.Abort(); })
+                : default;
+
             try
             {
-                response = await reportScoreClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            catch (SoilException)
             {
-                throw new SoilException("Request timed out while reporting score", 
-                    SoilExceptionErrorCode.TransportError);
+                throw; // propagate
             }
-            catch (HttpRequestException ex)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                throw new SoilException($"Network error while reporting score: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException("Report score canceled", SoilExceptionErrorCode.Canceled);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while reporting score: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while reporting score: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            if (response is { IsSuccessStatusCode: true })
-                return JsonConvert.DeserializeObject<UserScore>(responseString);
-            else
+            var status = request.responseCode;
+            var text = request.downloadHandler.text;
+            if (status >= 200 && status < 300)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                return JsonConvert.DeserializeObject<UserScore>(text);
             }
+            throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
         }
 
-        public static async Task DeleteScore(string leaderboardId)
+        public static async UniTask DeleteScore(string leaderboardId, CancellationToken cancellationToken = default)
         {
             if (!SoilServices.Ready)
                 throw new SoilException("Soil SDK is not ready", SoilExceptionErrorCode.InvalidRequest);
@@ -121,45 +113,35 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            using var deleteLeaderboardClient = new HttpClient();
-            deleteLeaderboardClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            deleteLeaderboardClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            var request = new HttpRequestMessage(HttpMethod.Delete, ReportScoreUrl);
-            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
-            HttpResponseMessage response;
-            
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            // Use the proper delete endpoint instead of the report score endpoint
+            using var request = new UnityEngine.Networking.UnityWebRequest(DeleteLeaderboardUrl, UnityEngine.Networking.UnityWebRequest.kHttpVerbDELETE);
+            var bodyRaw = Encoding.UTF8.GetBytes(stringBody);
+            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
+            using var reg = cancellationToken.CanBeCanceled
+                ? cancellationToken.Register(() => { if (!request.isDone) request.Abort(); })
+                : default;
             try
             {
-                response = await deleteLeaderboardClient.SendAsync(request);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while deleting score", 
-                    SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while deleting score: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
+            catch (SoilException) { throw; }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            { throw new SoilException("Delete score canceled", SoilExceptionErrorCode.Canceled); }
             catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while deleting score: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
-            }
+            { throw new SoilException($"Unexpected error while deleting score: {ex.Message}", SoilExceptionErrorCode.TransportError); }
 
-            if (response is not { StatusCode: HttpStatusCode.NoContent or HttpStatusCode.NotFound })
-            {
-                var responseString = await response.Content.ReadAsStringAsync();
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
-            }
+            var status = request.responseCode;
+            if (status == (long)HttpStatusCode.NoContent || status == (long)HttpStatusCode.NotFound) return;
+            var text = request.downloadHandler.text;
+            throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
         }
 
-        public static async Task<List<UserScore>> FetchLeaderboardAsync(string leaderboardId, int count = 10,
-            bool relative = false)
+        public static async UniTask<List<UserScore>> FetchLeaderboardAsync(string leaderboardId, int count = 10,
+            bool relative = false, CancellationToken cancellationToken = default)
         {
             if (!SoilServices.Ready)
                 throw new SoilException("Soil SDK is not ready", SoilExceptionErrorCode.InvalidRequest);
@@ -173,41 +155,34 @@ namespace FlyingAcorn.Soil.Leaderboard
             };
             var stringBody = JsonConvert.SerializeObject(payload);
 
-            using var fetchClient = new HttpClient();
-            fetchClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-            fetchClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
-            var request = new HttpRequestMessage(HttpMethod.Post, FetchLeaderboardUrl);
-            request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
-            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
-            HttpResponseMessage response;
-            string responseString;
-            
+            var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
+            using var request = new UnityEngine.Networking.UnityWebRequest(FetchLeaderboardUrl, UnityEngine.Networking.UnityWebRequest.kHttpVerbPOST);
+            var bodyRaw = Encoding.UTF8.GetBytes(stringBody);
+            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
+            using var reg = cancellationToken.CanBeCanceled
+                ? cancellationToken.Register(() => { if (!request.isDone) request.Abort(); })
+                : default;
             try
             {
-                response = await fetchClient.SendAsync(request);
-                responseString = await response.Content.ReadAsStringAsync();
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
             }
-            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-            {
-                throw new SoilException("Request timed out while reporting score", SoilExceptionErrorCode.TransportError);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new SoilException($"Network error while reporting score: {ex.Message}", SoilExceptionErrorCode.TransportError);
-            }
+            catch (SoilException) { throw; }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            { throw new SoilException("Fetch leaderboard canceled", SoilExceptionErrorCode.Canceled); }
             catch (Exception ex)
-            {
-                throw new SoilException($"Unexpected error while reporting score: {ex.Message}", SoilExceptionErrorCode.TransportError);
-            }
+            { throw new SoilException($"Unexpected error while fetching leaderboard: {ex.Message}", SoilExceptionErrorCode.TransportError); }
 
-            if (response is not { IsSuccessStatusCode: true })
+            var status = request.responseCode;
+            var text = request.downloadHandler.text;
+            if (status < 200 || status >= 300)
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
             }
-
-            var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);
-            LeaderboardPlayerPrefs.SetCachedLeaderboardData(leaderboardId, responseString, relative);
+            var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(text);
+            LeaderboardPlayerPrefs.SetCachedLeaderboardData(leaderboardId, text, relative);
             return leaderboard;
         }
     }

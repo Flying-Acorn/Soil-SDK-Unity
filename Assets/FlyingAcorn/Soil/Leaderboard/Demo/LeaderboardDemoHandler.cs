@@ -17,11 +17,11 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         [SerializeField] private TextMeshProUGUI yourScore;
         [SerializeField] private TextMeshProUGUI resultText;
         [SerializeField] private VerticalLayoutGroup leaderboardContainer;
-        [SerializeField] private Button getLeaderboardButton;
-        [SerializeField] private long score = 100;
-        [SerializeField] private int resultCount = 100;
-        private List<LeaderboardRow> _rows = new();
-        private bool _relativeMode;
+    [SerializeField] private Button getLeaderboardButton;
+    [SerializeField] private long score = 100;
+    [SerializeField] private int resultCount = 100;
+    private List<LeaderboardRow> _rows = new();
+    private bool _relativeMode;
 
         private void Start()
         {

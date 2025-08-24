@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Soil.Core.User.Authentication.Data;
 
 namespace FlyingAcorn.Soil.Core.User.Authentication
@@ -8,9 +8,9 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
     {
         public static string LastNotificationDate { get; set; }
 
-        public static Task<List<Notification>> GetNotificationsAsync()
+        public static UniTask<List<Notification>> GetNotificationsAsync()
         {
-            return Task.FromResult(new List<Notification>());
+            return UniTask.FromResult(new List<Notification>());
         }
     }
 }
