@@ -111,6 +111,10 @@ namespace FlyingAcorn.Soil.Purchasing
             OnPaymentDeeplinkActivated = null;
             OnPurchasingInitialized = null;
             OnItemsReceived = null;
+            OnItemsFailed = null;
+            OnInitializationFailed = null;
+            OnPurchaseStart = null;
+            OnPurchaseSuccessful = null;
         }
 
         private static void OpenInvoice(Dictionary<string, string> obj)

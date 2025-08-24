@@ -74,21 +74,28 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             showBannerButton.onClick.RemoveListener(BannerButtonListener);
             showInterstitialButton.onClick.RemoveListener(InterstitialButtonListener);
             showRewardedButton.onClick.RemoveListener(RewardedButtonListener);
+            // Comprehensive event unsubscription to prevent memory leaks and threading issues
             Events.OnInitialized -= OnInitialized;
             Events.OnInitializeFailed -= OnInitializeFailed;
+
             Events.OnBannerAdLoaded -= HandleAdLoaded;
             Events.OnInterstitialAdLoaded -= HandleAdLoaded;
             Events.OnRewardedAdLoaded -= HandleAdLoaded;
+
             Events.OnBannerAdError -= HandleAdError;
             Events.OnInterstitialAdError -= HandleAdError;
             Events.OnRewardedAdError -= HandleAdError;
+
             Events.OnRewardedAdClosed -= HandleAdClosed;
             Events.OnInterstitialAdClosed -= HandleAdClosed;
             Events.OnBannerAdClosed -= HandleAdClosed;
+
             Events.OnRewardedAdRewarded -= HandleAdCompleted;
+
             Events.OnBannerAdShown -= HandleAdShown;
             Events.OnInterstitialAdShown -= HandleAdShown;
             Events.OnRewardedAdShown -= HandleAdShown;
+
             Events.OnBannerAdClicked -= HandleAdClicked;
             Events.OnInterstitialAdClicked -= HandleAdClicked;
             Events.OnRewardedAdClicked -= HandleAdClicked;

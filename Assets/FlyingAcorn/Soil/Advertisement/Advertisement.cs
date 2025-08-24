@@ -22,11 +22,11 @@ namespace FlyingAcorn.Soil.Advertisement
     {
         [UsedImplicitly]
         public static bool Ready => availableCampaign != null;
-        private static readonly string AdvertisementBaseUrl = $"{Core.Data.Constants.ApiUrl}/advertisement/";
-        private static readonly string CampaignsUrl = $"{AdvertisementBaseUrl}campaigns/";
-        private static readonly string CampaignsSelectUrl = $"{CampaignsUrl}select/";
-    private static bool _campaignRequested;
-    private static bool _isInitializing;
+        private static string AdvertisementBaseUrl => $"{Core.Data.Constants.ApiUrl}/advertisement/";
+        private static string CampaignsUrl => $"{AdvertisementBaseUrl}campaigns/";
+        private static string CampaignsSelectUrl => $"{CampaignsUrl}select/";
+        private static bool _campaignRequested;
+        private static bool _isInitializing;
         private static Campaign availableCampaign = null;
         private static List<AdFormat> _requestedFormats;
         private static Task _cachedAssetsTask;

@@ -7,7 +7,9 @@ namespace FlyingAcorn.Soil.Socialization
 {
     public static class SocializationPlayerPrefs
     {
-        private static readonly string FriendsKey = $"{UserPlayerPrefs.GetKeysPrefix()}friends";
+    // Dynamic to reflect per-user prefix changes after account switch. If accessed in a hot path,
+    // consider caching the computed value on user change to avoid repeated string allocations.
+    private static string FriendsKey => $"{UserPlayerPrefs.GetKeysPrefix()}friends";
         private static string CacheKey(string leaderboardId, bool relative)
         {
             return FriendsKey + '_' + leaderboardId + (relative ? "_relative" : "");
@@ -29,7 +31,7 @@ namespace FlyingAcorn.Soil.Socialization
                 PlayerPrefs.Save();
             }
         }
-        
+
         internal static void SetCachedLeaderboardData(string leaderboardId, string data, bool relative)
         {
             PlayerPrefs.SetString(CacheKey(leaderboardId, relative), data);

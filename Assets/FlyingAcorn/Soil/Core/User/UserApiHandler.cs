@@ -20,8 +20,12 @@ namespace FlyingAcorn.Soil.Core.User
 
         [ItemNotNull]
         [UsedImplicitly]
-        public static async Task<UserInfo> FetchPlayerInfo()
+        public static async Task<UserInfo> FetchPlayerInfo(bool allowDuringInitialization = false)
         {
+            // Permit during core initialization when tokens are being established
+            if (!SoilServices.Ready && !allowDuringInitialization)
+                throw new SoilException("SoilServices is not initialized. Cannot fetch player info.", SoilExceptionErrorCode.NotReady);
+
             // Clear failed tasks to allow retry
             if (_fetchPlayerInfoTask is { IsCompletedSuccessfully: false, IsCompleted: true })
                 _fetchPlayerInfoTask = null;
@@ -35,7 +39,7 @@ namespace FlyingAcorn.Soil.Core.User
             {
                 MyDebug.Verbose("Player info fetch already in progress, sharing existing request...");
             }
-            
+
             try
             {
                 return await _fetchPlayerInfoTask;
@@ -68,7 +72,7 @@ namespace FlyingAcorn.Soil.Core.User
 
             using UnityWebRequest request = UnityWebRequest.Get(GetPlayerInfoUrl);
             request.timeout = UserPlayerPrefs.RequestTimeout;
-            
+
             // Set authorization header
             var authHeader = Authenticate.GetAuthorizationHeaderString();
             request.SetRequestHeader("Authorization", authHeader);
@@ -79,10 +83,10 @@ namespace FlyingAcorn.Soil.Core.User
             if (request.result != UnityWebRequest.Result.Success)
             {
                 var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
-                
+
                 if (request.result == UnityWebRequest.Result.ConnectionError)
                 {
-                    throw new SoilException($"Network error while fetching player info: {errorMessage}", 
+                    throw new SoilException($"Network error while fetching player info: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
                 else if (request.result == UnityWebRequest.Result.ProtocolError)
@@ -93,11 +97,11 @@ namespace FlyingAcorn.Soil.Core.User
                 }
                 else
                 {
-                    throw new SoilException($"Unexpected error while fetching player info: {errorMessage}", 
+                    throw new SoilException($"Unexpected error while fetching player info: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
             }
-            
+
             var responseText = request.downloadHandler?.text ?? "";
             var fetchedUser = JsonConvert.DeserializeObject<UserInfo>(responseText);
             if (fetchedUser == null)
@@ -105,7 +109,7 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new SoilException("Failed to deserialize user info response",
                     SoilExceptionErrorCode.TransportError);
             }
-            
+
             ReplaceUser(fetchedUser, UserPlayerPrefs.TokenData);
             MyDebug.Verbose($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
@@ -117,7 +121,7 @@ namespace FlyingAcorn.Soil.Core.User
         {
             if (!SoilServices.Ready)
             {
-                throw new SoilException("SoilServices is not initialized. Cannot update player info.", 
+                throw new SoilException("SoilServices is not initialized. Cannot update player info.",
                     SoilExceptionErrorCode.NotReady);
             }
 
@@ -135,7 +139,7 @@ namespace FlyingAcorn.Soil.Core.User
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.timeout = UserPlayerPrefs.RequestTimeout;
-            
+
             // Set headers
             var authHeader = Authenticate.GetAuthorizationHeaderString();
             request.SetRequestHeader("Authorization", authHeader);
@@ -147,10 +151,10 @@ namespace FlyingAcorn.Soil.Core.User
             if (request.result != UnityWebRequest.Result.Success)
             {
                 var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
-                
+
                 if (request.result == UnityWebRequest.Result.ConnectionError)
                 {
-                    throw new SoilException($"Network error while updating player info: {errorMessage}", 
+                    throw new SoilException($"Network error while updating player info: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
                 else if (request.result == UnityWebRequest.Result.ProtocolError)
@@ -161,7 +165,7 @@ namespace FlyingAcorn.Soil.Core.User
                 }
                 else
                 {
-                    throw new SoilException($"Unexpected error while updating player info: {errorMessage}", 
+                    throw new SoilException($"Unexpected error while updating player info: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
             }
@@ -173,7 +177,7 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new SoilException("Failed to deserialize updated user info response",
                     SoilExceptionErrorCode.TransportError);
             }
-            
+
             ReplaceUser(updatedUser, UserPlayerPrefs.TokenData);
             MyDebug.Verbose($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
@@ -186,7 +190,7 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new SoilException("Link response alternate user is null", SoilExceptionErrorCode.InvalidResponse);
             }
             var userIsDifferent = UserPlayerPrefs.UserInfo.uuid != linkResponseAlternateUser.uuid;
-            
+
             linkResponseAlternateUser.Validate();
             tokens.Validate();
             UserPlayerPrefs.UserInfo = userIsDifferent ? UserPlayerPrefs.UserInfo.ChangeUser(linkResponseAlternateUser) : linkResponseAlternateUser;
@@ -201,12 +205,12 @@ namespace FlyingAcorn.Soil.Core.User
                 throw new SoilException("Coming user is null", SoilExceptionErrorCode.InvalidResponse);
             }
             comingUser.Validate();
-            
+
             if (UserPlayerPrefs.UserInfo == null)
             {
                 throw new SoilException("UserPlayerPrefs.UserInfo is null", SoilExceptionErrorCode.InvalidResponse);
             }
-            
+
             UserPlayerPrefs.UserInfo = UserPlayerPrefs.UserInfo.ChangeRegionInfo(comingUser);
         }
     }

@@ -63,10 +63,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
     public static class AssetCache
     {
-        private static readonly Dictionary<string, AssetCacheEntry> _cachedAssets = new Dictionary<string, AssetCacheEntry>();
-        private static readonly HashSet<string> _currentlyDownloading = new HashSet<string>();
-        private static readonly object _lockObject = new object();
-        private static readonly string CacheDirectory = Path.Combine(Application.persistentDataPath, "SoilAssets");
+        private static readonly Dictionary<string, AssetCacheEntry> _cachedAssets = new();
+        private static readonly HashSet<string> _currentlyDownloading = new();
+        private static readonly object _lockObject = new();
+        private static string CacheDirectory => Path.Combine(Application.persistentDataPath, "SoilAssets");
 
         static AssetCache()
         {

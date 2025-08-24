@@ -53,14 +53,14 @@ namespace FlyingAcorn.Soil.Core
         private static int _retryAttempts = 0;
         private static DateTime _lastFailureTime = DateTime.MinValue;
         private static Exception _lastInitFailureException;
-        
+
         private static readonly TimeSpan[] _retryIntervals = {
             TimeSpan.FromSeconds(3),
             TimeSpan.FromSeconds(5),
             TimeSpan.FromSeconds(10),
             TimeSpan.FromSeconds(15),
+            TimeSpan.FromSeconds(17),
             TimeSpan.FromSeconds(20),
-            TimeSpan.FromSeconds(25),
         };
 
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;

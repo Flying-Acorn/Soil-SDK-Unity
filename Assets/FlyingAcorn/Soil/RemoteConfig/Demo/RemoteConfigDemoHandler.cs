@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using Newtonsoft.Json;
 using TMPro;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
         {
             SetDevButton();
             fetchedDataText.text = "Initializing Soil SDK...";
-            
+
             SoilServices.OnServicesReady += OnSoilServicesReady;
 
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
@@ -44,21 +45,32 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
             setDevButton.onClick.AddListener(SetDevMode);
             fetchButton.onClick.AddListener(InitializeAndFetchTest);
         }
-        
+
         private void OnDestroy()
         {
+            // Unsubscribe from SoilServices events
             if (SoilServices.OnServicesReady != null)
                 SoilServices.OnServicesReady -= OnSoilServicesReady;
             if (SoilServices.OnInitializationFailed != null)
                 SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+
+            // Unsubscribe from UI events
+            if (setDevButton != null)
+                setDevButton.onClick.RemoveListener(SetDevMode);
+            if (fetchButton != null)
+                fetchButton.onClick.RemoveListener(InitializeAndFetchTest);
+
+            // Unsubscribe from RemoteConfig events
+            RemoteConfig.OnServerAnswer -= HandleReceivedConfigs;
+            RemoteConfig.OnSuccessfulFetch -= null; // Ensure this is also unsubscribed if ever used
         }
-        
+
         private void OnSoilServicesReady()
         {
             fetchedDataText.text = "Soil SDK ready. Press Fetch to get remote config.";
         }
 
-        private void OnSoilServicesInitializationFailed(Exception exception)
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             fetchedDataText.text = $"SDK initialization failed: {exception.Message}";
         }
@@ -68,7 +80,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
         private void InitializeAndFetchTest()
         {
             fetchedDataText.text = "Working...";
-            
+
             RemoteConfig.OnServerAnswer -= HandleReceivedConfigs;
             RemoteConfig.OnServerAnswer += HandleReceivedConfigs;
             RemoteConfig.FetchConfig(new Dictionary<string, object>

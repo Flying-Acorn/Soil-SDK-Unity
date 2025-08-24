@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Leaderboard.Demo;
 using FlyingAcorn.Soil.Leaderboard.Models;
 using FlyingAcorn.Soil.Socialization.Models;
@@ -39,13 +40,13 @@ namespace FlyingAcorn.Soil.Socialization.Demo
 
             SoilServices.OnServicesReady += OnSoilServicesReady;
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
-            
+
             addButton.onClick.AddListener(AddFriend);
             removeButton.onClick.AddListener(RemoveFriend);
             friendsButton.onClick.AddListener(LoadFriends);
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
-            
+
             if (SoilServices.Ready)
             {
                 OnSoilServicesReady();
@@ -62,33 +63,42 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 SoilServices.OnServicesReady -= OnSoilServicesReady;
             if (SoilServices.OnInitializationFailed != null)
                 SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
-                
-            addButton.onClick.RemoveListener(AddFriend);
-            removeButton.onClick.RemoveListener(RemoveFriend);
-            friendsButton.onClick.RemoveListener(LoadFriends);
-            setRelativeButton.onClick.RemoveListener(SetRelativeMode);
-            getLeaderboardButton.onClick.RemoveListener(ReportScore);
+
+            if (addButton != null)
+                addButton.onClick.RemoveListener(AddFriend);
+            if (removeButton != null)
+                removeButton.onClick.RemoveListener(RemoveFriend);
+            if (friendsButton != null)
+                friendsButton.onClick.RemoveListener(LoadFriends);
+            if (setRelativeButton != null)
+                setRelativeButton.onClick.RemoveListener(SetRelativeMode);
+            if (getLeaderboardButton != null)
+                getLeaderboardButton.onClick.RemoveListener(ReportScore);
         }
-        
+
         private void OnSoilServicesReady()
         {
             headerText.text = "Soil SDK ready. Press something";
             statusText.text = "Ready";
         }
 
-        private void OnSoilServicesInitializationFailed(Exception exception)
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             statusText.text = $"SDK initialization failed: {exception.Message}";
         }
 
-        private async void ReportScore()
+        private void ReportScore()
         {
-            statusText.text = "Working...";
+            _ = ReportScoreAsync();
+        }
+
+        private async System.Threading.Tasks.Task ReportScoreAsync()
+        {
+            statusText.text = "Reporting score...";
             try
             {
                 var userScore = await Leaderboard.Leaderboard.ReportScore(score, "demo_dec_manual");
                 GetLeaderboard(userScore);
-                yourScore.text = "score" + ":" + userScore.score_scientific.ToString();
             }
             catch (Exception e)
             {
@@ -108,7 +118,12 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _friendRows = new List<FriendRow>();
         }
 
-        private async void GetLeaderboard(UserScore userScore)
+        private void GetLeaderboard(UserScore userScore)
+        {
+            _ = GetLeaderboardAsync(userScore);
+        }
+
+        private async System.Threading.Tasks.Task GetLeaderboardAsync(UserScore userScore)
         {
             Reset();
             statusText.text = "Working...";
@@ -132,13 +147,19 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             {
                 var row = Instantiate(leaderboardRowPrefab, rowsContainer.transform);
                 row.SetData(userScore);
+                row.SetPlayer(userScore.uuid == SoilServices.UserInfo.uuid);
                 _leaderboardRows.Add(row);
             }
 
             statusText.text = rows.Count == 0 ? "No Scores" : "";
         }
 
-        private async void AddFriend()
+        private void AddFriend()
+        {
+            _ = AddFriendAsync();
+        }
+
+        private async System.Threading.Tasks.Task AddFriendAsync()
         {
             statusText.text = "Working...";
             FriendsResponse response;
@@ -160,11 +181,15 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             }
 
             statusText.text = "";
-
             LoadFriends();
         }
 
-        private async void RemoveFriend()
+        private void RemoveFriend()
+        {
+            _ = RemoveFriendAsync();
+        }
+
+        private async System.Threading.Tasks.Task RemoveFriendAsync()
         {
             statusText.text = "Working...";
             FriendsResponse response;
@@ -186,7 +211,6 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             }
 
             statusText.text = "";
-
             LoadFriends();
         }
 
@@ -202,11 +226,45 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             SetRelativeText();
         }
 
-        private async void LoadFriends()
+        private void LoadFriends()
         {
-            statusText.text = "Working...";
+            _ = LoadFriendsAsync();
+        }
+
+        private async System.Threading.Tasks.Task LoadFriendsAsync()
+        {
+            // Clear existing rows so repeated requests don't append duplicates
             Reset();
-            FriendsResponse response;
+
+            // Show a refreshing indicator and disable buttons to prevent concurrent actions
+            TextMeshProUGUI friendsBtnTextComp = null;
+            string originalFriendsBtnText = null;
+            try
+            {
+                if (friendsButton != null)
+                {
+                    friendsBtnTextComp = friendsButton.GetComponentInChildren<TextMeshProUGUI>();
+                    if (friendsBtnTextComp != null)
+                    {
+                        originalFriendsBtnText = friendsBtnTextComp.text;
+                        friendsBtnTextComp.text = "Refreshing...";
+                    }
+                    friendsButton.interactable = false;
+                }
+
+                if (addButton != null) addButton.interactable = false;
+                if (removeButton != null) removeButton.interactable = false;
+                if (setRelativeButton != null) setRelativeButton.interactable = false;
+                if (getLeaderboardButton != null) getLeaderboardButton.interactable = false;
+
+                statusText.text = "Refreshing...";
+            }
+            catch
+            {
+                // Ignore UI update failures; continue to attempt load
+                statusText.text = "Refreshing...";
+            }
+            FriendsResponse response = null;
             try
             {
                 response = await Socialization.GetFriends();
@@ -214,8 +272,29 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             catch (Exception e)
             {
                 statusText.text = e.Message;
+                Reset();
                 return;
             }
+            finally
+            {
+                // restore UI state regardless of success/failure
+                try
+                {
+                    if (friendsBtnTextComp != null)
+                        friendsBtnTextComp.text = originalFriendsBtnText ?? friendsBtnTextComp.text;
+                    if (friendsButton != null) friendsButton.interactable = true;
+                    if (addButton != null) addButton.interactable = true;
+                    if (removeButton != null) removeButton.interactable = true;
+                    if (setRelativeButton != null) setRelativeButton.interactable = true;
+                    if (getLeaderboardButton != null) getLeaderboardButton.interactable = true;
+                }
+                catch
+                {
+                    // ignore UI restore failures
+                }
+            }
+
+            if (response == null) return;
 
             if (response.detail.code != Constants.FriendshipStatus.FriendshipExists)
             {
@@ -223,7 +302,6 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 return;
             }
 
-            statusText.text = "";
             GetFriendsSuccess(response.friends);
         }
 

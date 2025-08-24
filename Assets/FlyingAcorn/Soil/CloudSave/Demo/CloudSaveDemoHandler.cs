@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,34 +23,51 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
         private void Start()
         {
             statusText.text = "Initializing Soil SDK...";
-            SoilServices.OnServicesReady += OnSoilServicesReady;
-            SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
-            SoilServices.InitializeAsync();
-            
+            if (!SoilServices.Ready)
+            {
+                SoilServices.OnServicesReady += OnSoilServicesReady;
+                SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
+                SoilServices.InitializeAsync();
+            }
+            else
+            {
+                OnSoilServicesReady();
+            }
+
             saveButton.onClick.AddListener(Save);
             loadButton.onClick.AddListener(Load);
         }
-        
+
         private void OnDestroy()
         {
             if (SoilServices.OnServicesReady != null)
                 SoilServices.OnServicesReady -= OnSoilServicesReady;
             if (SoilServices.OnInitializationFailed != null)
                 SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+
+            if (saveButton != null)
+                saveButton.onClick.RemoveListener(Save);
+            if (loadButton != null)
+                loadButton.onClick.RemoveListener(Load);
         }
-        
+
         private void OnSoilServicesReady()
         {
             statusText.text = "Soil SDK ready. Initializing CloudSave...";
             LoadAll();
         }
-        
-        private void OnSoilServicesInitializationFailed(Exception exception)
+
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             statusText.text = $"SDK initialization failed: {exception.Message}";
         }
 
-        private async void Save()
+        private void Save()
+        {
+            _ = SaveAsync();
+        }
+
+        private async System.Threading.Tasks.Task SaveAsync()
         {
             statusText.text = "Saving data...";
             try
@@ -65,7 +83,12 @@ namespace FlyingAcorn.Soil.CloudSave.Demo
             LoadAll();
         }
 
-        private async void Load()
+        private void Load()
+        {
+            _ = LoadAsync();
+        }
+
+        private async System.Threading.Tasks.Task LoadAsync()
         {
             statusText.text = "Loading data...";
             try

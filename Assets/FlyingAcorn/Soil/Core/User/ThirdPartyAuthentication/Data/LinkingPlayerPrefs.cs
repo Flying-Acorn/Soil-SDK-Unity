@@ -9,7 +9,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 {
     public static class LinkingPlayerPrefs
     {
-        private static readonly string LinksKey = $"{UserPlayerPrefs.GetKeysPrefix()}links";
+        private static string LinksKey => $"{UserPlayerPrefs.GetKeysPrefix()}links";
 
         internal static void AddLink(LinkPostResponse link)
         {

@@ -19,7 +19,7 @@ namespace FlyingAcorn.Soil.CloudSave
 {
     public static class CloudSave
     {
-        private static readonly string CloudSaveUrl = $"{Constants.ApiUrl}/cloudsave/";
+        private static string CloudSaveUrl => $"{Constants.ApiUrl}/cloudsave/";
         public static bool Ready => SoilServices.Ready;
 
         public static async Task SaveAsync(string key, object value, bool isPublic = false)

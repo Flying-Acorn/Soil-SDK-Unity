@@ -8,8 +8,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 {
     public static class AdvertisementPlayerPrefs
     {
-        private static readonly string AdvertisementKey = $"{UserPlayerPrefs.GetKeysPrefix()}advertisement";
-        private static readonly string CachedAssetsKey = $"{UserPlayerPrefs.GetKeysPrefix()}cached_assets";
+        private static string AdvertisementKey => $"{UserPlayerPrefs.GetKeysPrefix()}advertisement";
+        private static string CachedAssetsKey => $"{UserPlayerPrefs.GetKeysPrefix()}cached_assets";
 
         internal static Campaign CachedCampaign
         {

@@ -9,10 +9,10 @@ namespace FlyingAcorn.Soil.Core.User
         internal static UserInfo UserInfoInstance => UserInfo;
         private static UserInfo _userInfoInstance;
 
-        private static readonly string TokenDataKey = $"{GetKeysPrefix()}token_data";
-        private static readonly string UserInfoKey = $"{GetKeysPrefix()}player_info";
-        private static readonly string AppIDKey = $"{GetKeysPrefix()}app_id";
-        private static readonly string SDKTokenKey = $"{GetKeysPrefix()}sdk_token";
+        private static string TokenDataKey => $"{GetKeysPrefix()}token_data";
+        private static string UserInfoKey => $"{GetKeysPrefix()}player_info";
+        private static string AppIDKey => $"{GetKeysPrefix()}app_id";
+        private static string SDKTokenKey => $"{GetKeysPrefix()}sdk_token";
 
         internal static void ResetSetInMemoryCache()
         {
@@ -71,7 +71,7 @@ namespace FlyingAcorn.Soil.Core.User
                 return settings && settings.DeepLinkEnabled;
             }
         }
-        
+
         public static int RequestTimeout
         {
             get

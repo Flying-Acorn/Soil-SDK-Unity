@@ -248,10 +248,8 @@ namespace FlyingAcorn.Soil.Socialization
             var request = new HttpRequestMessage(HttpMethod.Post, FriendsLeaderboardUrl);
             request.Content = new StringContent(stringBody, Encoding.UTF8, "application/json");
             request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-            
             HttpResponseMessage response;
             string responseString;
-            
             try
             {
                 response = await fetchClient.SendAsync(request);
@@ -259,18 +257,15 @@ namespace FlyingAcorn.Soil.Socialization
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while fetching friends leaderboard", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException("Request timed out while fetching friends leaderboard", SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while fetching friends leaderboard: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Network error while fetching friends leaderboard: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while fetching friends leaderboard: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while fetching friends leaderboard: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
             if (response is not { IsSuccessStatusCode: true })

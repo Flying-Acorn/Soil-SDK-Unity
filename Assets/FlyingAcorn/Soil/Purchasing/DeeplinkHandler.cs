@@ -10,7 +10,7 @@ namespace FlyingAcorn.Soil.Purchasing
 {
     public static class DeeplinkHandler
     {
-        private static readonly Uri PaymentDeeplink;
+        private static Uri PaymentDeeplink;
         [UsedImplicitly] internal static Action<Dictionary<string, string>> OnPaymentDeeplinkActivated;
 
         static DeeplinkHandler()

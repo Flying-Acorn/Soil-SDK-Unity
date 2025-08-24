@@ -15,10 +15,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
     internal static class ThirdPartyAPIHandler
     {
-        private static readonly string SocialBaseUrl = $"{Authenticate.UserBaseUrl}/social";
-
-        private static readonly string LinkUserUrl = $"{SocialBaseUrl}/link/";
-        private static readonly string UnlinkUserUrl = $"{SocialBaseUrl}/unlink/";
+        private static string SocialBaseUrl => $"{Authenticate.UserBaseUrl}/social";
+        private static string LinkUserUrl => $"{SocialBaseUrl}/link/";
+        private static string UnlinkUserUrl => $"{SocialBaseUrl}/unlink/";
 
         private static Dictionary<string, object> GetLinkUserPayload(LinkAccountInfo thirdPartyUser,
             ThirdPartySettings settings)
@@ -58,7 +57,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await linkClient.SendAsync(request);
@@ -66,17 +65,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while linking account", 
+                throw new SoilException("Request timed out while linking account",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while linking account: {ex.Message}", 
+                throw new SoilException($"Network error while linking account: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while linking account: {ex.Message}", 
+                throw new SoilException($"Unexpected error while linking account: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -127,10 +126,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
             linkClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             var request = new HttpRequestMessage(HttpMethod.Get, LinkUserUrl);
-            
+
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await linkClient.SendAsync(request);
@@ -138,17 +137,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while getting links", 
+                throw new SoilException("Request timed out while getting links",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while getting links: {ex.Message}", 
+                throw new SoilException($"Network error while getting links: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while getting links: {ex.Message}", 
+                throw new SoilException($"Unexpected error while getting links: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 
@@ -186,7 +185,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             };
 
             var stringBody = JsonConvert.SerializeObject(body);
-            
+
             using var linkClient = new HttpClient();
             linkClient.Timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
             linkClient.DefaultRequestHeaders.Authorization = Authenticate.GetAuthorizationHeader();
@@ -196,7 +195,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             HttpResponseMessage response;
             string responseString;
-            
+
             try
             {
                 response = await linkClient.SendAsync(request);
@@ -204,17 +203,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while unlinking account", 
+                throw new SoilException("Request timed out while unlinking account",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while unlinking account: {ex.Message}", 
+                throw new SoilException($"Network error while unlinking account: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while unlinking account: {ex.Message}", 
+                throw new SoilException($"Unexpected error while unlinking account: {ex.Message}",
                     SoilExceptionErrorCode.TransportError);
             }
 

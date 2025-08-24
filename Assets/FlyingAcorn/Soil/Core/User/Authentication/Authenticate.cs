@@ -60,7 +60,8 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             {
                 try
                 {
-                    await UserApiHandler.FetchPlayerInfo();
+                    // Allow fetch during initialization prior to Ready being true
+                    await UserApiHandler.FetchPlayerInfo(allowDuringInitialization: true);
                 }
                 catch (Exception e)
                 {
@@ -87,12 +88,12 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             var body = UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties();
             var stringBody = JsonConvert.SerializeObject(new Dictionary<string, object> { { "properties", body } });
             byte[] bodyData = Encoding.UTF8.GetBytes(stringBody);
-            
+
             using UnityWebRequest request = new UnityWebRequest(RegisterPlayerUrl, "POST");
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.timeout = UserPlayerPrefs.RequestTimeout;
-            
+
             // Set headers
             request.SetRequestHeader("Authorization", $"Bearer {bearerToken}");
             request.SetRequestHeader("Content-Type", "application/json");
@@ -104,10 +105,10 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             if (request.result != UnityWebRequest.Result.Success)
             {
                 var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
-                
+
                 if (request.result == UnityWebRequest.Result.ConnectionError)
                 {
-                    throw new SoilException($"Network error while registering player: {errorMessage}", 
+                    throw new SoilException($"Network error while registering player: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
                 else if (request.result == UnityWebRequest.Result.ProtocolError)
@@ -118,7 +119,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 }
                 else
                 {
-                    throw new SoilException($"Unexpected error while registering player: {errorMessage}", 
+                    throw new SoilException($"Unexpected error while registering player: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
             }
@@ -130,7 +131,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 throw new SoilException("Failed to deserialize token data from registration response",
                     SoilExceptionErrorCode.TransportError);
             }
-            
+
             UserPlayerPrefs.TokenData = tokenData;
             MyDebug.Info($"Player registered successfully. Response: {responseString}");
             OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
@@ -146,7 +147,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Refresh))
             {
                 // TODO: Check user lifetime and re-register
-                throw new SoilException("Refresh token is invalid. Re-register player.", 
+                throw new SoilException("Refresh token is invalid. Re-register player.",
                     SoilExceptionErrorCode.InvalidRequest);
             }
 
@@ -160,7 +161,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.timeout = UserPlayerPrefs.RequestTimeout;
-            
+
             // Set headers
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Accept", "application/json");
@@ -170,10 +171,10 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             if (request.result != UnityWebRequest.Result.Success)
             {
                 var errorMessage = $"Request failed: {request.error ?? "Unknown error"} (Code: {request.responseCode})";
-                
+
                 if (request.result == UnityWebRequest.Result.ConnectionError)
                 {
-                    throw new SoilException($"Network error while refreshing tokens: {errorMessage}", 
+                    throw new SoilException($"Network error while refreshing tokens: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
                 else if (request.result == UnityWebRequest.Result.ProtocolError)
@@ -184,7 +185,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 }
                 else
                 {
-                    throw new SoilException($"Unexpected error while refreshing tokens: {errorMessage}", 
+                    throw new SoilException($"Unexpected error while refreshing tokens: {errorMessage}",
                         SoilExceptionErrorCode.TransportError);
                 }
             }
@@ -196,7 +197,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 throw new SoilException("Failed to deserialize token data from refresh response",
                     SoilExceptionErrorCode.TransportError);
             }
-            
+
             UserPlayerPrefs.TokenData = tokenData;
             MyDebug.Info($"Tokens refreshed successfully. Response: {responseString}");
             OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);

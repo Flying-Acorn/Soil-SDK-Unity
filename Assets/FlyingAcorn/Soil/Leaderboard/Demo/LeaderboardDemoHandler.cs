@@ -1,4 +1,5 @@
 using System;
+using FlyingAcorn.Soil.Core.Data;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Leaderboard.Models;
@@ -42,13 +43,18 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
         }
-        
+
         private void OnDestroy()
         {
             if (SoilServices.OnServicesReady != null)
                 SoilServices.OnServicesReady -= OnSoilServicesReady;
             if (SoilServices.OnInitializationFailed != null)
                 SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+
+            if (setRelativeButton != null)
+                setRelativeButton.onClick.RemoveListener(SetRelativeMode);
+            if (getLeaderboardButton != null)
+                getLeaderboardButton.onClick.RemoveListener(ReportScore);
         }
 
         private void OnSoilServicesReady()
@@ -67,32 +73,43 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             yourScore.text = SoilServices.UserInfo.name + ":" + score;
         }
 
-        private async void ReportScore()
+        private void ReportScore()
+        {
+            _ = ReportScoreAsync();
+        }
+
+        private async System.Threading.Tasks.Task ReportScoreAsync()
         {
             Failed("Reporting score...");
             try
             {
                 var userScore = await Leaderboard.ReportScore(score, "demo_dec_manual");
-                Failed("Score reported successfully");
                 GetLeaderboard(userScore);
             }
             catch (Exception e)
             {
-                Failed($"Report score failed: {e.Message}");
+                Failed(e.Message);
             }
         }
 
-        private async void GetLeaderboard(UserScore userScore)
+        private void GetLeaderboard(UserScore userScore)
+        {
+            _ = GetLeaderboardAsync(userScore);
+        }
+
+        private async System.Threading.Tasks.Task GetLeaderboardAsync(UserScore userScore)
         {
             Failed("Fetching leaderboard...");
             try
             {
-                var leaderboard = await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount, _relativeMode);
-                GetLeaderboardSuccess(leaderboard);
+                var rows = _relativeMode
+                    ? await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount, true)
+                    : await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount);
+                GetLeaderboardSuccess(rows);
             }
             catch (Exception e)
             {
-                Failed($"Get leaderboard failed: {e.Message}");
+                Failed(e.Message);
             }
         }
 
@@ -101,7 +118,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             resultText.text = error;
         }
 
-        private void OnSoilServicesInitializationFailed(Exception exception)
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             Failed($"SDK initialization failed: {exception.Message}");
         }
@@ -121,6 +138,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             {
                 var row = Instantiate(leaderboardRowPrefab, leaderboardContainer.transform);
                 row.SetData(userScore);
+                row.SetPlayer(userScore.uuid == SoilServices.UserInfo.uuid);
                 _rows.Add(row);
             }
         }

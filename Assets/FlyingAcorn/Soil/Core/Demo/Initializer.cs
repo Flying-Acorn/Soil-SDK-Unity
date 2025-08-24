@@ -1,5 +1,6 @@
 using System;
 using TMPro;
+using FlyingAcorn.Soil.Core.Data;
 using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Demo
@@ -7,7 +8,7 @@ namespace FlyingAcorn.Soil.Core.Demo
     public class Initializer : MonoBehaviour
     {
         [SerializeField] private bool initOnStart;
-    [SerializeField] private TextMeshProUGUI statusText;
+        [SerializeField] private TextMeshProUGUI statusText;
         private static Initializer Instance { get; set; }
 
         private void Awake()
@@ -20,7 +21,7 @@ namespace FlyingAcorn.Soil.Core.Demo
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            
+
             // Subscribe to initialization events
             SoilServices.OnServicesReady += OnSoilServicesReady;
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
@@ -45,7 +46,7 @@ namespace FlyingAcorn.Soil.Core.Demo
         {
             if (!Instance)
                 throw new Exception("Initializer instance is null");
-            
+
             Debug.Log("[Soil SDK] Starting initialization...");
             if (SoilServices.Ready)
             {
@@ -56,15 +57,15 @@ namespace FlyingAcorn.Soil.Core.Demo
                 SoilServices.InitializeAsync();
             }
         }
-        
+
         private void OnSoilServicesReady()
         {
             var msg = "[Soil SDK] Services are ready! User: " + (SoilServices.UserInfo?.uuid ?? "Unknown");
             Debug.Log(msg);
             if (statusText != null) statusText.text = "Soil SDK ready";
         }
-        
-        private void OnSoilServicesInitializationFailed(Exception exception)
+
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             var msg = $"[Soil SDK] Initialization failed: {exception.Message}";
             Debug.LogError(msg);

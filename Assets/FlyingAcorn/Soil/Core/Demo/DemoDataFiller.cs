@@ -20,6 +20,14 @@ namespace FlyingAcorn.Soil.Core.Demo
             Authenticate.OnTokenRefreshed += FillRefreshTokenData;
         }
 
+        private void OnDestroy()
+        {
+            Authenticate.OnPlayerInfoFetched -= LogInfoFetched;
+            Authenticate.OnUserReady -= FillData;
+            Authenticate.OnUserRegistered -= FillTokenDataRegister;
+            Authenticate.OnTokenRefreshed -= FillRefreshTokenData;
+        }
+
         private void FillTokenDataRegister(TokenData obj)
         {
             dataBox.text += $"\n\nRegistered!\nAccess Token: {obj.Access}\nRefresh Token: {obj.Refresh}";

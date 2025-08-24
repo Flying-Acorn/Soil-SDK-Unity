@@ -7,9 +7,9 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 {
     public static class ABTestingPlayerPrefs
     {
-        private static readonly string KeysPrefix = $"{UserPlayerPrefs.GetKeysPrefix()}ab_testing_";
-        private static readonly string LastExperimentKey = $"{KeysPrefix}last_experiment";
-        private static readonly string SeenChallengersKey = $"{KeysPrefix}seen_challengers";
+        private static string KeysPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}ab_testing_";
+        private static string LastExperimentKey => $"{KeysPrefix}last_experiment";
+        private static string SeenChallengersKey => $"{KeysPrefix}seen_challengers";
 
 
         internal static string GetLastExperimentId()
@@ -32,7 +32,9 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 
         internal static List<string> GetSeenChallengers()
         {
-            return PlayerPrefs.GetString(SeenChallengersKey, "").Split(',').ToList();
+            var raw = PlayerPrefs.GetString(SeenChallengersKey, "");
+            if (string.IsNullOrEmpty(raw)) return new List<string>();
+            return raw.Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries).ToList();
         }
     }
 }

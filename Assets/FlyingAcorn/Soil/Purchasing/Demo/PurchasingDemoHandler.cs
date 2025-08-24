@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
+using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Purchasing.Models;
 using TMPro;
 using UnityEngine;
@@ -27,7 +28,11 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             Purchasing.OnPurchaseStart += OnPurchaseStart;
             verifyButton.onClick.AddListener(VerifyAllPurchases);
 
-            if (!Purchasing.Ready)
+            if (Purchasing.Ready)
+            {
+                OnPurchasingInitialized();
+            }
+            else
             {
                 Purchasing.Initialize(verifyOnInitialize: true);
             }
@@ -42,9 +47,15 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
         {
             Purchasing.OnPurchasingInitialized -= OnPurchasingInitialized;
             SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+            Purchasing.OnItemsReceived -= FillItems;
+            Purchasing.OnPurchaseSuccessful -= OnPurchaseSuccessful;
+            Purchasing.OnPurchaseStart -= OnPurchaseStart;
+
+            if (verifyButton != null)
+                verifyButton.onClick.RemoveListener(VerifyAllPurchases);
         }
 
-        private void OnSoilServicesInitializationFailed(Exception exception)
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             Failed($"SDK initialization failed: {exception.Message}");
         }

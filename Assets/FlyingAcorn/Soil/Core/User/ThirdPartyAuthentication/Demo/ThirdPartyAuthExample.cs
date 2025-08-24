@@ -20,7 +20,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         public Button linkAppleButton;
         public Button unlinkButton;
         public Button getAllLinksButton;
-        [SerializeField] private List<ThirdPartySettings> mySettings; 
+        [SerializeField] private List<ThirdPartySettings> mySettings;
 
 
         private CrossPlatformBrowser _crossPlatformBrowser;
@@ -28,7 +28,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         protected override void Awake()
         {
             base.Awake();
-            
+
             // Initialize Soil SDK first
             statusText.text = "Initializing Soil SDK...";
             SoilServices.OnServicesReady += OnSoilServicesReady;
@@ -84,8 +84,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         protected override void OnDisable()
         {
             base.OnDisable();
+            // Comprehensive event unsubscription for thread safety
             SoilServices.OnServicesReady -= OnSoilServicesReady;
             SoilServices.OnInitializationFailed -= OnSoilServicesInitializationFailed;
+            SocialAuthentication.OnInitializationSuccess -= OnSocialAuthenticationInitialized;
+            SocialAuthentication.OnInitializationFailed -= OnSocialAuthenticationFailed;
             SocialAuthentication.OnLinkSuccessCallback -= OnLinkSuccess;
             SocialAuthentication.OnLinkFailureCallback -= OnFailure;
             SocialAuthentication.OnUnlinkSuccessCallback -= OnUnlinkSuccess;
@@ -93,6 +96,16 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             SocialAuthentication.OnGetAllLinksSuccessCallback -= OnGetAllLinksSuccess;
             SocialAuthentication.OnGetAllLinksFailureCallback -= OnFailure;
             SocialAuthentication.OnAccessRevoked -= OnAccessRevoked;
+            
+            // UI event unsubscription
+            if (linkGoogleButton != null)
+                linkGoogleButton.onClick.RemoveListener(LinkGoogle);
+            if (linkAppleButton != null)
+                linkAppleButton.onClick.RemoveListener(LinkApple);
+            if (unlinkButton != null)
+                unlinkButton.onClick.RemoveListener(Unlink);
+            if (getAllLinksButton != null)
+                getAllLinksButton.onClick.RemoveListener(GetLinks);
         }
 
         private void OnAccessRevoked(Constants.ThirdParty obj)
@@ -123,7 +136,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
 
             statusText.text = $"Unlinking {link.detail.app_party.party}...";
             SocialAuthentication.Unlink(link.detail.app_party.party);
-            
+
         }
 
         private void LinkGoogle()
@@ -144,7 +157,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             UpdateButtons();
         }
 
-        private void OnSoilServicesInitializationFailed(Exception exception)
+        private void OnSoilServicesInitializationFailed(SoilException exception)
         {
             statusText.text = $"SDK initialization failed: {exception.Message}";
         }

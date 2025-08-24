@@ -16,10 +16,11 @@ namespace FlyingAcorn.Soil.Leaderboard
 {
     public static class Leaderboard
     {
-        private static readonly string LeaderboardBaseUrl = $"{Core.Data.Constants.ApiUrl}/leaderboard/v2";
+        private static string LeaderboardBaseUrl => $"{Core.Data.Constants.ApiUrl}/leaderboard/v2";
+        private static string DeleteLeaderboardUrl => $"{LeaderboardBaseUrl}/delete/";
+        private static string ReportScoreUrl => $"{LeaderboardBaseUrl}/reportscore/";
+        private static string FetchLeaderboardUrl => $"{LeaderboardBaseUrl}/getleaderboard/";
 
-        private static readonly string ReportScoreUrl = $"{LeaderboardBaseUrl}/reportscore/";
-        private static readonly string FetchLeaderboardUrl = $"{LeaderboardBaseUrl}/getleaderboard/";
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
 
@@ -189,24 +190,20 @@ namespace FlyingAcorn.Soil.Leaderboard
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                throw new SoilException("Request timed out while fetching leaderboard", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException("Request timed out while reporting score", SoilExceptionErrorCode.TransportError);
             }
             catch (HttpRequestException ex)
             {
-                throw new SoilException($"Network error while fetching leaderboard: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Network error while reporting score: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while fetching leaderboard: {ex.Message}", 
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while reporting score: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
             if (response is not { IsSuccessStatusCode: true })
             {
-                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}",
-                    SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Server returned error {response.StatusCode}: {responseString}", SoilExceptionErrorCode.TransportError);
             }
 
             var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseString);
