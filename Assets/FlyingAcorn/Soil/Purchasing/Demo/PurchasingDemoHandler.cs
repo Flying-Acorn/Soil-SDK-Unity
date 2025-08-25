@@ -34,14 +34,14 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
             }
             else
             {
-                Failed("Initializing Soil SDK...");
+                Failed("Initializing...");
                 Purchasing.Initialize(verifyOnInitialize: true);
             }
         }
 
         private void OnPurchasingInitialized()
         {
-            Failed("Purchasing initialized");
+            Failed("Ready");
         }
 
         private void OnDestroy()
@@ -69,17 +69,17 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
 
         private void OnPurchaseStart(Item obj)
         {
-            Failed($"Purchasing {obj.sku}...");
+            Failed($"Buying {obj.sku}...");
         }
 
         private void OnPurchaseSuccessful(Purchase obj)
         {
-            Failed($"Purchased {obj.sku} successfully!");
+            Failed($"Purchased {obj.sku}");
         }
 
         private void FillItems(List<Item> items)
         {
-            Failed($"Received {items.Count} items.");
+            Failed($"Items: {items.Count}");
             foreach (var row in _rows)
             {
                 row.OnClick -= BuyItem;
@@ -99,7 +99,7 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
 
         private void BuyItem(string sku)
         {
-            Failed($"Purchasing {sku}...");
+            Failed($"Buying {sku}...");
             _ = Purchasing.BuyItem(sku);
         }
 
@@ -110,7 +110,7 @@ namespace FlyingAcorn.Soil.Purchasing.Demo
 
         private void VerifyAllPurchases()
         {
-            Failed("Verifying all purchases...");
+            Failed("Verifying purchases...");
             if (PurchasingPlayerPrefs.UnverifiedPurchaseIds.Count == 0)
             {
                 Failed("No unverified purchases.");

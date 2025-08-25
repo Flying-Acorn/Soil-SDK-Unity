@@ -141,10 +141,23 @@ namespace FlyingAcorn.Soil.Core.Data
         {
             var tcs = new UniTaskCompletionSource<bool>();
             var operation = request.SendWebRequest();
-            operation.completed += _ => tcs.TrySetResult(true);
+            
+            // Ensure the completion callback runs on the main thread for UI operations
+            operation.completed += _ => {
+                if (PlayerLoopHelper.IsMainThread)
+                {
+                    tcs.TrySetResult(true);
+                }
+                else
+                {
+                    // Use SwitchToMainThread to ensure continuation runs on main thread
+                    UniTask.Post(() => tcs.TrySetResult(true));
+                }
+            };
 
             var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds));
             var (hasResultLeft, _) = await UniTask.WhenAny(tcs.Task, timeoutTask);
+            await UniTask.SwitchToMainThread();
 
             if (!hasResultLeft)
             {

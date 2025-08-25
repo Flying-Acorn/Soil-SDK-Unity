@@ -144,7 +144,7 @@ namespace FlyingAcorn.Soil.Purchasing
             request.SetRequestHeader("Accept", "application/json");
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
             }
             catch (SoilException) { throw; }
             catch (Exception ex)
@@ -205,7 +205,7 @@ namespace FlyingAcorn.Soil.Purchasing
             request.SetRequestHeader("Accept", "application/json");
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
             }
             catch (SoilException) { throw; }
             catch (Exception ex)
@@ -218,7 +218,6 @@ namespace FlyingAcorn.Soil.Purchasing
                 var body = request.downloadHandler?.text ?? string.Empty;
                 throw new SoilException($"Server returned error {(System.Net.HttpStatusCode)request.responseCode}: {body}", SoilExceptionErrorCode.TransportError);
             }
-
             var createResponse = JsonConvert.DeserializeObject<CreateResponse>(request.downloadHandler.text);
             OnPurchaseCreated(createResponse);
         }
@@ -238,7 +237,6 @@ namespace FlyingAcorn.Soil.Purchasing
                 { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
             };
             var stringBody = JsonConvert.SerializeObject(payload);
-
             using var request = new UnityWebRequest(VerifyPurchaseUrl, UnityWebRequest.kHttpVerbPOST)
             {
                 uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(stringBody)),
@@ -250,20 +248,16 @@ namespace FlyingAcorn.Soil.Purchasing
             request.SetRequestHeader("Accept", "application/json");
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
             }
             catch (SoilException) { throw; }
             catch (Exception ex)
             {
                 throw new SoilException($"Unexpected error while verifying purchase: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
-
             if (request.responseCode == (long)System.Net.HttpStatusCode.NotFound)
             {
-                OnVerificationResponse(new VerifyResponse
-                {
-                    purchase = new Purchase { purchase_id = purchaseId, expired = true }
-                });
+                OnVerificationResponse(new VerifyResponse { purchase = new Purchase { purchase_id = purchaseId, expired = true } });
                 return;
             }
             if (request.responseCode < 200 || request.responseCode >= 300)
@@ -271,7 +265,6 @@ namespace FlyingAcorn.Soil.Purchasing
                 var body = request.downloadHandler?.text ?? string.Empty;
                 throw new SoilException($"Server returned error {(System.Net.HttpStatusCode)request.responseCode}: {body}", SoilExceptionErrorCode.TransportError);
             }
-
             var verifyResponse = JsonConvert.DeserializeObject<VerifyResponse>(request.downloadHandler.text);
             OnVerificationResponse(verifyResponse);
         }
@@ -293,7 +286,6 @@ namespace FlyingAcorn.Soil.Purchasing
                 { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
             };
             var stringBody = JsonConvert.SerializeObject(payload);
-
             using var request = new UnityWebRequest(BatchVerifyPurchaseUrl, UnityWebRequest.kHttpVerbPOST)
             {
                 uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(stringBody)),
@@ -305,27 +297,22 @@ namespace FlyingAcorn.Soil.Purchasing
             request.SetRequestHeader("Accept", "application/json");
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
             }
             catch (SoilException) { throw; }
             catch (Exception ex)
             {
                 throw new SoilException($"Unexpected error while batch verifying purchases: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
-
             if (request.responseCode < 200 || request.responseCode >= 300)
             {
                 var body = request.downloadHandler?.text ?? string.Empty;
                 throw new SoilException($"Server returned error {(System.Net.HttpStatusCode)request.responseCode}: {body}", SoilExceptionErrorCode.TransportError);
             }
-
             var batchVerifyResponse = JsonConvert.DeserializeObject<BatchVerifyResponse>(request.downloadHandler.text);
             foreach (var purchase in batchVerifyResponse.purchases)
             {
-                OnVerificationResponse(new VerifyResponse
-                {
-                    purchase = purchase
-                });
+                OnVerificationResponse(new VerifyResponse { purchase = purchase });
             }
         }
 
@@ -398,6 +385,8 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             _verifyTask = null;
         }
+
+        // Intentionally no per-call recovery waits; initialization handles self-recovery.
 
         internal static async UniTask<bool> HealthCheck(string apiUrl)
         {

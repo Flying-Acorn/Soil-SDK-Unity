@@ -49,20 +49,22 @@ namespace FlyingAcorn.Soil.Core
         private const int MaxQueuedRequests = 200;
         private static bool _initSucceeded; // stable success flag
         private static bool _retryScheduled;
-        private static bool _isShuttingDown;
         private static SynchronizationContext _unityContext;
         private bool _sessionAuthSuccess;
         private static int _retryAttempts = 0;
         private static DateTime _lastFailureTime = DateTime.MinValue;
         private static Exception _lastInitFailureException;
+        private static DateTime _lastAuthValidTime = DateTime.MinValue;
+        private static readonly TimeSpan _authGracePeriod = TimeSpan.FromSeconds(15);
 
         private static readonly TimeSpan[] _retryIntervals = {
-            TimeSpan.FromSeconds(3),
-            TimeSpan.FromSeconds(5),
-            TimeSpan.FromSeconds(10),
-            TimeSpan.FromSeconds(15),
-            TimeSpan.FromSeconds(17),
-            TimeSpan.FromSeconds(20),
+            TimeSpan.FromSeconds(0.5),  // Quick retry for transient issues
+            TimeSpan.FromSeconds(1),    // Still quick but slightly longer
+            TimeSpan.FromSeconds(2),    // Start building up delay
+            TimeSpan.FromSeconds(4),    // Reasonable delay
+            TimeSpan.FromSeconds(7),    // Moderate delay
+            TimeSpan.FromSeconds(12),   // Longer delay for persistent issues
+            TimeSpan.FromSeconds(20),   // Maximum delay for severe issues
         };
 
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
@@ -76,14 +78,15 @@ namespace FlyingAcorn.Soil.Core
             {
                 var hasInstance = _instance != null;
                 var instanceReady = _instance?._instanceReady ?? false;
+                var userInfoValid = UserPlayerPrefs.UserInfoInstance != null && !string.IsNullOrEmpty(UserPlayerPrefs.UserInfoInstance.uuid);
                 var sessionAuthValid = _instance?._sessionAuthSuccess ?? false;
                 var initTaskCompleted = _initSucceeded;
                 var authValid = IsAuthenticationCurrentlyValid();
-                var userInfoValid = UserPlayerPrefs.UserInfoInstance != null && !string.IsNullOrEmpty(UserPlayerPrefs.UserInfoInstance.uuid);
+                var basicReady = hasInstance && instanceReady && userInfoValid;
+                var fullyReady = basicReady && initTaskCompleted && authValid && sessionAuthValid;
+                var result = fullyReady; // Changed from basicReady to fullyReady for Task->UniTask migration compatibility
 
-                var result = hasInstance && instanceReady && initTaskCompleted && authValid && sessionAuthValid && userInfoValid;
-
-                MyDebug.Verbose($"Soil-Core Ready check: Instance={hasInstance}, InstanceReady={instanceReady}, InitCompleted={initTaskCompleted}, AuthValid={authValid}, SessionAuthValid={sessionAuthValid}, UserInfoValid={userInfoValid} => {result}");
+                MyDebug.Verbose($"Soil-Core Ready check: Instance={hasInstance}, InstanceReady={instanceReady}, UserInfoValid={userInfoValid}, InitCompleted={initTaskCompleted}, AuthValid={authValid}, SessionAuthValid={sessionAuthValid} => BasicReady={basicReady}, FullyReady={fullyReady}, Using={result}");
 
                 return result;
             }
@@ -101,7 +104,6 @@ namespace FlyingAcorn.Soil.Core
 
         private void StartInstance()
         {
-            _isShuttingDown = false;
             UserPlayerPrefs.ResetSetInMemoryCache();
             _instance.transform.SetParent(null);
             _initTask = null;
@@ -134,10 +136,9 @@ namespace FlyingAcorn.Soil.Core
 
         private void OnDestroy()
         {
-            _isShuttingDown = true;
             _instance = null;
             _initTask = null;
-            _initSucceeded = false;
+            _unityContext = null;
             _readyBroadcasted = false;
             OnServicesReady = null;
             OnInitializationFailed = null;
@@ -148,14 +149,30 @@ namespace FlyingAcorn.Soil.Core
 
         public static void InitializeAsync()
         {
+            MyDebug.Verbose("[SoilServices] InitializeAsync() called");
             _ = InitializeOnMainThreadAsync();
         }
 
-        private static async UniTask InitializeOnMainThreadAsync()
+        /// <summary>
+        /// Awaitable version of initialization for callers who want to handle exceptions directly
+        /// </summary>
+        public static UniTask InitializeAwaitableAsync(CancellationToken cancellationToken = default)
+        {
+            MyDebug.Verbose("[SoilServices] InitializeAwaitableAsync() called");
+            return InitializeOnMainThreadAsync(cancellationToken);
+        }
+
+        private static async UniTask InitializeOnMainThreadAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                await Initialize();
+                cancellationToken.ThrowIfCancellationRequested();
+                await Initialize(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                MyDebug.Verbose("SoilServices initialization was canceled");
+                throw;
             }
             catch (Exception ex)
             {
@@ -171,10 +188,14 @@ namespace FlyingAcorn.Soil.Core
             }
         }
 
-        private static async UniTask Initialize()
+        private static async UniTask Initialize(CancellationToken cancellationToken = default)
         {
-            var deadline = DateTime.UtcNow.AddSeconds(UserPlayerPrefs.RequestTimeout);
+            // Give more generous timeout for initialization - use 3x normal timeout for better reliability
+            var initializationTimeout = Math.Max(UserPlayerPrefs.RequestTimeout * 3, 20); // At least 20 seconds
+            var deadline = DateTime.UtcNow.AddSeconds(initializationTimeout);
             CleanupExpiredRequests();
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (_lastFailureTime != DateTime.MinValue)
             {
@@ -272,8 +293,19 @@ namespace FlyingAcorn.Soil.Core
 
             if (!IsNetworkAvailable)
             {
-                throw new SoilException("No network connectivity and no cached authentication data",
-                    SoilExceptionErrorCode.Timeout);
+                // If network is unavailable but we have valid cached auth, proceed offline
+                var hasValidAuth = IsAuthenticationCurrentlyValid();
+                if (!hasValidAuth)
+                {
+                    MyDebug.LogWarning("Soil-Core: No network connectivity and no valid cached authentication. Will retry when network becomes available.");
+                    throw new SoilException("No network connectivity and no cached authentication data",
+                        SoilExceptionErrorCode.TransportError);
+                }
+                else
+                {
+                    MyDebug.Info("Soil-Core: No network connectivity but valid cached authentication found. Proceeding with offline mode.");
+                    // Allow the initialization to continue with cached data
+                }
             }
 
             lock (_initLock)
@@ -283,14 +315,20 @@ namespace FlyingAcorn.Soil.Core
                     if (!_instance._sessionAuthSuccess)
                     {
                         var authValid = IsAuthenticationCurrentlyValid();
+                        MyDebug.Verbose($"[SoilServices] Creating _initTask - sessionAuthSuccess=false, authValid={authValid}");
                         _initTask = authValid
                             ? PerformAuthentication(forceFetchPlayerInfo: true)
                             : PerformAuthentication(forceRefresh: true);
                     }
                     else
                     {
+                        MyDebug.Verbose("[SoilServices] Creating _initTask - sessionAuthSuccess=true, using default authentication");
                         _initTask = PerformAuthentication();
                     }
+                }
+                else
+                {
+                    MyDebug.Verbose("[SoilServices] _initTask already exists, not creating new one");
                 }
             }
 
@@ -338,23 +376,20 @@ namespace FlyingAcorn.Soil.Core
                     finally
                     {
                         _retryScheduled = false;
-                        if (!_isShuttingDown)
+                        if (_unityContext == null)
                         {
-                            if (_unityContext == null)
+                            MyDebug.Verbose("Soil-Core: Skipping background retry due to missing Unity context");
+                        }
+                        else
+                        {
+                            RunOnUnityContext(() =>
                             {
-                                MyDebug.Verbose("Soil-Core: Skipping background retry due to missing Unity context");
-                            }
-                            else
-                            {
-                                RunOnUnityContext(() =>
+                                if (_lastFailureTime != DateTime.MinValue && !Ready)
                                 {
-                                    if (_lastFailureTime != DateTime.MinValue && !Ready)
-                                    {
-                                        MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
-                                        InitializeAsync();
-                                    }
-                                });
-                            }
+                                    MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
+                                    InitializeAsync();
+                                }
+                            });
                         }
                     }
                 });
@@ -408,7 +443,6 @@ namespace FlyingAcorn.Soil.Core
                 yield return new WaitForSecondsRealtime(seconds);
 
             _retryScheduled = false;
-            if (_isShuttingDown) yield break;
 
             if (_lastFailureTime != DateTime.MinValue && !Ready)
             {
@@ -419,23 +453,50 @@ namespace FlyingAcorn.Soil.Core
 
         private static UniTask PerformAuthentication(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
+            MyDebug.Verbose($"[SoilServices] PerformAuthentication called - forceRefresh: {forceRefresh}, forceFetchPlayerInfo: {forceFetchPlayerInfo}");
             return Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
         }
 
         private static void HandleInitializationFailure(Exception exception)
         {
+            // Check if this is a different error type than the last one - if so, allow faster retry
+            var isDifferentErrorType = _lastInitFailureException == null ||
+                                     exception.GetType() != _lastInitFailureException.GetType() ||
+                                     exception.Message != _lastInitFailureException.Message;
+
             if (ReferenceEquals(exception, _lastInitFailureException))
             {
                 return;
             }
             _lastInitFailureException = exception;
 
-            _retryAttempts++;
+            // If it's a different error type and we haven't failed too many times, reset retry attempts partially
+            if (isDifferentErrorType && _retryAttempts > 2)
+            {
+                MyDebug.Verbose("Soil-Core: Different error type detected, reducing retry penalty for faster recovery");
+                _retryAttempts = Math.Max(1, _retryAttempts - 2); // Reduce penalty but don't go to zero
+            }
+            else
+            {
+                _retryAttempts++;
+            }
+
             _lastFailureTime = DateTime.UtcNow;
 
             var retryInterval = GetCurrentRetryInterval();
-            MyDebug.Info($"Soil-Core: Initialization failed (attempt #{_retryAttempts}). " +
-                           $"Next retry in {retryInterval.TotalSeconds}s. Error: {exception.Message}");
+
+            // Use less alarming logging for first few attempts - these are often transient network issues
+            var logMessage = $"Soil-Core: Initialization failed (attempt #{_retryAttempts}). " +
+                           $"Next retry in {retryInterval.TotalSeconds}s. Error: {exception.Message}";
+
+            if (_retryAttempts <= 3)
+            {
+                MyDebug.Verbose(logMessage);
+            }
+            else
+            {
+                MyDebug.Info(logMessage);
+            }
 
             ScheduleRetryAfterCooldown(retryInterval);
 
@@ -456,11 +517,29 @@ namespace FlyingAcorn.Soil.Core
             try
             {
                 var soilEx = exception as SoilException ?? new SoilException($"Initialization failed: {exception.Message}", DetermineInitializationFailureCode(exception));
-                RunOnUnityContext(() => OnInitializationFailed?.Invoke(soilEx));
+                
+                var canRetryManually = _retryAttempts < _retryIntervals.Length;
+                
+                // Capture the event reference to avoid race conditions
+                var failedEvent = OnInitializationFailed;
+                if (failedEvent != null)
+                {
+                    RunOnUnityContext(() =>
+                    {
+                        try
+                        {
+                            failedEvent.Invoke(soilEx);
+                        }
+                        catch (Exception invocationEx)
+                        {
+                            MyDebug.LogError($"Soil-Core: Exception in OnInitializationFailed handler: {invocationEx.Message}");
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {
-                MyDebug.LogError($"Soil-Core: Failed to invoke OnInitializationFailed: {ex.Message}");
+                MyDebug.LogError($"Soil-Core: Failed to process OnInitializationFailed: {ex.Message}");
             }
         }
 
@@ -633,14 +712,42 @@ namespace FlyingAcorn.Soil.Core
                     return false;
                 }
 
-                if (!JwtUtils.IsTokenValid(tokenData.Access))
+                var accessValid = JwtUtils.IsTokenValid(tokenData.Access);
+                if (accessValid)
                 {
-                    MyDebug.Verbose("Soil-Core: Authentication validation failed - access token is invalid/expired");
-                    return false;
+                    _lastAuthValidTime = DateTime.UtcNow; // update last known good
+                    MyDebug.Verbose("Soil-Core: Authentication validation passed - access token valid");
+                    return true;
                 }
 
-                MyDebug.Verbose("Soil-Core: Authentication validation passed - tokens are valid");
-                return true;
+                // Access token invalid/expired here.
+                var refreshValid = !string.IsNullOrEmpty(tokenData.Refresh) && JwtUtils.IsTokenValid(tokenData.Refresh);
+                var initInProgress = _initTask.HasValue && !_initTask.Value.AsTask().IsCompleted;
+
+                // Allow a grace window after last validity OR while an init/auth cycle is in progress and refresh token is still good
+                if (refreshValid)
+                {
+                    if (initInProgress)
+                    {
+                        MyDebug.Verbose("Soil-Core: Access token invalid but init/auth in progress with valid refresh token – treating as temporarily valid");
+                        return true;
+                    }
+
+                    if (_lastAuthValidTime != DateTime.MinValue)
+                    {
+                        var sinceValid = DateTime.UtcNow - _lastAuthValidTime;
+                        // Extended grace period when network is unavailable - be more lenient offline
+                        var graceWindow = IsNetworkAvailable ? _authGracePeriod : _authGracePeriod.Add(TimeSpan.FromMinutes(5));
+                        if (sinceValid <= graceWindow)
+                        {
+                            MyDebug.Verbose($"Soil-Core: Access token expired; within grace window ({sinceValid.TotalMilliseconds:F0}ms <= {graceWindow.TotalMilliseconds:F0}ms) – treating as temporarily valid");
+                            return true;
+                        }
+                    }
+                }
+
+                MyDebug.Verbose("Soil-Core: Authentication validation failed - access token invalid and no temporary conditions satisfied");
+                return false;
             }
             catch (Exception ex)
             {

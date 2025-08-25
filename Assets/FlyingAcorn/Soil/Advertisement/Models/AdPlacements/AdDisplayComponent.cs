@@ -802,13 +802,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             if (imageAsset != null)
             {
-                MyDebug.Verbose($"[AdDisplayComponent] Attempting to show fallback image asset: {imageAsset.Id} (conversation logic)");
+                MyDebug.Verbose($"[AdDisplayComponent] Fallback image candidate: {imageAsset.Id}");
                 var texture = Advertisement.LoadTexture(imageAsset.Id);
                 rawAssetImage.texture = texture;
                 rawAssetImage.gameObject.SetActive(true);
                 StretchRawImageAndSetNative();
 
-                MyDebug.Verbose($"[AdDisplayComponent] Showing fallback image {imageAsset.Id} while video prepares (conversation logic)");
+                MyDebug.Verbose($"[AdDisplayComponent] Showing fallback image {imageAsset.Id} while video prepares");
             }
         }
 
@@ -1235,7 +1235,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 MyDebug.Verbose($"[AdDisplayComponent] Video frame check: {whiteCount} white pixels, ratio={whiteRatio:F2}"); // Conversation log
                 if (whiteRatio > 0.95f)
                 {
-                    MyDebug.LogWarning("[AdDisplayComponent] Video frame appears blank/white, falling back to image ad (conversation logic)");
+                    MyDebug.LogWarning("[AdDisplayComponent] Blank video frame; falling back to image");
                     _isVideoAd = false;
                     var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
                     MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after blank video: {fallbackImageAsset?.Id}"); // Conversation log
@@ -1244,7 +1244,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
             }
 
-            // ...existing code...
+            // remaining ad display logic
         }
 
 
@@ -1252,9 +1252,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         /// <summary>
         private void OnVideoFinished(VideoPlayer vp)
         {
-            MyDebug.Verbose($"[AdDisplayComponent] Video finished for {adFormat} ad (conversation logic)");
+            MyDebug.Verbose($"[AdDisplayComponent] Video finished for {adFormat}");
 
-            // Show image fallback after video finishes once (conversation logic)
+            // Show image fallback after video finishes once
             var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
             MyDebug.Verbose($"[AdDisplayComponent] Showing fallback image after video finished: {fallbackImageAsset?.Id}"); // Conversation log
             ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
@@ -1262,7 +1262,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // For rewarded ads, enable close button when video finishes
             if (adFormat == AdFormat.rewarded)
             {
-                MyDebug.Verbose("[AdDisplayComponent] Enabling close button after rewarded video finished (conversation logic)");
+                MyDebug.Verbose("[AdDisplayComponent] Enabling close button after rewarded video");
                 EnableCloseButton();
             }
         }

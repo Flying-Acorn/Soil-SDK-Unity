@@ -22,22 +22,19 @@ namespace FlyingAcorn.Soil.Core.User
         [UsedImplicitly]
         public static async UniTask<UserInfo> FetchPlayerInfo(bool allowDuringInitialization = false)
         {
-            // Permit during core initialization when tokens are being established
             if (!SoilServices.Ready && !allowDuringInitialization)
                 throw new SoilException("SoilServices is not initialized. Cannot fetch player info.", SoilExceptionErrorCode.NotReady);
 
-            // Clear failed tasks to allow retry
             if (_fetchPlayerInfoTask?.AsTask() is { IsCompletedSuccessfully: false, IsCompleted: true })
                 _fetchPlayerInfoTask = null;
 
-            // Prevent multiple concurrent fetch operations from blocking
             if (_fetchPlayerInfoTask == null)
             {
                 _fetchPlayerInfoTask = FetchPlayerInfoInternal();
             }
             else if (!_fetchPlayerInfoTask?.AsTask().IsCompleted ?? false)
             {
-                MyDebug.Verbose("Player info fetch already in progress, sharing existing request...");
+                MyDebug.Verbose("Player info fetch in progress, sharing request");
             }
 
             try
@@ -46,7 +43,6 @@ namespace FlyingAcorn.Soil.Core.User
             }
             catch (Exception)
             {
-                // Clear the failed task for subsequent retry attempts
                 if (_fetchPlayerInfoTask?.AsTask() != null && _fetchPlayerInfoTask.Value.AsTask().IsFaulted)
                 {
                     _fetchPlayerInfoTask = null;
@@ -57,16 +53,16 @@ namespace FlyingAcorn.Soil.Core.User
 
         private static async UniTask<UserInfo> FetchPlayerInfoInternal()
         {
-            MyDebug.Verbose("Fetching player info...");
+            MyDebug.Verbose("Fetching player info");
 
             if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
             {
                 throw new Exception("Access token is missing. Abandoning the process.");
             }
 
-            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access)) // Because Authenticate is dependent on this
+            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
             {
-                MyDebug.LogWarning("Access token is not valid. Trying to refresh tokens...");
+                MyDebug.LogWarning("Access token invalid, refreshing");
                 await Authenticate.RefreshTokenIfNeeded(true);
             }
 

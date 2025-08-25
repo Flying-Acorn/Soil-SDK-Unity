@@ -34,7 +34,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         private void Start()
         {
             SetRelativeText();
-            headerText.text = "Initializing Soil SDK...";
+            headerText.text = "Initializing...";
             statusText.text = "Initializing...";
             Reset();
 
@@ -78,7 +78,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
 
         private void OnSoilServicesReady()
         {
-            headerText.text = "Soil SDK ready. Press something";
+            headerText.text = "Ready";
             statusText.text = "Ready";
         }
 

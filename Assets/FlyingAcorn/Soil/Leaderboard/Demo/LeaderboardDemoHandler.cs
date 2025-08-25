@@ -3,7 +3,6 @@ using FlyingAcorn.Soil.Core.Data;
 using System.Collections.Generic;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Leaderboard.Models;
-// ...existing code...
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -26,7 +25,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         private void Start()
         {
             SetRelativeText();
-            Failed("Initializing Soil SDK...");
+            Failed("Initializing...");
 
             SoilServices.OnServicesReady += OnSoilServicesReady;
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
@@ -59,7 +58,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
         private void OnSoilServicesReady()
         {
-            Failed("Leaderboard ready. Press Get Leaderboard");
+            Failed("Ready. Press Get Leaderboard");
             SetYourScore();
         }
 
@@ -99,7 +98,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
         private async System.Threading.Tasks.Task GetLeaderboardAsync(UserScore userScore)
         {
-            Failed("Fetching leaderboard...");
+            Failed("Loading...");
             try
             {
                 var rows = _relativeMode

@@ -27,31 +27,31 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         public int? Height;
         public string AltText;
         public DateTime CachedAt;
-        
+
         // Additional Ad-level data stored with the first asset of each format
         public string AdId;
         public string MainHeaderText;
         public string ActionButtonText;
         public string DescriptionText;
 
-        public long FileSize 
-        { 
-            get 
-            { 
-                try 
-                { 
-                    return File.Exists(LocalPath) ? new FileInfo(LocalPath).Length : 0; 
-                } 
-                catch 
-                { 
-                    return 0; 
-                } 
-            } 
+        public long FileSize
+        {
+            get
+            {
+                try
+                {
+                    return File.Exists(LocalPath) ? new FileInfo(LocalPath).Length : 0;
+                }
+                catch
+                {
+                    return 0;
+                }
+            }
         }
 
-        public bool IsValid => 
-            !string.IsNullOrEmpty(LocalPath) && 
-            (AssetType == AssetType.video 
+        public bool IsValid =>
+            !string.IsNullOrEmpty(LocalPath) &&
+            (AssetType == AssetType.video
                 ? (LocalPath.StartsWith("http://") || LocalPath.StartsWith("https://")) // Videos: URL validation
                 : File.Exists(LocalPath)); // Images/Logos: File existence validation
 
@@ -129,63 +129,63 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         public static async UniTask CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
             MyDebug.Verbose($"Starting CacheAssetsForFormatAsync for {adFormat}");
-            
+
             if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
             {
                 MyDebug.LogWarning($"No campaign or ad groups available for {adFormat}");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
-            
+
             MyDebug.Verbose($"Campaign has {campaign.ad_groups.Count} ad groups");
-            
+
             var random = new System.Random();
-            
+
             // Get all ad groups that have ads of this format in either image_ads or video_ads
             var eligibleAdGroups = campaign.ad_groups
                 .Where(g => HasAdsForFormat(g, adFormat))
                 .ToList();
-                
+
             MyDebug.Verbose($"Found {eligibleAdGroups.Count} eligible ad groups for {adFormat}");
-                
+
             if (!eligibleAdGroups.Any())
             {
                 MyDebug.Info($"No assets found to cache for {adFormat} format");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
-            
+
             // Pick a random ad group
             var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
-            
+
             // Get all ads in this group with the requested format
             var eligibleAds = GetEligibleAdsForFormat(adGroup, adFormat);
-            
+
             if (!eligibleAds.Any())
             {
                 MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
-            
+
             var cachingTasks = new List<UniTask>();
-            
+
             // NEW APPROACH: Cache assets from multiple ads in the same ad group to ensure we have both video and image fallbacks
             // This ensures that even if one ad only has video, another ad in the same group provides the image fallback
-            
+
             // Separate ads by their primary asset type
             var videoAds = eligibleAds.Where(ad => ad.main_video?.url != null).ToList();
             var imageAds = eligibleAds.Where(ad => ad.main_image?.url != null).ToList();
-            
+
             MyDebug.Verbose($"Ad group breakdown - Video ads: {videoAds.Count}, Image ads: {imageAds.Count}");
-            
+
             // Cache from video ad (if available) to get video + any accompanying assets
             if (videoAds.Any())
             {
                 var videoAd = videoAds[random.Next(videoAds.Count)];
                 MyDebug.Verbose($"Caching assets from video ad: {videoAd.id}");
                 var videoAssetsToCache = GetAssetsToCache(videoAd, adFormat);
-                
+
                 foreach (var (asset, assetType) in videoAssetsToCache)
                 {
                     if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
@@ -195,18 +195,18 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                 }
             }
-            
+
             // Cache from image ad (if available and different from video ad) to ensure image fallback
             if (imageAds.Any())
             {
                 var imageAd = imageAds[random.Next(imageAds.Count)];
-                
+
                 // Only cache if it's different from the video ad (avoid duplicates) or if no video ad was processed
                 if (!videoAds.Any() || !videoAds.Any(va => va.id == imageAd.id))
                 {
                     MyDebug.Verbose($"Caching assets from image ad: {imageAd.id}");
                     var imageAssetsToCache = GetAssetsToCache(imageAd, adFormat);
-                    
+
                     // Track which asset types we're already caching from video ad
                     var existingAssetTypes = new HashSet<AssetType>();
                     if (videoAds.Any())
@@ -214,7 +214,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         var videoAssetsToCache = GetAssetsToCache(videoAds.First(), adFormat);
                         existingAssetTypes = videoAssetsToCache.Select(x => x.assetType).ToHashSet();
                     }
-                    
+
                     foreach (var (asset, assetType) in imageAssetsToCache)
                     {
                         if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
@@ -234,7 +234,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                 }
             }
-            
+
             if (cachingTasks.Count > 0)
             {
                 await UniTask.WhenAll(cachingTasks);
@@ -244,14 +244,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
             }
-            
+
             // Persist the updated cache
             PersistCachedAssets();
-            
+
             // Invoke callback to signal this format is ready
             onFormatReady?.Invoke(adFormat);
         }
-        
+
         /// <summary>
         /// Checks if an ad group has ads for the specified format
         /// </summary>
@@ -261,7 +261,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             MyDebug.Verbose($"Checking ad group for {adFormat} format:");
             MyDebug.Verbose($"  - image_ads count: {adGroup.image_ads?.Count ?? 0}");
             MyDebug.Verbose($"  - video_ads count: {adGroup.video_ads?.Count ?? 0}");
-            
+
             // Debug all format values we find
             if (adGroup.image_ads != null)
             {
@@ -277,9 +277,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     MyDebug.Verbose($"  - video_ad id: {ad.id}, format: '{ad.format ?? "NULL"}'");
                 }
             }
-            
+
             // Check both new structure (image_ads/video_ads) and legacy structure (ads)
-            var hasInImageAds = adGroup.image_ads?.Any(a => {
+            var hasInImageAds = adGroup.image_ads?.Any(a =>
+            {
                 // If format is null or empty, assume it matches (API might not set format for individual ads)
                 if (string.IsNullOrEmpty(a.format))
                 {
@@ -290,8 +291,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 MyDebug.Verbose($"  - image_ad {a.id} format: '{a.format}' -> {f} (matches: {formatMatches})");
                 return formatMatches;
             }) == true;
-            
-            var hasInVideoAds = adGroup.video_ads?.Any(a => {
+
+            var hasInVideoAds = adGroup.video_ads?.Any(a =>
+            {
                 // If format is null or empty, assume it matches (API might not set format for individual ads)
                 if (string.IsNullOrEmpty(a.format))
                 {
@@ -302,28 +304,29 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 MyDebug.Verbose($"  - video_ad {a.id} format: '{a.format}' -> {f} (matches: {formatMatches})");
                 return formatMatches;
             }) == true;
-            
+
             var result = hasInImageAds || hasInVideoAds;
             MyDebug.Verbose($"HasAdsForFormat({adFormat}): {result} (image: {hasInImageAds}, video: {hasInVideoAds}");
-            
+
             return result;
         }
-        
+
         /// <summary>
         /// Gets eligible ads for the format, including both video and image ads
         /// </summary>
         private static List<Ad> GetEligibleAdsForFormat(AdGroup adGroup, AdFormat adFormat)
         {
             var eligibleAds = new List<Ad>();
-            
+
             MyDebug.Verbose($"Getting eligible ads for {adFormat} format");
-            
+
             // Include both video and image ads for all formats
             // First collect video ads
             if (adGroup.video_ads != null)
             {
                 var videoAds = adGroup.video_ads
-                    .Where(a => {
+                    .Where(a =>
+                    {
                         // If format is null or empty, assume it matches (API might not set format for individual ads)
                         if (string.IsNullOrEmpty(a.format))
                         {
@@ -335,19 +338,20 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         return formatMatches;
                     })
                     .ToList();
-                
+
                 if (videoAds.Any())
                 {
                     MyDebug.Verbose($"Found {videoAds.Count} matching video ads for {adFormat}");
                     eligibleAds.AddRange(videoAds);
                 }
             }
-            
+
             // Then collect image ads
             if (adGroup.image_ads != null)
             {
                 var imageAds = adGroup.image_ads
-                    .Where(a => {
+                    .Where(a =>
+                    {
                         // If format is null or empty, assume it matches (API might not set format for individual ads)
                         if (string.IsNullOrEmpty(a.format))
                         {
@@ -359,14 +363,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         return formatMatches;
                     })
                     .ToList();
-                
+
                 if (imageAds.Any())
                 {
                     MyDebug.Verbose($"Found {imageAds.Count} matching image ads for {adFormat}");
                     eligibleAds.AddRange(imageAds);
                 }
             }
-            
+
             MyDebug.Verbose($"Total eligible ads for {adFormat}: {eligibleAds.Count} (including both videos and images)");
             return eligibleAds;
         }
@@ -402,7 +406,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     // Determine actual asset type based on URL or asset_type field
                     var actualAssetType = DetermineAssetType(asset);
-                    
+
                     if (actualAssetType == AssetType.image || actualAssetType == AssetType.logo)
                     {
                         // Cache images and logos normally
@@ -483,7 +487,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 if (assetType == AssetType.video)
                 {
                     Analytics.MyDebug.Verbose($"Creating metadata entry for video {cacheKey} (no download)");
-                    
+
                     var cachedVideoAsset = new AssetCacheEntry
                     {
                         Id = asset.id,
@@ -508,7 +512,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         _cachedAssets[cacheKey] = cachedVideoAsset;
                         _currentlyDownloading.Remove(cacheKey);
                     }
-                    
+
                     Analytics.MyDebug.Verbose($"Video metadata entry created for {cacheKey}");
                     return;
                 }
@@ -518,7 +522,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 request.downloadHandler = new DownloadHandlerBuffer();
                 try
                 {
-                    await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                    // Asset (image/logo) download: can be larger than JSON but usually cached quickly -> 1.5x
+                    var effectiveTimeout = (int)(UserPlayerPrefs.RequestTimeout * 1.5f);
+                    await DataUtils.ExecuteUnityWebRequestWithTimeout(request, effectiveTimeout);
                 }
                 catch (SoilException sx)
                 {
@@ -530,7 +536,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     throw new Exception($"Failed to download asset from {resolvedUrl}: No data received");
                 }
-                
+
                 // Generate unique filename with timestamp to avoid conflicts
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
                 var originalFileName = Path.GetFileName(resolvedUrl);
@@ -573,7 +579,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     _cachedAssets[cacheKey] = cachedAsset;
                 }
-                
+
                 // Persist the updated cache to PlayerPrefs
                 PersistCachedAssets();
 
@@ -611,7 +617,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     {
                         throw; // Re-throw on final attempt
                     }
-                    
+
                     // Wait before retry with exponential backoff
                     await UniTask.Delay(100 * (attempt + 1));
                 }
@@ -634,7 +640,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             var constants = new Constants();
             var baseDomain = constants.AssetsBaseDomain.TrimEnd('/');
             var relativePath = url.TrimStart('/');
-            
+
             return $"{baseDomain}/{relativePath}";
         }
 
@@ -668,7 +674,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         public static AssetCacheEntry GetCachedAssetByUUID(string uuid)
         {
             var asset = _cachedAssets.Values.FirstOrDefault(a => a.Id == uuid);
-            
+
             if (asset == null)
             {
                 MyDebug.LogWarning($"Asset with UUID {uuid} not found in cache. Available assets: {_cachedAssets.Count}");
@@ -681,7 +687,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 MyDebug.Verbose($"Found asset {uuid}: {asset.AssetType} for {asset.AdFormat} at {asset.LocalPath}");
             }
-            
+
             return asset;
         }
 
@@ -708,7 +714,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         {
             AssetCacheEntry asset;
             string keyToRemove;
-            
+
             lock (_lockObject)
             {
                 asset = GetCachedAssetByUUID(uuid);
@@ -736,7 +742,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             catch (Exception ex)
             {
                 MyDebug.LogError($"Failed to remove cached asset {uuid}: {ex.Message}");
-                
+
                 // Re-add to cache if file deletion failed
                 lock (_lockObject)
                 {
@@ -755,7 +761,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         public static async UniTask ClearCacheAsync()
         {
             List<AssetCacheEntry> assetsToDelete;
-            
+
             lock (_lockObject)
             {
                 assetsToDelete = _cachedAssets.Values.ToList();
@@ -765,6 +771,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
             List<string> deleteErrors = new List<string>();
             Exception clearException = null;
+
+            // Cache the directory path on the main thread before entering background thread
+            string cacheDirectoryPath = CacheDirectory;
 
             await UniTask.RunOnThreadPool(() =>
             {
@@ -785,13 +794,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         }
                     }
 
-                    // Clean up directory
-                    if (Directory.Exists(CacheDirectory))
+                    // Clean up directory using the cached path
+                    if (Directory.Exists(cacheDirectoryPath))
                     {
                         try
                         {
-                            Directory.Delete(CacheDirectory, true);
-                            Directory.CreateDirectory(CacheDirectory);
+                            Directory.Delete(cacheDirectoryPath, true);
+                            Directory.CreateDirectory(cacheDirectoryPath);
                         }
                         catch (Exception ex)
                         {
@@ -817,7 +826,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     MyDebug.LogWarning(error);
                 }
-                
+
                 if (deleteErrors.Count == 0)
                 {
                     MyDebug.Verbose("Cleared all cached assets");
@@ -831,18 +840,18 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         {
             var cutoffDate = DateTime.Now.AddDays(-olderThanDays);
             List<AssetCacheEntry> assetsToDelete;
-            
+
             lock (_lockObject)
             {
                 assetsToDelete = _cachedAssets.Values
                     .Where(asset => asset.CachedAt < cutoffDate)
                     .ToList();
-                    
+
                 var keysToRemove = _cachedAssets
                     .Where(kvp => kvp.Value.CachedAt < cutoffDate)
                     .Select(kvp => kvp.Key)
                     .ToList();
-                    
+
                 foreach (var key in keysToRemove)
                 {
                     _cachedAssets.Remove(key);
@@ -881,7 +890,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 MyDebug.LogWarning($"Asset not found in cache: {uuid}");
                 return null;
             }
-            
+
             // Accept both image and logo assets for texture loading
             if (asset.AssetType != AssetType.image && asset.AssetType != AssetType.logo)
             {
@@ -905,13 +914,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
 
                 var texture = new Texture2D(2, 2);
-                
+
                 if (texture.LoadImage(data))
                 {
                     MyDebug.Verbose($"Successfully loaded texture {uuid} ({texture.width}x{texture.height}) - {asset.AssetType}");
                     return texture;
                 }
-                
+
                 MyDebug.LogError($"Failed to decode image data for asset {uuid}");
                 UnityEngine.Object.DestroyImmediate(texture);
                 return null;
@@ -988,14 +997,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         {
                             // Clear current cache
                             _cachedAssets.Clear();
-                            
+
                             // Load valid assets
                             foreach (var asset in persistedAssets.Where(a => a.IsValid))
                             {
                                 var cacheKey = GenerateCacheKey(asset.AdFormat, asset.AssetType, asset.Id);
                                 _cachedAssets[cacheKey] = asset;
                             }
-                            
+
                             loadedCount = _cachedAssets.Count;
                         }
                     }

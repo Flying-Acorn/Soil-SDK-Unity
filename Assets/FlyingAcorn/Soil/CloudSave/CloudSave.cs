@@ -33,18 +33,18 @@ namespace FlyingAcorn.Soil.CloudSave
                 throw new SoilException("Value cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
 
+            if (!Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot save data.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
             var payload = new Dictionary<string, object>()
             {
                 { "key", key },
                 { "value", value },
                 { "is_public", isPublic }
             };
-
-            if (!Ready)
-            {
-                throw new SoilException("SoilServices is not initialized. Cannot save data.",
-                    SoilExceptionErrorCode.NotReady);
-            }
 
             var stringBody = JsonConvert.SerializeObject(payload, Formatting.None);
 
@@ -94,7 +94,6 @@ namespace FlyingAcorn.Soil.CloudSave
             {
                 throw new SoilException("Key cannot be null or empty", SoilExceptionErrorCode.InvalidRequest);
             }
-
             if (!Ready)
             {
                 throw new SoilException("SoilServices is not initialized. Cannot load data.",

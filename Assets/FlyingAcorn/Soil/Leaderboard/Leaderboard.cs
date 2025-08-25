@@ -78,7 +78,9 @@ namespace FlyingAcorn.Soil.Leaderboard
 
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                // Leaderboard report: moderately heavy (ranking + DB write) -> 1.75x base timeout
+                var effectiveTimeout = (int)(UserPlayerPrefs.RequestTimeout * 1.75f);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, effectiveTimeout);
             }
             catch (SoilException)
             {
@@ -167,7 +169,9 @@ namespace FlyingAcorn.Soil.Leaderboard
                 : default;
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                // Leaderboard fetch: potentially large payload but read-only -> 1.75x base timeout
+                var effectiveTimeout = (int)(UserPlayerPrefs.RequestTimeout * 1.75f);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, effectiveTimeout);
             }
             catch (SoilException) { throw; }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

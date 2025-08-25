@@ -27,7 +27,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
         private void Start()
         {
             SetDevButton();
-            fetchedDataText.text = "Initializing Soil SDK...";
+            fetchedDataText.text = "Initializing...";
 
             SoilServices.OnServicesReady += OnSoilServicesReady;
 
@@ -67,7 +67,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
 
         private void OnSoilServicesReady()
         {
-            fetchedDataText.text = "Soil SDK ready. Press Fetch to get remote config.";
+            fetchedDataText.text = "Ready. Press Fetch.";
         }
 
         private void OnSoilServicesInitializationFailed(SoilException exception)

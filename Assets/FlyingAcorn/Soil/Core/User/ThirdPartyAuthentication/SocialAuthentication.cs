@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
@@ -14,6 +15,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
     public abstract class SocialAuthentication
     {
         private static bool Initialized => SoilServices.Ready && _initialized;
+        public static bool IsInitialized => SoilServices.Ready && _initialized;
 
         private static List<ThirdPartySettings> _thirdPartySettings;
         public static Action OnInitializationSuccess { get; set; }
@@ -41,7 +43,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             _initialized = false;
 
             _thirdPartySettings = thirdPartySettings;
-            
+
             if (SoilServices.Ready)
             {
                 SoilInitSuccess();
@@ -175,37 +177,80 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             };
         }
 
-        public static async void Unlink(Constants.ThirdParty party)
+        private static readonly Dictionary<Constants.ThirdParty, bool> _unlinkInProgress = new();
+        
+        public static void Unlink(Constants.ThirdParty party)
         {
-            if (!Initialized)
+            MyDebug.Verbose($"SocialAuthentication.Unlink called for {party}");
+            
+            // Guard against concurrent unlink operations for the same party
+            lock (_unlinkInProgress)
             {
-                MyDebug.LogWarning("Social Authentication not initialized");
-                OnUnlinkFailureCallback?.Invoke(party, new SoilException("Social Authentication not initialized",
-                    SoilExceptionErrorCode.NotReady));
-                return;
+                if (_unlinkInProgress.ContainsKey(party) && _unlinkInProgress[party])
+                {
+                    MyDebug.LogWarning($"Unlink already in progress for {party}, ignoring duplicate request");
+                    return;
+                }
+                _unlinkInProgress[party] = true;
             }
+            
+            UnlinkAsync(party).Forget();
+        }
 
-            var settings = GetConfigFile(party);
+        private static async UniTask UnlinkAsync(Constants.ThirdParty party)
+        {
             try
             {
-                var unlinkResponse = await ThirdPartyAPIHandler.Unlink(settings);
-                MyDebug.Verbose("Unlinked user with " + JsonConvert.SerializeObject(unlinkResponse));
-                OnUnlinkSuccessCallback?.Invoke(unlinkResponse);
+                MyDebug.Verbose($"UnlinkAsync called for {party}");
+                if (!Initialized)
+                {
+                    MyDebug.LogWarning("Social Authentication not initialized");
+                    OnUnlinkFailureCallback?.Invoke(party, new SoilException("Social Authentication not initialized",
+                        SoilExceptionErrorCode.NotReady));
+                    return;
+                }
+
+                var settings = GetConfigFile(party);
+                try
+                {
+                    MyDebug.Verbose($"Calling ThirdPartyAPIHandler.Unlink for {party}");
+                    var unlinkResponse = await ThirdPartyAPIHandler.Unlink(settings);
+                    MyDebug.Verbose($"ThirdPartyAPIHandler.Unlink completed for {party}. Response: {JsonConvert.SerializeObject(unlinkResponse)}");
+                    MyDebug.Verbose($"About to invoke OnUnlinkSuccessCallback for {party}");
+                    OnUnlinkSuccessCallback?.Invoke(unlinkResponse);
+                    MyDebug.Verbose($"OnUnlinkSuccessCallback invoked for {party}");
+                }
+                catch (SoilException e)
+                {
+                    MyDebug.LogWarning($"Unlink failed for {party}: {e.Message}");
+                    LinkingPlayerPrefs.EnqueueSilentUnlink(party);
+                    OnUnlinkFailureCallback?.Invoke(party, e);
+                }
+                catch (Exception e)
+                {
+                    MyDebug.LogWarning($"Unlink failed for {party} with unexpected error: {e.Message}");
+                    LinkingPlayerPrefs.EnqueueSilentUnlink(party);
+                    var soilException = new SoilException(e.Message);
+                    OnUnlinkFailureCallback?.Invoke(party, soilException);
+                }
             }
-            catch (SoilException e)
+            finally
             {
-                LinkingPlayerPrefs.EnqueueSilentUnlink(party);
-                OnUnlinkFailureCallback?.Invoke(party, e);
-            }
-            catch (Exception e)
-            {
-                LinkingPlayerPrefs.EnqueueSilentUnlink(party);
-                var soilException = new SoilException(e.Message);
-                OnUnlinkFailureCallback?.Invoke(party, soilException);
+                // Clear the in-progress flag
+                lock (_unlinkInProgress)
+                {
+                    _unlinkInProgress[party] = false;
+                }
+                MyDebug.Verbose($"UnlinkAsync completed for {party}, cleared in-progress flag");
             }
         }
 
-        public static async void GetLinks()
+        public static void GetLinks()
+        {
+            GetLinksAsync().Forget();
+        }
+        
+        private static async UniTask GetLinksAsync()
         {
             if (!Initialized)
             {
@@ -232,7 +277,12 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             }
         }
 
-        private static async void OnSigninSuccess(LinkAccountInfo thirdPartyUser, ThirdPartySettings settings)
+        private static void OnSigninSuccess(LinkAccountInfo thirdPartyUser, ThirdPartySettings settings)
+        {
+            OnSigninSuccessAsync(thirdPartyUser, settings).Forget();
+        }
+
+        private static async UniTask OnSigninSuccessAsync(LinkAccountInfo thirdPartyUser, ThirdPartySettings settings)
         {
             try
             {

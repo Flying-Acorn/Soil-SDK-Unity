@@ -100,7 +100,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
                 responseString = request.downloadHandler?.text;
             }
             catch (SoilException) { throw; }

@@ -21,13 +21,14 @@ namespace FlyingAcorn.Soil.Advertisement
     public class Advertisement
     {
         [UsedImplicitly]
-        public static bool Ready => availableCampaign != null;
+        public static bool Ready => _campaignSelectionSucceeded;
         private static string AdvertisementBaseUrl => $"{Core.Data.Constants.ApiUrl}/advertisement/";
         private static string CampaignsUrl => $"{AdvertisementBaseUrl}campaigns/";
         private static string CampaignsSelectUrl => $"{CampaignsUrl}select/";
         private static bool _campaignRequested;
         private static bool _isInitializing;
         private static Campaign availableCampaign = null;
+        private static bool _campaignSelectionSucceeded;
         private static List<AdFormat> _requestedFormats;
         private static UniTask _cachedAssetsTask;
 
@@ -121,6 +122,7 @@ namespace FlyingAcorn.Soil.Advertisement
             }
 
             _campaignRequested = true;
+            _campaignSelectionSucceeded = false; // reset before attempt
             try
             {
                 var campaignResponse = await SelectCampaignAsync();
@@ -129,17 +131,20 @@ namespace FlyingAcorn.Soil.Advertisement
                     await ClearAssetCacheAsync();
                     availableCampaign = null;
                     AdvertisementPlayerPrefs.CachedCampaign = null;
+                    _campaignSelectionSucceeded = true; // success path (no active campaign available)
                     _campaignRequested = false;
                     _isInitializing = false;
                     Events.InvokeOnInitialized();
                     return;
                 }
                 availableCampaign = campaignResponse.campaign;
+                _campaignSelectionSucceeded = true; // success path (campaign obtained)
             }
             catch (SoilException ex)
             {
                 _campaignRequested = false;
                 _isInitializing = false;
+                _campaignSelectionSucceeded = false; // failed attempt
                 Events.InvokeOnInitializeFailed($"Failed to select campaign: {ex.Message} - {ex.ErrorCode}");
                 return;
             }
@@ -147,6 +152,7 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 _campaignRequested = false;
                 _isInitializing = false;
+                _campaignSelectionSucceeded = false; // failed attempt
                 Events.InvokeOnInitializeFailed($"Unexpected error selecting campaign: {ex.Message}");
                 return;
             }
@@ -157,6 +163,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _campaignRequested = false;
             _isInitializing = false;
         }
+
 
         /// <summary>
         /// Creates the persistent ad placement manager GameObject with all ad placements as children
@@ -181,24 +188,24 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             // Simple and reliable cache management
             bool isDifferentCampaign = AdvertisementPlayerPrefs.CachedCampaign?.id != availableCampaign.id;
-            
+
             if (isDifferentCampaign)
             {
                 // Clear all for different campaigns - simple and predictable
                 await ClearAssetCacheAsync();
             }
-            
+
             AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
 
             // Pre-filter requested formats to only include those that are actually available in the campaign
             var availableFormats = GetAvailableFormatsInCampaign(availableCampaign, _requestedFormats);
-            
+
             if (!availableFormats.Any())
             {
                 MyDebug.LogWarning("No requested ad formats are available in the selected campaign");
                 return;
             }
-            
+
             MyDebug.Verbose($"Caching assets for available formats: {string.Join(", ", availableFormats)}");
 
             // Cache assets for each AVAILABLE format separately
@@ -221,7 +228,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 MyDebug.LogError($"Error during asset caching: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// Pre-filters requested formats to only include those that are actually available in the campaign
         /// </summary>
@@ -235,8 +242,8 @@ namespace FlyingAcorn.Soil.Advertisement
             foreach (var requestedFormat in requestedFormats)
             {
                 // Check if any ad group has ads for this format
-                
-                bool formatAvailable = campaign.ad_groups.Any(adGroup => 
+
+                bool formatAvailable = campaign.ad_groups.Any(adGroup =>
                     AssetCache.HasAdsForFormat(adGroup, requestedFormat));
 
                 if (formatAvailable)
@@ -245,13 +252,13 @@ namespace FlyingAcorn.Soil.Advertisement
 
             return availableFormats;
         }
-        
+
         /// <summary>
         /// Caches assets for a specific ad format and invokes the loaded event when ready
         /// </summary>
         private static async UniTask CacheFormatAssetsAsync(Campaign campaign, AdFormat adFormat)
         {
-                await AssetCache.CacheAssetsForFormatAsync(campaign, adFormat, OnFormatAssetsReady);
+            await AssetCache.CacheAssetsForFormatAsync(campaign, adFormat, OnFormatAssetsReady);
         }
 
         /// <summary>
@@ -352,7 +359,7 @@ namespace FlyingAcorn.Soil.Advertisement
 
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
             }
             catch (SoilException sx)
             {
@@ -383,15 +390,16 @@ namespace FlyingAcorn.Soil.Advertisement
             var content = request.downloadHandler?.text ?? string.Empty;
             try
             {
+                if (string.IsNullOrEmpty(content))
+                    return new CampaignSelectResponse { campaign = null, selection_reason = SelectionReason.only_eligible };
+
                 var result = JsonConvert.DeserializeObject<CampaignSelectResponse>(content);
-                if (result == null)
-                    throw new SoilException("Response deserialization returned null while selecting campaign", SoilExceptionErrorCode.InvalidResponse);
                 return result;
             }
-            catch (SoilException) { throw; }
             catch (Exception)
             {
-                throw new SoilException($"Invalid response format while selecting campaign. Response: {content}", SoilExceptionErrorCode.InvalidResponse);
+                MyDebug.LogError($"[Advertisement] Failed to parse campaign response. Treating as no active campaign. Raw: {content}");
+                return new CampaignSelectResponse { campaign = null, selection_reason = SelectionReason.only_eligible };
             }
         }
 
@@ -416,12 +424,12 @@ namespace FlyingAcorn.Soil.Advertisement
             var canvasScaler = canvasObject.AddComponent<CanvasScaler>();
             if (_adPlacementManager && _adPlacementManager.canvasReferences != null)
             {
-                    canvasScaler.uiScaleMode = _adPlacementManager.canvasReferences.UIScaleMode;
-                    canvasScaler.referenceResolution = _adPlacementManager.canvasReferences.ReferenceResolution;
-                    canvasScaler.screenMatchMode = _adPlacementManager.canvasReferences.ScreenMatchMode;
-                    canvasScaler.matchWidthOrHeight = _adPlacementManager.canvasReferences.MatchWidthOrHeight;
-                    canvasScaler.referencePixelsPerUnit = _adPlacementManager.canvasReferences.ReferencePixelsPerUnit;
-                
+                canvasScaler.uiScaleMode = _adPlacementManager.canvasReferences.UIScaleMode;
+                canvasScaler.referenceResolution = _adPlacementManager.canvasReferences.ReferenceResolution;
+                canvasScaler.screenMatchMode = _adPlacementManager.canvasReferences.ScreenMatchMode;
+                canvasScaler.matchWidthOrHeight = _adPlacementManager.canvasReferences.MatchWidthOrHeight;
+                canvasScaler.referencePixelsPerUnit = _adPlacementManager.canvasReferences.ReferencePixelsPerUnit;
+
                 var layer = _adPlacementManager.canvasReferences.Layer;
                 foreach (var child in canvasObject.GetComponentsInChildren<Transform>(true))
                     child.gameObject.layer = layer;
@@ -718,9 +726,11 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         public static async UniTask<bool> IsVideoCachedAsync(string id)
         {
+            // Cache the directory path on the main thread before entering background thread
+            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+
             return await UniTask.RunOnThreadPool(() =>
             {
-                string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
                 string fileName = id + ".mp4";
                 string filePath = System.IO.Path.Combine(cacheDir, fileName);
                 return System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0;
@@ -793,7 +803,7 @@ namespace FlyingAcorn.Soil.Advertisement
         public static async UniTask ClearOldAssetsAsync(int olderThanDays = 7)
         {
             await AssetCache.ClearOldAssetsAsync(olderThanDays);
-            
+
             // Update persisted cache
             var remainingAssets = AssetCache.GetAllCachedAssets();
             AdvertisementPlayerPrefs.CachedAssets = remainingAssets;

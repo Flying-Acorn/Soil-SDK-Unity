@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
@@ -20,6 +21,10 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
         private static string RegisterPlayerUrl => $"{UserBaseUrl}/register/";
         private static string RefreshTokenUrl => $"{UserBaseUrl}/refreshtoken/";
 
+        // Lock to prevent concurrent user registrations
+        private static readonly SemaphoreSlim _registrationLock = new SemaphoreSlim(1, 1);
+        private static bool _registrationInProgress = false;
+
         [UsedImplicitly] public static Action<TokenData> OnTokenRefreshed;
         [UsedImplicitly] public static Action<TokenData> OnUserRegistered;
         [UsedImplicitly] public static Action<UserInfo> OnPlayerInfoFetched;
@@ -28,18 +33,58 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
         internal static async UniTask AuthenticateUser(bool forceRegister = false,
             bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
+            MyDebug.Verbose($"[AuthenticateUser] Starting authentication - forceRegister: {forceRegister}, forceRefresh: {forceRefresh}");
+            
             var userIsMissing = UserPlayerPrefs.TokenData == null ||
                                 string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
                                 string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh);
+            
+            MyDebug.Verbose($"[AuthenticateUser] User missing check: {userIsMissing}");
+            
             if (forceRegister || userIsMissing)
             {
+                MyDebug.Verbose($"[AuthenticateUser] Acquiring registration lock...");
+                await _registrationLock.WaitAsync();
                 try
                 {
-                    await RegisterPlayer();
+                    // Double-check after acquiring lock - another thread might have registered
+                    var userStillMissing = UserPlayerPrefs.TokenData == null ||
+                                         string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
+                                         string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh);
+                    
+                    MyDebug.Verbose($"[AuthenticateUser] Double-check after lock: userStillMissing={userStillMissing}, _registrationInProgress={_registrationInProgress}");
+                    
+                    if (forceRegister || userStillMissing)
+                    {
+                        if (_registrationInProgress)
+                        {
+                            MyDebug.Verbose("[AuthenticateUser] Registration already in progress - skipping duplicate registration");
+                            return;
+                        }
+
+                        _registrationInProgress = true;
+                        try
+                        {
+                            await RegisterPlayer();
+                        }
+                        finally
+                        {
+                            _registrationInProgress = false;
+                        }
+                    }
+                    else
+                    {
+                        MyDebug.Verbose("[AuthenticateUser] User data available after acquiring registration lock - skipping registration");
+                    }
                 }
                 catch (Exception e)
                 {
+                    _registrationInProgress = false;
                     throw new Exception($"Failed to register player: {e.Message}, abandoning the process.");
+                }
+                finally
+                {
+                    _registrationLock.Release();
                 }
             }
             else
@@ -77,6 +122,8 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
         private static async UniTask RegisterPlayer()
         {
             MyDebug.Verbose("Registering player...");
+            MyDebug.Info($"[RegisterPlayer] Starting user registration process");
+            
             var appID = UserPlayerPrefs.AppID;
             var sdkToken = UserPlayerPrefs.SDKToken;
 
