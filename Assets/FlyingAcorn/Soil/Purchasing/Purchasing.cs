@@ -71,7 +71,7 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void InitFailed(SoilException exception)
         {
             _isInitializing = false;
-            MyDebug.LogWarning($"FlyingAcorn ====> Purchasing initialization failed: {exception.Message}");
+            MyDebug.Info($"FlyingAcorn ====> Purchasing initialization failed: {exception.Message}");
             UnsubscribeFromCore();
             OnInitializationFailed?.Invoke(exception);
         }
@@ -100,7 +100,7 @@ namespace FlyingAcorn.Soil.Purchasing
 
             OnItemsFailed -= OnPurchasingInitializeFailed;
             OnItemsFailed += OnPurchasingInitializeFailed;
-            _ = QueryItems();
+            QueryItems().Forget();
         }
 
         public static void DeInitialize()
@@ -136,40 +136,54 @@ namespace FlyingAcorn.Soil.Purchasing
             OnPurchasingInitialized?.Invoke();
         }
 
-        private static async UniTask QueryItems()
+        private static async UniTaskVoid QueryItems()
         {
-            using var request = UnityWebRequest.Get(ItemsUrl);
-            var authHeader = Authenticate.GetAuthorizationHeaderString();
-            if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
-            request.SetRequestHeader("Accept", "application/json");
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
+                using var request = UnityWebRequest.Get(ItemsUrl);
+                var authHeader = Authenticate.GetAuthorizationHeaderString();
+                if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
+                request.SetRequestHeader("Accept", "application/json");
+                try
+                {
+                    await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
+                }
+                catch (SoilException) { throw; }
+                catch (Exception ex)
+                {
+                    throw new SoilException($"Unexpected error while querying items: {ex.Message}", SoilExceptionErrorCode.TransportError);
+                }
+
+                if (request.responseCode < 200 || request.responseCode >= 300)
+                {
+                    var body = request.downloadHandler?.text ?? string.Empty;
+                    throw new SoilException($"Server returned error {(System.Net.HttpStatusCode)request.responseCode}: {body}", SoilExceptionErrorCode.TransportError);
+                }
+
+                var responseString = request.downloadHandler?.text ?? string.Empty;
+                try
+                {
+                    PurchasingPlayerPrefs.CachedItems = JsonConvert.DeserializeObject<ItemsResponse>(responseString).items;
+                }
+                catch (Exception)
+                {
+                    throw new SoilException($"Failed to deserialize items. Response: {responseString}", SoilExceptionErrorCode.InvalidResponse);
+                }
+
+                CompleteInitialization();
+                OnItemsReceived?.Invoke(AvailableItems);
             }
-            catch (SoilException) { throw; }
+            catch (SoilException ex)
+            {
+                MyDebug.Info($"FlyingAcorn ====> Failed to query items: {ex.Message}");
+                OnItemsFailed?.Invoke(ex);
+            }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while querying items: {ex.Message}", SoilExceptionErrorCode.TransportError);
+                MyDebug.LogWarning($"FlyingAcorn ====> Unexpected error while querying items: {ex.Message}");
+                var soilEx = new SoilException($"Unexpected error while querying items: {ex.Message}", SoilExceptionErrorCode.TransportError);
+                OnItemsFailed?.Invoke(soilEx);
             }
-
-            if (request.responseCode < 200 || request.responseCode >= 300)
-            {
-                var body = request.downloadHandler?.text ?? string.Empty;
-                throw new SoilException($"Server returned error {(System.Net.HttpStatusCode)request.responseCode}: {body}", SoilExceptionErrorCode.TransportError);
-            }
-
-            var responseString = request.downloadHandler?.text ?? string.Empty;
-            try
-            {
-                PurchasingPlayerPrefs.CachedItems = JsonConvert.DeserializeObject<ItemsResponse>(responseString).items;
-            }
-            catch (Exception)
-            {
-                throw new SoilException($"Failed to deserialize items. Response: {responseString}", SoilExceptionErrorCode.InvalidResponse);
-            }
-
-            CompleteInitialization();
-            OnItemsReceived?.Invoke(AvailableItems);
         }
 
         [UsedImplicitly]
