@@ -75,7 +75,7 @@ namespace FlyingAcorn.Soil.Advertisement
             if (SoilServices.Ready)
             {
                 // run the continuation on the thread pool to avoid blocking caller
-                _ = HandleServicesReadyAsync(_cachedAssetsTask);
+                HandleServicesReadyAsync(_cachedAssetsTask).Forget();
                 return;
             }
 
@@ -159,7 +159,7 @@ namespace FlyingAcorn.Soil.Advertisement
             GetOrCreatePersistentAdCanvas();
             Events.InvokeOnInitialized();
             // Start asset caching in background - don't block initialization on this
-            _ = CacheAds(availableCampaign);
+            CacheAds(availableCampaign).Forget();
             _campaignRequested = false;
             _isInitializing = false;
         }

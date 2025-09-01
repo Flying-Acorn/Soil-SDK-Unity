@@ -72,6 +72,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         private bool _videoLoaded = false;
         private bool _videoStarted = false;
         private bool _shouldMuteAudio = false;
+        private int _frameDropCount = 0; // Track frame drops for performance monitoring
+        private bool _isVideoBuffering = false; // Track buffering state
+        private int _consecutiveSyncIssues = 0; // Track consecutive sync drift issues
+        private bool _forceMutedDueToSync = false; // Track if audio was muted due to sync issues
 
         // Countdown functionality
         private float _countdownTime;
@@ -139,7 +143,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             // Audio configuration for better sync and silent mode handling
             mainAssetVideoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
-            
+
+            // Add frame drop event for monitoring performance
+            mainAssetVideoPlayer.frameDropped += OnVideoFrameDropped;
+
             // Initialize audio mute state early for consistent sync
             UpdateAudioMuteState();
 
@@ -344,6 +351,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             _isVideoAd = false;
             _videoLoaded = false;
             _videoStarted = false;
+            _frameDropCount = 0;
+            _isVideoBuffering = false;
+            _consecutiveSyncIssues = 0;
+            _forceMutedDueToSync = false;
         }
 
         /// <summary>
@@ -697,14 +708,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         AdFormat = adFormat
                     };
                     _isVideoAd = true;
-                    
+
                     // Show fallback image during video preparation for streaming videos too
                     if (hasCachedImage)
                     {
                         var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
                         ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
                     }
-                    
+
                     mainAssetVideoPlayer.source = VideoSource.Url;
                     mainAssetVideoPlayer.url = videoUrl;
                     mainAssetVideoPlayer.enabled = true;
@@ -734,7 +745,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             // Check for supported video formats
             string url = videoUrl.ToLower();
-            bool isSupported = url.Contains(".mp4") || url.Contains(".m4v") || url.Contains(".mov") || 
+            bool isSupported = url.Contains(".mp4") || url.Contains(".m4v") || url.Contains(".mov") ||
                               url.Contains("video/mp4") || url.Contains("video/quicktime");
 
             if (!isSupported)
@@ -759,12 +770,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (mainAssetVideoPlayer != null && mainAssetVideoPlayer.enabled)
             {
                 bool preparationFailed = false;
-                
+
                 try
                 {
                     // Pre-apply audio settings before preparation for better sync
                     UpdateAudioMuteState();
-                    
+
                     mainAssetVideoPlayer.Prepare();
                     MyDebug.Verbose($"[AdDisplayComponent] VideoPlayer preparation initiated successfully");
                 }
@@ -1225,22 +1236,31 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
                 // Check if the first frame is blank/white (common on failed/partial loads)
                 Texture2D frameCheck = new Texture2D(mainAssetVideoPlayer.targetTexture.width, mainAssetVideoPlayer.targetTexture.height, TextureFormat.RGB24, false);
-                RenderTexture.active = mainAssetVideoPlayer.targetTexture;
-                frameCheck.ReadPixels(new Rect(0, 0, frameCheck.width, frameCheck.height), 0, 0);
-                frameCheck.Apply();
-                RenderTexture.active = null;
-                Color32[] pixels = frameCheck.GetPixels32();
-                int whiteCount = pixels.Where(p => p.r > 240 && p.g > 240 && p.b > 240).Count();
-                float whiteRatio = (float)whiteCount / pixels.Length;
-                MyDebug.Verbose($"[AdDisplayComponent] Video frame check: {whiteCount} white pixels, ratio={whiteRatio:F2}"); // Conversation log
-                if (whiteRatio > 0.95f)
+                try
                 {
-                    MyDebug.LogWarning("[AdDisplayComponent] Blank video frame; falling back to image");
-                    _isVideoAd = false;
-                    var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
-                    MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after blank video: {fallbackImageAsset?.Id}"); // Conversation log
-                    ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
-                    return;
+                    RenderTexture.active = mainAssetVideoPlayer.targetTexture;
+                    frameCheck.ReadPixels(new Rect(0, 0, frameCheck.width, frameCheck.height), 0, 0);
+                    frameCheck.Apply();
+                    RenderTexture.active = null;
+                    Color32[] pixels = frameCheck.GetPixels32();
+                    int whiteCount = pixels.Where(p => p.r > 240 && p.g > 240 && p.b > 240).Count();
+                    float whiteRatio = (float)whiteCount / pixels.Length;
+                    MyDebug.Verbose($"[AdDisplayComponent] Video frame check: {whiteCount} white pixels, ratio={whiteRatio:F2}"); // Conversation log
+                    if (whiteRatio > 0.95f)
+                    {
+                        MyDebug.LogWarning("[AdDisplayComponent] Blank video frame; falling back to image");
+                        _isVideoAd = false;
+                        var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+                        MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after blank video: {fallbackImageAsset?.Id}"); // Conversation log
+                        ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
+                        return;
+                    }
+                }
+                finally
+                {
+                    // Always dispose the temporary texture to prevent memory leaks
+                    if (frameCheck != null)
+                        DestroyImmediate(frameCheck);
                 }
             }
 
@@ -1272,13 +1292,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             MyDebug.LogError($"[AdDisplayComponent] Video error for {adFormat} ad: {message}");
 
             // Check for common sync-related errors
-            bool isSyncError = message.Contains("audio") || message.Contains("sync") || 
+            bool isSyncError = message.Contains("audio") || message.Contains("sync") ||
                               message.Contains("timing") || message.Contains("decode");
-            
+
             if (isSyncError)
             {
                 MyDebug.LogWarning("[AdDisplayComponent] Detected potential sync-related video error, attempting recovery");
-                
+
                 // Try to recover by resetting time update mode
                 if (mainAssetVideoPlayer != null)
                 {
@@ -1296,6 +1316,18 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
             MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after video error: {fallbackImageAsset?.Id}"); // Conversation log
             ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
+        }
+
+        /// <summary>
+        /// Handles frame drops for better sync monitoring
+        /// </summary>
+        private void OnVideoFrameDropped(VideoPlayer vp)
+        {
+            _frameDropCount++;
+            if (_frameDropCount > 5) // Alert after multiple drops
+            {
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoFrameDrops");
+            }
         }
 
         private void StartVideoPlayback()
@@ -1318,7 +1350,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (mainAssetVideoPlayer == null) return;
 
             // Check if device is in silent mode or audio is disabled
-            _shouldMuteAudio = AudioListener.pause || AudioListener.volume == 0;
+            bool systemMuted = AudioListener.pause || AudioListener.volume == 0;
+
+            // Combine system mute with sync mute
+            _shouldMuteAudio = systemMuted || _forceMutedDueToSync;
 
             // On mobile platforms, also check for silent mode
 #if UNITY_ANDROID || UNITY_IOS
@@ -1341,7 +1376,46 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
             }
 
-            MyDebug.Verbose($"[AdDisplayComponent] Audio mute state updated: {_shouldMuteAudio}");
+            MyDebug.Verbose($"[AdDisplayComponent] Audio mute state updated: {_shouldMuteAudio} (System: {systemMuted}, Sync: {_forceMutedDueToSync})");
+        }
+
+        /// <summary>
+        /// Forces audio mute due to major sync issues to prevent out-of-sync audio playback
+        /// </summary>
+        private void ForceMuteAudioDueToSync()
+        {
+            if (_forceMutedDueToSync) return; // Already muted due to sync
+
+            _forceMutedDueToSync = true;
+            _shouldMuteAudio = true;
+
+            // Apply mute immediately
+            if (mainAssetVideoPlayer != null && mainAssetVideoPlayer.audioOutputMode == VideoAudioOutputMode.Direct)
+            {
+                for (ushort trackIndex = 0; trackIndex < mainAssetVideoPlayer.audioTrackCount; trackIndex++)
+                {
+                    mainAssetVideoPlayer.SetDirectAudioMute(trackIndex, true);
+                }
+            }
+
+            MyDebug.LogWarning($"[AdDisplayComponent] Audio forcibly muted due to persistent sync issues ({_consecutiveSyncIssues} consecutive major drifts)");
+            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdAudioForceMutedDueToSync");
+        }
+
+        /// <summary>
+        /// Attempts to restore audio if sync issues have been resolved
+        /// </summary>
+        private void TryRestoreAudioFromSyncMute()
+        {
+            if (!_forceMutedDueToSync) return;
+
+            // Only restore if we haven't had sync issues for a while
+            if (_consecutiveSyncIssues == 0)
+            {
+                _forceMutedDueToSync = false;
+                UpdateAudioMuteState(); // This will restore normal mute state
+                MyDebug.LogWarning("[AdDisplayComponent] Audio restored after sync issues resolved");
+            }
         }
 
         /// <summary>
@@ -1361,7 +1435,8 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         }
 
         /// <summary>
-        /// Monitors audio-video sync and logs potential issues
+        /// Monitors audio-video sync and logs potential issues.
+        /// Automatically mutes audio if major sync issues (1.0s+ drift) persist for 3+ consecutive checks.
         /// </summary>
         private IEnumerator MonitorAudioVideoSync()
         {
@@ -1370,20 +1445,62 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             float lastVideoTime = 0f;
             float lastCheckTime = Time.time;
             int syncCheckCount = 0;
+            _consecutiveSyncIssues = 0; // Reset counter at start
 
             while (_videoStarted && mainAssetVideoPlayer.isPlaying && syncCheckCount < 10)
             {
                 yield return new WaitForSeconds(1f); // Check every second for first 10 seconds
-                
+
                 float currentVideoTime = (float)mainAssetVideoPlayer.time;
                 float currentRealTime = Time.time;
                 float expectedProgress = currentRealTime - lastCheckTime;
                 float actualProgress = currentVideoTime - lastVideoTime;
-                
-                // Allow 0.2 second tolerance for sync drift
-                if (Mathf.Abs(expectedProgress - actualProgress) > 0.2f)
+
+                // Skip first 2 checks to allow sync to stabilize, and skip if video not advancing (buffering)
+                if (syncCheckCount >= 2 && actualProgress > 0f)
                 {
-                    MyDebug.LogWarning($"[AdDisplayComponent] Potential A/V sync drift detected. Expected: {expectedProgress:F2}s, Actual: {actualProgress:F2}s, Drift: {Mathf.Abs(expectedProgress - actualProgress):F2}s");
+                    // Detect buffering state
+                    _isVideoBuffering = (actualProgress < 0.1f && expectedProgress > 0.5f);
+
+                    if (!_isVideoBuffering)
+                    {
+                        float syncDrift = Mathf.Abs(expectedProgress - actualProgress);
+
+                        // Check for major sync issues (0.3s or more drift)
+                        if (syncDrift > 0.3f)
+                        {
+                            _consecutiveSyncIssues++;
+                            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoSyncDriftMajor");
+
+                            // If we have 3 or more consecutive major sync issues, mute audio to prevent out-of-sync audio
+                            if (_consecutiveSyncIssues >= 3 && !_forceMutedDueToSync)
+                            {
+                                ForceMuteAudioDueToSync();
+                            }
+                        }
+                        else if (syncDrift <= 0.5f)
+                        {
+                            // Reset counter if sync is good
+                            if (_consecutiveSyncIssues > 0)
+                            {
+                                _consecutiveSyncIssues = 0;
+                                MyDebug.Verbose("[AdDisplayComponent] A/V sync recovered, resetting issue counter");
+
+                                // Try to restore audio if it was muted due to sync issues
+                                TryRestoreAudioFromSyncMute();
+                            }
+                        }
+
+                        // Log warning for any sync drift over 0.5s (but don't mute yet)
+                        if (syncDrift > 0.5f)
+                        {
+                            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoSyncDrift");
+                        }
+                    }
+                    else
+                    {
+                        MyDebug.Verbose($"[AdDisplayComponent] Video buffering detected, skipping sync check");
+                    }
                 }
 
                 lastVideoTime = currentVideoTime;
@@ -1416,6 +1533,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 mainAssetVideoPlayer.started -= OnVideoStarted;
                 mainAssetVideoPlayer.loopPointReached -= OnVideoFinished;
                 mainAssetVideoPlayer.errorReceived -= OnVideoError;
+                mainAssetVideoPlayer.frameDropped -= OnVideoFrameDropped;
             }
         }
     }
