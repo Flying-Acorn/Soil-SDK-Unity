@@ -31,6 +31,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         private static List<IPlatformAuthentication> _availableHandlers = new();
         protected static bool _isInitializing;
         protected static bool _initialized;
+        private static List<LinkPostResponse> _myLinks = new();
+        public static List<LinkPostResponse> LinkedInfo => _myLinks.AsReadOnly().ToList();
 
         public static void Initialize(List<ThirdPartySettings> thirdPartySettings = null)
         {
@@ -92,7 +94,25 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             IPlatformAuthentication.OnAccessRevoked += AccessRevoked;
             IPlatformAuthentication.OnSignInSuccessCallback += OnSigninSuccess;
 
+            OnGetAllLinksSuccessCallback -= OnGetAllLinksSuccess;
+            OnGetAllLinksSuccessCallback += OnGetAllLinksSuccess;
+
+            OnGetAllLinksFailureCallback -= OnGetAllLinksFailure;
+            OnGetAllLinksFailureCallback += OnGetAllLinksFailure;
+            GetLinks();
+        }
+
+        private static void OnGetAllLinksSuccess(LinkGetResponse response)
+        {
+            _myLinks = response != null && response.linked_accounts != null ? response.linked_accounts : new List<LinkPostResponse>();
+            foreach (var link in _myLinks)
+                LinkingPlayerPrefs.SetUserId(link.detail.app_party.party, link.social_account_info.social_account_id);
             FireInitSuccess();
+        }
+
+        private static void OnGetAllLinksFailure(Constants.ThirdParty party, SoilException exception)
+        {
+            FireInitFailed(exception);
         }
 
         private static void FireInitFailed(SoilException soilException)
@@ -178,11 +198,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         }
 
         private static readonly Dictionary<Constants.ThirdParty, bool> _unlinkInProgress = new();
-        
+
         public static void Unlink(Constants.ThirdParty party)
         {
             MyDebug.Verbose($"SocialAuthentication.Unlink called for {party}");
-            
+
             // Guard against concurrent unlink operations for the same party
             lock (_unlinkInProgress)
             {
@@ -193,7 +213,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 }
                 _unlinkInProgress[party] = true;
             }
-            
+
             UnlinkAsync(party).Forget();
         }
 
@@ -217,6 +237,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                     var unlinkResponse = await ThirdPartyAPIHandler.Unlink(settings);
                     MyDebug.Verbose($"ThirdPartyAPIHandler.Unlink completed for {party}. Response: {JsonConvert.SerializeObject(unlinkResponse)}");
                     MyDebug.Verbose($"About to invoke OnUnlinkSuccessCallback for {party}");
+                    _myLinks.RemoveAll(link => link.detail.app_party.party == party);
+                    LinkingPlayerPrefs.SetUserId(party, "");
                     OnUnlinkSuccessCallback?.Invoke(unlinkResponse);
                     MyDebug.Verbose($"OnUnlinkSuccessCallback invoked for {party}");
                 }
@@ -249,10 +271,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         {
             GetLinksAsync().Forget();
         }
-        
+
         private static async UniTask GetLinksAsync()
         {
-            if (!Initialized)
+            if (!SoilServices.Ready) // Only needs to check if SoilServices is ready
             {
                 MyDebug.LogWarning("Social Authentication not initialized");
                 OnGetAllLinksFailureCallback?.Invoke(Constants.ThirdParty.none,
@@ -288,6 +310,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             {
                 MyDebug.Info("Linking user with " + settings.ThirdParty);
                 var authenticatedUser = await ThirdPartyAPIHandler.Link(thirdPartyUser, settings);
+                if (_myLinks.Any(link => link.detail.app_party.party == settings.ThirdParty))
+                    _myLinks.RemoveAll(link => link.detail.app_party.party == settings.ThirdParty);
+                _myLinks.Add(authenticatedUser);
+                LinkingPlayerPrefs.SetUserId(settings.ThirdParty, thirdPartyUser.social_account_id);
                 OnLinkSuccessCallback?.Invoke(authenticatedUser);
             }
             catch (SoilException e)

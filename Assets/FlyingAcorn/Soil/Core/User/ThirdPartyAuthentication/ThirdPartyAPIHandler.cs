@@ -113,7 +113,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         }
 
         [UsedImplicitly]
-    internal static async UniTask<LinkGetResponse> GetLinks(CancellationToken cancellationToken = default)
+        internal static async UniTask<LinkGetResponse> GetLinks(CancellationToken cancellationToken = default)
         {
             using var request = UnityWebRequest.Get(LinkUserUrl);
             var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
@@ -160,7 +160,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         }
 
         [UsedImplicitly]
-    internal static async UniTask<UnlinkResponse> Unlink(ThirdPartySettings settings, CancellationToken cancellationToken = default)
+        internal static async UniTask<UnlinkResponse> Unlink(ThirdPartySettings settings, CancellationToken cancellationToken = default)
         {
             var body = new Dictionary<string, object>
             {
