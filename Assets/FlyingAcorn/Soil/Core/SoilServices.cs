@@ -42,7 +42,7 @@ namespace FlyingAcorn.Soil.Core
     {
         private static SoilServices _instance;
         private static bool _readyBroadcasted;
-        private static UniTask? _initTask;
+        private static Task _initTask; // Use Task instead of UniTask to avoid double-await issues
         private static readonly object _initLock = new object();
         private static readonly List<QueuedInitRequest> _queuedInitRequests = new List<QueuedInitRequest>();
         private static readonly object _queueLock = new object();
@@ -84,7 +84,7 @@ namespace FlyingAcorn.Soil.Core
                 var authValid = IsAuthenticationCurrentlyValid();
                 var basicReady = hasInstance && instanceReady && userInfoValid;
                 var fullyReady = basicReady && initTaskCompleted && authValid && sessionAuthValid;
-                var result = fullyReady; // Changed from basicReady to fullyReady for Task->UniTask migration compatibility
+                var result = fullyReady; // Using Task-based initialization for better reliability and double-await prevention
 
                 return result;
             }
@@ -242,18 +242,31 @@ namespace FlyingAcorn.Soil.Core
                 }
             }
 
-            UniTask? runningInit;
+            Task runningInit;
             lock (_initLock)
             {
-                runningInit = _initTask; // may be null
+                runningInit = _initTask; // Get the Task directly
             }
 
-            if (runningInit.HasValue && !runningInit.Value.AsTask().IsCompleted)
+            if (runningInit != null && !runningInit.IsCompleted)
             {
-                // Convert to Task and back to UniTask to avoid double-await issues
-                var taskCopy = runningInit.Value.AsTask();
-                await AwaitWithDeadline(taskCopy.AsUniTask(), deadline, "existing initialization");
-                return;
+                try
+                {
+                    // Await the existing task directly using Task overload
+                    await AwaitWithDeadline(runningInit, deadline, "existing initialization");
+                    return;
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("Already continuation registered") || 
+                                                            ex.Message.Contains("double-await") || 
+                                                            ex.Message.Contains("multiple await"))
+                {
+                    // Handle UniTask double-await cases by clearing the task and creating a new one
+                    MyDebug.LogWarning($"Soil-Core: Detected UniTask await issue: {ex.Message}. Creating new initialization task.");
+                    lock (_initLock)
+                    {
+                        _initTask = null; // Clear the problematic task
+                    }
+                }
             }
 
             if (!_instance)
@@ -266,10 +279,10 @@ namespace FlyingAcorn.Soil.Core
 
             lock (_initLock)
             {
-                if (_initTask.HasValue)
+                if (_initTask != null)
                 {
-                    var t = _initTask.Value.AsTask();
-                    if (!t.IsCompletedSuccessfully && t.IsCompleted)
+                    // Clean up completed tasks to prevent accumulation
+                    if (!_initTask.IsCompletedSuccessfully && _initTask.IsCompleted)
                         _initTask = null;
                 }
             }
@@ -277,9 +290,9 @@ namespace FlyingAcorn.Soil.Core
             switch (BasicReady)
             {
                 case true when UserPlayerPrefs.TokenData?.Access != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access):
-                    MyDebug.LogWarning("Soil-Core: BasicReady was true but access token is invalid - forcing re-authentication");
+                    MyDebug.Info("Soil-Core: BasicReady was true but access token is invalid - forcing re-authentication");
                     _initTask = null;
-                    _initTask = PerformAuthentication(forceRefresh: true);
+                    _initTask = PerformAuthentication(forceRefresh: true).AsTask();
                     break;
                 case true:
                     BroadcastReady();
@@ -316,31 +329,31 @@ namespace FlyingAcorn.Soil.Core
                     {
                         var authValid = IsAuthenticationCurrentlyValid();
                         _initTask = authValid
-                            ? PerformAuthentication(forceFetchPlayerInfo: true)
-                            : PerformAuthentication(forceRefresh: true);
+                            ? PerformAuthentication(forceFetchPlayerInfo: true).AsTask()
+                            : PerformAuthentication(forceRefresh: true).AsTask();
                     }
                     else
                     {
-                        _initTask = PerformAuthentication();
+                        _initTask = PerformAuthentication().AsTask();
                     }
                 }
             }
 
-            UniTask initTaskSnapshot;
+            Task initTaskSnapshot;
             lock (_initLock)
             {
-                if (!_initTask.HasValue)
+                if (_initTask == null)
                     return; // safety guard
-                initTaskSnapshot = _initTask.Value;
+                initTaskSnapshot = _initTask;
             }
 
-            // Convert to Task to allow multi-await safely (UniTask source may not support multiple awaiters)
-            var initTaskAsTask = initTaskSnapshot.AsTask();
+            // Task is already safe for multiple await operations (unlike UniTask)
+            var initTaskAsTask = initTaskSnapshot;
 
             // Attach success callback (only on success, failures handled by outer catch)
             AttachInitializationSuccessCallback(initTaskAsTask).Forget(); // fire-and-forget
 
-            await AwaitWithDeadline(initTaskAsTask.AsUniTask(), deadline, "authentication");
+            await AwaitWithDeadline(initTaskAsTask, deadline, "authentication");
         }
 
         private static TimeSpan GetCurrentRetryInterval()
@@ -385,14 +398,14 @@ namespace FlyingAcorn.Soil.Core
                                     else if (BasicReady && UserPlayerPrefs.TokenData?.Access != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
                                     {
                                         MyDebug.Verbose("Soil-Core: Periodic token validation - access token invalid, forcing refresh");
-                                        PerformAuthentication(forceRefresh: true).Forget();
+                                        _ = PerformAuthenticationBackground(forceRefresh: true);
                                     }
                                     else if (Ready)
                                     {
                                         // Everything is good, but continue periodic checks
                                         MyDebug.Verbose("Soil-Core: Periodic validation - all good, scheduling next check");
                                     }
-                                    
+
                                     // Always reschedule the next periodic check
                                     if (!_retryScheduled)
                                     {
@@ -432,7 +445,7 @@ namespace FlyingAcorn.Soil.Core
                 var hasInstance = _instance != null;
                 var instanceReady = _instance?._instanceReady ?? false;
                 var sessionAuthValid = _instance?._sessionAuthSuccess ?? false;
-                var initTaskCompleted = _initTask?.AsTask().IsCompletedSuccessfully ?? false;
+                var initTaskCompleted = _initTask?.IsCompletedSuccessfully ?? false;
                 var authValid = IsAuthenticationCurrentlyValid();
                 var userInfoValid = UserPlayerPrefs.UserInfoInstance != null && !string.IsNullOrEmpty(UserPlayerPrefs.UserInfoInstance.uuid);
 
@@ -468,14 +481,14 @@ namespace FlyingAcorn.Soil.Core
                 else if (BasicReady && UserPlayerPrefs.TokenData?.Access != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
                 {
                     MyDebug.Verbose("Soil-Core: Periodic token validation - access token invalid, forcing refresh");
-                    PerformAuthentication(forceRefresh: true).Forget();
+                    _ = PerformAuthenticationBackground(forceRefresh: true);
                 }
                 else if (Ready)
                 {
                     // Everything is good, but continue periodic checks
                     MyDebug.Verbose("Soil-Core: Periodic validation - all good, scheduling next check");
                 }
-                
+
                 // Always reschedule the next periodic check
                 if (!_retryScheduled)
                 {
@@ -492,6 +505,29 @@ namespace FlyingAcorn.Soil.Core
         private static UniTask PerformAuthentication(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
         {
             return Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
+        }
+
+        private static async UniTaskVoid PerformAuthenticationBackground(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+        {
+            try
+            {
+                await Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
+                MyDebug.Verbose("Soil-Core: Background authentication completed successfully");
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"Soil-Core: Background authentication failed: {ex.Message}");
+
+                // If this is a critical auth failure during periodic checks, we might need to trigger a full re-initialization
+                if (ex is SoilException soilEx &&
+                    (soilEx.ErrorCode == SoilExceptionErrorCode.InvalidToken ||
+                     soilEx.ErrorCode == SoilExceptionErrorCode.TokenExpired ||
+                     soilEx.ErrorCode == SoilExceptionErrorCode.Forbidden))
+                {
+                    MyDebug.Info("Soil-Core: Critical auth failure in background - triggering re-initialization");
+                    InitializeAsync();
+                }
+            }
         }
 
         private static void HandleInitializationFailure(Exception exception)
@@ -535,20 +571,9 @@ namespace FlyingAcorn.Soil.Core
             }
 
             ScheduleRetryAfterCooldown(retryInterval);
-
-            List<string> completedRequests;
-            lock (_queueLock)
-            {
-                completedRequests = new List<string>(_queuedInitRequests.Count);
-                foreach (var request in _queuedInitRequests)
-                {
-                    if (request.TaskSource.TrySetException(exception))
-                        completedRequests.Add(request.RequestId);
-                }
-                _queuedInitRequests.Clear();
-            }
-            if (completedRequests.Count > 0)
-                MyDebug.Verbose($"Soil-Core: Completed {completedRequests.Count} queued requests with exception: [{string.Join(", ", completedRequests)}]");
+            var completed = DrainQueue(r => r.TaskSource.TrySetException(exception));
+            if (completed.Count > 0)
+                MyDebug.Verbose($"Soil-Core: Completed {completed.Count} queued requests with exception: [{string.Join(", ", completed)}]");
 
             try
             {
@@ -581,59 +606,52 @@ namespace FlyingAcorn.Soil.Core
 
         private static void OnInitializationSuccess()
         {
-            if (_instance != null)
-                _instance._sessionAuthSuccess = true;
-            _initSucceeded = true; // mark completion
-            _retryAttempts = 0;
-            _lastFailureTime = DateTime.MinValue;
-
-            List<string> completedRequests;
-            lock (_queueLock)
+            try
             {
-                completedRequests = new List<string>(_queuedInitRequests.Count);
-                foreach (var request in _queuedInitRequests)
+                if (_instance != null)
+                    _instance._sessionAuthSuccess = true;
+                _initSucceeded = true; // mark completion
+                _retryAttempts = 0;
+                _lastFailureTime = DateTime.MinValue;
+
+                // Drain and complete all queued init requests
+                var completed = DrainQueue(r => r.TaskSource.TrySetResult(true));
+                if (completed.Count > 0)
+                    MyDebug.Verbose($"Soil-Core: Completed {completed.Count} queued requests successfully: [{string.Join(", ", completed)}]");
+
+                // Try broadcasting immediately, but also schedule a delayed check in case Ready isn't true yet
+                BroadcastReady();
+
+                // If broadcasting failed (Ready was false), schedule a retry
+                if (!_readyBroadcasted && _instance != null)
                 {
-                    if (request.TaskSource.TrySetResult(true))
-                        completedRequests.Add(request.RequestId);
+                    _instance.StartCoroutine(_instance.DelayedBroadcastCheck());
                 }
-                _queuedInitRequests.Clear();
-            }
-            if (completedRequests.Count > 0)
-                MyDebug.Verbose($"Soil-Core: Completed {completedRequests.Count} queued requests successfully: [{string.Join(", ", completedRequests)}]");
 
-            // Try broadcasting immediately, but also schedule a delayed check in case Ready isn't true yet
-            BroadcastReady();
-
-            // If broadcasting failed (Ready was false), schedule a retry
-            if (!_readyBroadcasted && _instance != null)
-            {
-                _instance.StartCoroutine(_instance.DelayedBroadcastCheck());
+                // Schedule periodic token validation using the retry mechanism
+                if (!_retryScheduled)
+                {
+                    var periodicCheckInterval = _retryIntervals[_retryIntervals.Length - 1];
+                    ScheduleRetryAfterCooldown(periodicCheckInterval);
+                }
             }
-            
-            // Schedule periodic token validation using the retry mechanism
-            if (!_retryScheduled)
+            catch (Exception ex)
             {
-                var periodicCheckInterval = _retryIntervals[_retryIntervals.Length - 1];
-                ScheduleRetryAfterCooldown(periodicCheckInterval);
+                MyDebug.LogError($"Soil-Core: Critical error in OnInitializationSuccess: {ex.Message}");
             }
         }
-
         private static void CompleteAndClearQueuedRequests(Exception exception)
         {
-            List<string> completed;
-            lock (_queueLock)
+            try
             {
-                if (_queuedInitRequests.Count == 0) return;
-                completed = new List<string>(_queuedInitRequests.Count);
-                foreach (var request in _queuedInitRequests)
-                {
-                    if (request.TaskSource.TrySetException(exception))
-                        completed.Add(request.RequestId);
-                }
-                _queuedInitRequests.Clear();
+                var completed = DrainQueue(r => r.TaskSource.TrySetException(exception));
+                if (completed.Count > 0)
+                    MyDebug.Verbose($"Soil-Core: Completed {completed.Count} queued requests due to reset: [{string.Join(", ", completed)}]");
             }
-            if (completed.Count > 0)
-                MyDebug.Verbose($"Soil-Core: Completed {completed.Count} queued requests due to reset: [{string.Join(", ", completed)}]");
+            catch (Exception ex)
+            {
+                MyDebug.LogError($"Soil-Core: Critical error in CompleteAndClearQueuedRequests: {ex.Message}");
+            }
         }
 
         private static void RunOnUnityContext(Action action)
@@ -687,21 +705,42 @@ namespace FlyingAcorn.Soil.Core
 
         private static void CleanupExpiredRequests()
         {
-            var expiredThreshold = DateTime.UtcNow.AddMinutes(-5);
-            List<QueuedInitRequest> expiredRequests;
-            lock (_queueLock)
+            try
             {
-                expiredRequests = _queuedInitRequests.Where(r => r.QueuedTime < expiredThreshold).ToList();
-                foreach (var expired in expiredRequests)
+                var expiredThreshold = DateTime.UtcNow.AddMinutes(-5);
+                List<QueuedInitRequest> expiredRequests;
+                lock (_queueLock)
                 {
-                    expired.TaskSource.TrySetException(new SoilException(
-                        $"Initialization request expired after 5 minutes (ID: {expired.RequestId})",
-                        SoilExceptionErrorCode.Timeout));
-                    _queuedInitRequests.Remove(expired);
+                    expiredRequests = _queuedInitRequests.Where(r => r.QueuedTime < expiredThreshold).ToList();
+
+                    // Process expired requests safely - create copy to avoid modification during enumeration
+                    foreach (var expired in expiredRequests)
+                    {
+                        try
+                        {
+                            expired.TaskSource.TrySetException(new SoilException(
+                                $"Initialization request expired after 5 minutes (ID: {expired.RequestId})",
+                                SoilExceptionErrorCode.Timeout));
+                        }
+                        catch (Exception ex)
+                        {
+                            MyDebug.LogWarning($"Soil-Core: Failed to set exception for expired request: {ex.Message}");
+                        }
+                    }
+
+                    // Remove expired requests from the original list
+                    foreach (var expired in expiredRequests)
+                    {
+                        _queuedInitRequests.Remove(expired);
+                    }
                 }
+                if (expiredRequests.Count > 0)
+                    MyDebug.Info($"Soil-Core: Cleaned up expired initialization requests");
             }
-            if (expiredRequests.Count > 0)
-                MyDebug.LogWarning($"Soil-Core: Cleaned up {expiredRequests.Count} expired initialization requests");
+            catch (Exception ex)
+            {
+                MyDebug.LogError($"Soil-Core: Critical error in CleanupExpiredRequests: {ex.Message}");
+            }
         }
 
         private static void BroadcastReady()
@@ -731,6 +770,21 @@ namespace FlyingAcorn.Soil.Core
                 throw new SoilException($"Initialization timed out during {stage}", SoilExceptionErrorCode.Timeout);
         }
 
+        /// <summary>
+        /// Awaits a Task with a deadline, throwing a timeout exception if the deadline is exceeded.
+        /// This overload is specifically for Task objects to avoid UniTask conversion overhead.
+        /// </summary>
+        private static async UniTask AwaitWithDeadline(Task task, DateTime deadline, string stage)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                throw new SoilException($"Initialization timed out during {stage}", SoilExceptionErrorCode.Timeout);
+
+            var completed = await UniTask.WhenAny(task.AsUniTask(), UniTask.Delay(remaining));
+            if (completed != 0)
+                throw new SoilException($"Initialization timed out during {stage}", SoilExceptionErrorCode.Timeout);
+        }
+
         private static async UniTaskVoid AttachInitializationSuccessCallback(Task task)
         {
             try
@@ -751,6 +805,7 @@ namespace FlyingAcorn.Soil.Core
                 var tokenData = UserPlayerPrefs.TokenData;
                 if (tokenData == null || string.IsNullOrEmpty(tokenData.Access))
                 {
+                    MyDebug.Verbose("Soil-Core: No token data available");
                     return false;
                 }
 
@@ -764,13 +819,16 @@ namespace FlyingAcorn.Soil.Core
 
                 // Access token invalid/expired here.
                 var refreshValid = !string.IsNullOrEmpty(tokenData.Refresh) && JwtUtils.IsTokenValid(tokenData.Refresh);
-                var initInProgress = _initTask.HasValue && !_initTask.Value.AsTask().IsCompleted;
+                var initInProgress = _initTask != null && !_initTask.IsCompleted;
 
                 // Allow a grace window after last validity OR while an init/auth cycle is in progress and refresh token is still good
                 if (refreshValid)
                 {
+                    // If initialization is in progress with valid refresh token, be more lenient
                     if (initInProgress)
                     {
+                        MyDebug.Verbose("Soil-Core: Access token invalid but init in progress with valid refresh token - treating as temporarily valid");
+                        return true;
                     }
 
                     if (_lastAuthValidTime != DateTime.MinValue)
@@ -857,6 +915,35 @@ namespace FlyingAcorn.Soil.Core
             {
                 return SoilExceptionErrorCode.Unknown;
             }
+        }
+
+        /// <summary>
+        /// Drains the queued initialization requests, invoking the handler on each and clearing the queue.
+        /// </summary>
+        private static List<string> DrainQueue(Func<QueuedInitRequest, bool> handler)
+        {
+            var completedIds = new List<string>();
+            lock (_queueLock)
+            {
+                if (_queuedInitRequests.Count == 0)
+                    return completedIds;
+
+                var requestsCopy = _queuedInitRequests.ToList();
+                foreach (var req in requestsCopy)
+                {
+                    try
+                    {
+                        if (handler(req))
+                            completedIds.Add(req.RequestId);
+                    }
+                    catch (Exception ex)
+                    {
+                        MyDebug.LogWarning($"Soil-Core: Failed to process queued request {req.RequestId}: {ex.Message}");
+                    }
+                }
+                _queuedInitRequests.Clear();
+            }
+            return completedIds;
         }
     }
 }
