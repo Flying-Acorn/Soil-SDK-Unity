@@ -139,33 +139,51 @@ namespace FlyingAcorn.Soil.Core.Data
         
         public static async UniTask ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
         {
-            var tcs = new UniTaskCompletionSource<bool>();
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (timeoutSeconds <= 0) timeoutSeconds = 1; // sanity clamp
+
+            // Fast-path: already finished (rare but possible if using a cached result)
+            if (request.isDone) return;
+
+            var tcs = new UniTaskCompletionSource();
             var operation = request.SendWebRequest();
-            
-            // Ensure the completion callback runs on the main thread for UI operations
-            operation.completed += _ => {
-                if (PlayerLoopHelper.IsMainThread)
-                {
-                    tcs.TrySetResult(true);
-                }
-                else
-                {
-                    // Use SwitchToMainThread to ensure continuation runs on main thread
-                    UniTask.Post(() => tcs.TrySetResult(true));
-                }
-            };
 
-            var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds));
-            var (hasResultLeft, _) = await UniTask.WhenAny(tcs.Task, timeoutTask);
-            await UniTask.SwitchToMainThread();
+            // Unity guarantees AsyncOperation.completed on main thread; no need to marshal unless future changes.
+            operation.completed += _ => tcs.TrySetResult();
 
-            if (!hasResultLeft)
+            // Separate CTS to allow cancellation of the scheduled timeout when request wins.
+            using var timeoutCts = new System.Threading.CancellationTokenSource();
+            var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), cancellationToken: timeoutCts.Token);
+
+            // UniTask.WhenAny with two tasks returns index (0 => request finished, 1 => timeout)
+            int winner;
+            try
             {
-                request.Abort();
-                throw new SoilException($"Request timeout after {timeoutSeconds}s", SoilExceptionErrorCode.Timeout);
+                winner = await UniTask.WhenAny(tcs.Task, timeoutTask);
+            }
+            catch (Exception ex)
+            {
+                // If something unexpected happened before completion (very rare), abort to free resources.
+                if (!request.isDone)
+                {
+                    try { request.Abort(); } catch { /* ignore */ }
+                }
+                throw new SoilException($"Unexpected error waiting for request: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            await tcs.Task;
+            if (winner == 1) // timeout branch
+            {
+                // Abort the underlying request; some platforms may still invoke completed later, but tcs already resolved or will be ignored.
+                try { request.Abort(); } catch { /* ignore */ }
+                throw new SoilException($"Request timeout after {timeoutSeconds}s (url: {request.url})", SoilExceptionErrorCode.Timeout);
+            }
+
+            // Cancel timeout so Delay task stops (avoids needless continuation work)
+            timeoutCts.Cancel();
+
+            // Ensure we're back on main thread if caller will touch Unity objects right after.
+            if (!PlayerLoopHelper.IsMainThread)
+                await UniTask.SwitchToMainThread();
         }
     }
 }
