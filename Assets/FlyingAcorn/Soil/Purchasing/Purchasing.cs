@@ -31,6 +31,10 @@ namespace FlyingAcorn.Soil.Purchasing
         private static string BatchVerifyPurchaseUrl => $"{PurchaseBaseUrl}/batchverify/";
         private static string PurchaseInvoiceUrl => PurchaseBaseUrl + "/{purchase_id}/invoice/";
 
+        private static string _apiAtItemsFetch;                // API base used when we first (or last) fetched items
+        private static string _lastItemsQueryApi;              // Last API actually used inside QueryItems()
+        private static bool _itemsQueried;                     // Whether we have successfully performed at least one QueryItems()
+
         [UsedImplicitly] public static Action<Item> OnPurchaseStart;
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
         [UsedImplicitly] public static Action<SoilException> OnItemsFailed;
@@ -40,6 +44,9 @@ namespace FlyingAcorn.Soil.Purchasing
         [UsedImplicitly] public static Action<Dictionary<string, string>> OnDeeplinkActivated;
         private static UniTask? _verifyTask;
         private static bool _verifyOnInitialize;
+
+        private static bool _waitingForRemoteConfig;
+        private static UniTaskCompletionSource<bool> _remoteConfigCompletionSource;
 
         [UsedImplicitly]
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
@@ -87,6 +94,152 @@ namespace FlyingAcorn.Soil.Purchasing
             SoilServices.OnInitializationFailed -= InitFailed;
         }
 
+        private static void UnsubscribeFromRemoteConfig()
+        {
+            RemoteConfig.RemoteConfig.OnServerAnswer -= OnRemoteConfigAnswer;
+            RemoteConfig.RemoteConfig.OnSuccessfulFetch -= OnRemoteConfigSuccess;
+        }
+
+        private static void OnRemoteConfigAnswer(bool success)
+        {
+            MyDebug.Verbose($"[Purchasing] Remote config fetch completed with success: {success}");
+            _waitingForRemoteConfig = false;
+            _remoteConfigCompletionSource?.TrySetResult(success);
+            _remoteConfigCompletionSource = null;
+            try
+            {
+                // Apply settings only on success; if we previously timed out and already queried items with fallback API,
+                // we may need to re-query if API changed.
+                if (success)
+                {
+                    ApplyPurchasingSettingsFromRemoteConfigAndMaybeRequery("OnServerAnswer-success");
+                }
+            }
+            finally
+            {
+                UnsubscribeFromRemoteConfig();
+            }
+        }
+
+        private static void OnRemoteConfigSuccess(Newtonsoft.Json.Linq.JObject config)
+        {
+            MyDebug.Verbose("[Purchasing] Remote config successfully fetched and applied");
+        }
+
+        private static async UniTaskVoid EnsureRemoteConfigAndProceed()
+        {
+            if (RemoteConfig.RemoteConfig.IsFetchedAndReady)
+            {
+                SetSettingsFromRemoteConfig();
+                MyDebug.Info("[Purchasing] Remote config already ready, applying settings and proceeding with QueryItems");
+                QueryItems().Forget();
+                return;
+            }
+
+            try
+            {
+                await EnsureRemoteConfigReady();
+                MyDebug.Verbose("[Purchasing] Remote config fetch completed, proceeding with QueryItems");
+                QueryItems().Forget();
+            }
+            catch (Exception ex)
+            {
+                MyDebug.Info($"[Purchasing] Failed to ensure remote config: {ex.Message}, proceeding with defaults");
+                QueryItems().Forget();
+            }
+        }
+
+        private static void SetSettingsFromRemoteConfig()
+        {
+            try
+            {
+                PurchasingSettings fetchedPurchasingSettings = null;
+                if (RemoteConfig.RemoteConfigPlayerPrefs.CachedRemoteConfigData != null &&
+                    RemoteConfig.RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(RemoteConfig.Constants.PurchasingSettingsKey))
+                {
+                    fetchedPurchasingSettings = JsonConvert.DeserializeObject<PurchasingSettings>(
+                        RemoteConfig.RemoteConfigPlayerPrefs.CachedRemoteConfigData[RemoteConfig.Constants.PurchasingSettingsKey].ToString());
+                }
+                _ = PurchasingPlayerPrefs.SetAlternateSettings(fetchedPurchasingSettings);
+            }
+            catch (Exception e)
+            {
+                try
+                {
+                    _ = PurchasingPlayerPrefs.SetAlternateSettings(null);
+
+                    try
+                    {
+                        MyDebug.LogError($"Failed to parse remote config purchasing settings. Exception: {e.GetType().Name}: {e.Message}");
+                    }
+                    catch
+                    {
+                        MyDebug.LogError($"Failed to log error for remote config purchasing settings. Exception: {e}");
+                    }
+                }
+                catch
+                {
+                    MyDebug.LogError($"Failed to set alternate purchasing settings to null. Response: {e}");
+                }
+            }
+        }
+
+        private static async UniTask EnsureRemoteConfigReady()
+        {
+            // Fast path: already fetched
+            if (RemoteConfig.RemoteConfig.IsFetchedAndReady)
+            {
+                MyDebug.Verbose("[Purchasing] Remote config already available (Scenario 1: already ready)");
+                return;
+            }
+
+            // If another fetch is in progress, just attach
+            if (RemoteConfig.RemoteConfig.IsFetching)
+            {
+                MyDebug.Verbose("[Purchasing] Remote config fetch in progress elsewhere, subscribing (Scenario: parallel fetch)");
+            }
+            else
+            {
+                MyDebug.Verbose("[Purchasing] Remote config not ready, initiating fetch (Scenario: cold start)");
+                RemoteConfig.RemoteConfig.FetchConfig();
+            }
+
+            if (_remoteConfigCompletionSource == null)
+            {
+                _remoteConfigCompletionSource = new UniTaskCompletionSource<bool>();
+            }
+            _waitingForRemoteConfig = true;
+
+            // Ensure we have only one subscription set
+            UnsubscribeFromRemoteConfig();
+            RemoteConfig.RemoteConfig.OnServerAnswer += OnRemoteConfigAnswer;
+            RemoteConfig.RemoteConfig.OnSuccessfulFetch += OnRemoteConfigSuccess; // kept for potential future use / diagnostics
+
+            try
+                {
+                    var timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+                    var start = DateTime.UtcNow;
+                    while ((DateTime.UtcNow - start) < timeout && _remoteConfigCompletionSource != null && !_remoteConfigCompletionSource.Task.Status.IsCompleted())
+                    {
+                        // small yield slices to avoid busy wait (no Thread.Sleep to keep compatibility with player loop)
+                        await UniTask.Delay(100);
+                    }
+                    if (_remoteConfigCompletionSource != null && !_remoteConfigCompletionSource.Task.Status.IsCompleted())
+                    {
+                        MyDebug.Info("[Purchasing] Remote config fetch timed out, continuing with defaults while awaiting late response");
+                    }
+                    else
+                    {
+                        MyDebug.Verbose("[Purchasing] Remote config wait completed (event fired before timeout)");
+                    }
+            }
+            catch (Exception ex)
+            {
+                MyDebug.Info($"[Purchasing] Error waiting for remote config: {ex.Message}; proceeding with defaults");
+            }
+            // Do NOT unsubscribe here; allow late success to arrive and trigger re-query if needed.
+        }
+
         private static void InitializeInternal()
         {
             UnsubscribeFromCore();
@@ -100,16 +253,21 @@ namespace FlyingAcorn.Soil.Purchasing
 
             OnItemsFailed -= OnPurchasingInitializeFailed;
             OnItemsFailed += OnPurchasingInitializeFailed;
-            QueryItems().Forget();
+
+            EnsureRemoteConfigAndProceed().Forget();
         }
 
         public static void DeInitialize()
         {
             UnsubscribeFromCore();
+            UnsubscribeFromRemoteConfig();
             _isInitializing = false;
             _initialized = false;
             _verifyTask = null;
             _verifyOnInitialize = false;
+            _waitingForRemoteConfig = false;
+            _remoteConfigCompletionSource?.TrySetResult(false);
+            _remoteConfigCompletionSource = null;
             OnPaymentDeeplinkActivated = null;
             OnPurchasingInitialized = null;
             OnItemsReceived = null;
@@ -126,7 +284,6 @@ namespace FlyingAcorn.Soil.Purchasing
             OnDeeplinkActivated?.Invoke(obj);
         }
 
-        // Mark purchasing as initialized (idempotent) and raise OnPurchasingInitialized once.
         private static void CompleteInitialization()
         {
             if (_initialized)
@@ -140,6 +297,8 @@ namespace FlyingAcorn.Soil.Purchasing
         {
             try
             {
+                _apiAtItemsFetch = PurchasingAPIUrl; // Snapshot of API when starting this query
+                _lastItemsQueryApi = _apiAtItemsFetch;
                 using var request = UnityWebRequest.Get(ItemsUrl);
                 var authHeader = Authenticate.GetAuthorizationHeaderString();
                 if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
@@ -171,6 +330,7 @@ namespace FlyingAcorn.Soil.Purchasing
                 }
 
                 CompleteInitialization();
+                _itemsQueried = true;
                 OnItemsReceived?.Invoke(AvailableItems);
             }
             catch (SoilException ex)
@@ -183,6 +343,32 @@ namespace FlyingAcorn.Soil.Purchasing
                 MyDebug.LogWarning($"FlyingAcorn ====> Unexpected error while querying items: {ex.Message}");
                 var soilEx = new SoilException($"Unexpected error while querying items: {ex.Message}", SoilExceptionErrorCode.TransportError);
                 OnItemsFailed?.Invoke(soilEx);
+            }
+        }
+
+        // Applies remote config purchasing settings and triggers a re-query if API base changed after a timeout fallback.
+        private static void ApplyPurchasingSettingsFromRemoteConfigAndMaybeRequery(string source)
+        {
+            try
+            {
+                SetSettingsFromRemoteConfig();
+                var currentApi = PurchasingAPIUrl;
+                var baselineApi = _lastItemsQueryApi ?? _apiAtItemsFetch;
+                if (_itemsQueried && !string.IsNullOrEmpty(baselineApi) && baselineApi != currentApi)
+                {
+                    MyDebug.Verbose($"[Purchasing] Purchasing API changed from {baselineApi} to {currentApi} after remote config ({source}), re-querying items");
+                    _apiAtItemsFetch = currentApi;
+                    _lastItemsQueryApi = currentApi;
+                    QueryItems().Forget();
+                }
+                else
+                {
+                    MyDebug.Verbose($"[Purchasing] Remote config applied ({source}); no re-query needed (baseline={baselineApi}, current={currentApi}, itemsQueried={_itemsQueried})");
+                }
+            }
+            catch (Exception e)
+            {
+                MyDebug.LogWarning($"[Purchasing] Exception while applying remote config purchasing settings: {e.Message}");
             }
         }
 
@@ -366,7 +552,6 @@ namespace FlyingAcorn.Soil.Purchasing
                 OnPurchaseSuccessful?.Invoke(purchase);
         }
 
-        // Use this method with caution, it will undo all unpaid purchases
         public static void RollbackUnpaidPurchases()
         {
             MyDebug.Info("FlyingAcorn ====> Rolling back unpaid purchases");
@@ -399,8 +584,6 @@ namespace FlyingAcorn.Soil.Purchasing
             }
             _verifyTask = null;
         }
-
-        // Intentionally no per-call recovery waits; initialization handles self-recovery.
 
         internal static async UniTask<bool> HealthCheck(string apiUrl)
         {

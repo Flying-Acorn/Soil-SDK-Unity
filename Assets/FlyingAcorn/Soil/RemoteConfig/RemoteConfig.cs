@@ -46,6 +46,11 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         private static string FetchUrl => $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
 
+        [UsedImplicitly]
+        public static bool IsFetchedAndReady => _fetchSuccessState && RemoteConfigPlayerPrefs.CachedRemoteConfigData != null;
+
+        [UsedImplicitly]
+        public static bool IsFetching => _fetching;
 
         public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
         {
@@ -181,35 +186,6 @@ namespace FlyingAcorn.Soil.RemoteConfig
                 catch
                 {
                     Analytics.MyDebug.LogException(e, "Failed to parse remote config user info - logging failed");
-                }
-            }
-
-            try
-            {
-                RemoteConfigPurchasingSettings = null;
-                if (RemoteConfigPlayerPrefs.CachedRemoteConfigData.ContainsKey(Constants.PurchasingSettingsKey))
-                    RemoteConfigPurchasingSettings = JsonConvert.DeserializeObject<Purchasing.Models.PurchasingSettings>(RemoteConfigPlayerPrefs.CachedRemoteConfigData[Constants.PurchasingSettingsKey].ToString());
-
-                _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(RemoteConfigPurchasingSettings);
-            }
-            catch (Exception e)
-            {
-                try
-                {
-                    _ = Purchasing.PurchasingPlayerPrefs.SetAlternateSettings(null);
-
-                    try
-                    {
-                        Analytics.MyDebug.LogError($"Failed to parse remote config purchasing settings. Exception: {e.GetType().Name}: {e.Message}");
-                    }
-                    catch
-                    {
-                        Analytics.MyDebug.LogError($"Failed to log error for remote config purchasing settings. Exception: {e}");
-                    }
-                }
-                catch
-                {
-                    Analytics.MyDebug.LogError($"Failed to set alternate purchasing settings to null. Response: {e} - {responseString}");
                 }
             }
             _fetchSuccessState = true;
