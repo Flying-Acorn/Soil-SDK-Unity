@@ -40,7 +40,15 @@ namespace FlyingAcorn.Analytics
                 return;
             foreach (var service in _services)
             {
-                service.Initialize();
+                try
+                {
+                    service.Initialize();
+                }
+                catch (Exception ex)
+                {
+                    // Use direct Unity logging to avoid recursive analytics/error loops
+                    UnityEngine.Debug.LogWarning($"[Analytics] Service {service.GetType().Name} failed to Initialize. Continuing. Exception: {ex.Message}\n{ex.StackTrace}");
+                }
             }
 
             IsInitialized = true;
@@ -58,20 +66,14 @@ namespace FlyingAcorn.Analytics
                 UnityEngine.Debug.Log(
                     $"Sending message to analytics: {message} with severity: {severity} for services");
 
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.ErrorEvent(severity, message);
-            }
+            ForEachServiceSafely("ErrorEvent", s => s.ErrorEvent(severity, message));
         }
 
         public void UserSegmentation(string name, string property, int dimension)
         {
             MyDebug.Verbose(
                 $"Sending user segmentation to analytics: {name} with property: {property} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.UserSegmentation(name, property);
-            }
+            ForEachServiceSafely("UserSegmentation", s => s.UserSegmentation(name, property));
         }
 
         public void ResourceEvent(FlyingAcornResourceFlowType flowType, string currency, float amount, string itemType,
@@ -80,10 +82,7 @@ namespace FlyingAcorn.Analytics
             MyDebug.Verbose(
                 $"Sending resource event to analytics: {flowType} with currency: {currency} with amount: " +
                 $"{amount} with itemType: {itemType} with itemID: {itemID} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.ResourceEvent(flowType, currency, amount, itemType, itemID);
-            }
+            ForEachServiceSafely("ResourceEvent", s => s.ResourceEvent(flowType, currency, amount, itemType, itemID));
         }
 
         public void SetUserIdentifier()
@@ -94,10 +93,7 @@ namespace FlyingAcorn.Analytics
         public void SetConsents()
         {
             MyDebug.Verbose("Sending consents to analytics for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.SetConsents();
-            }
+            ForEachServiceSafely("SetConsents", s => s.SetConsents());
         }
 
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
@@ -106,10 +102,7 @@ namespace FlyingAcorn.Analytics
             MyDebug.Verbose($" Sending business event to analytics: {currency} with amount: " +
                             $"{amount} with itemType: {itemType} with itemID: {itemId} with cartType: " +
                             $"{cartType} with receipt: {receipt} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt);
-            }
+            ForEachServiceSafely("BusinessEvent", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt));
         }
 
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
@@ -118,10 +111,7 @@ namespace FlyingAcorn.Analytics
             MyDebug.Info($"Tracking business event to analytics: {currency} with amount: " +
                          $"{amount} with itemType: {itemType} with itemID: {itemId} with cartType: " +
                          $"{cartType} with receipt: {receipt} with customData: {GetNames(customData)}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt, customData);
-            }
+            ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt, customData));
         }
 
         /// <summary>
@@ -139,11 +129,7 @@ namespace FlyingAcorn.Analytics
 
             MyDebug.Verbose(" Sending design event to analytics:" +
                             $" {eventSteps[0]} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.DesignEvent(eventSteps);
-            }
-
+            ForEachServiceSafely("DesignEvent", s => s.DesignEvent(eventSteps));
             OnEventSent?.Invoke(string.Join(EventSeparator, eventSteps));
         }
 
@@ -164,10 +150,7 @@ namespace FlyingAcorn.Analytics
 
             MyDebug.Verbose(" Sending design event to analytics:" +
                             $" {eventSteps[0]} with customFields: {GetNames(customFields)} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.DesignEvent(customFields, eventSteps);
-            }
+            ForEachServiceSafely("DesignEvent(customFields)", s => s.DesignEvent(customFields, eventSteps));
         }
 
         /// <summary>
@@ -185,10 +168,7 @@ namespace FlyingAcorn.Analytics
 
             MyDebug.Verbose(" Sending design event to analytics:" +
                             $" {eventSteps[0]} with value: {value} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.DesignEvent(value, eventSteps);
-            }
+            ForEachServiceSafely("DesignEvent(value)", s => s.DesignEvent(value, eventSteps));
         }
 
         /// <summary>
@@ -206,10 +186,7 @@ namespace FlyingAcorn.Analytics
 
             MyDebug.Verbose(" Sending design event to analytics:" +
                             $" {eventSteps[0]} with value: {value} with customFields: {GetNames(customFields)} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.DesignEvent(value, customFields, eventSteps);
-            }
+            ForEachServiceSafely("DesignEvent(value,customFields)", s => s.DesignEvent(value, customFields, eventSteps));
         }
 
         public void ProgressionEvent(FlyingAcornProgressionStatus progressionStatus, string levelType,
@@ -218,20 +195,14 @@ namespace FlyingAcorn.Analytics
             MyDebug.Verbose(" Sending progression event to analytics:" +
                             $" {progressionStatus} with levelType: {levelType} with " +
                             $"levelNumber: {levelNumber} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.ProgressionEvent(progressionStatus, levelType, levelNumber);
-            }
+            ForEachServiceSafely("ProgressionEvent", s => s.ProgressionEvent(progressionStatus, levelType, levelNumber));
         }
 
         public void NonLevelProgressionEvent(FlyingAcornNonLevelStatus progressionStatus, string progressionType)
         {
             MyDebug.Verbose("Sending progression event to analytics:" +
                             $" {progressionStatus} with levelType: {progressionType} with {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.NonLevelProgressionEvent(progressionStatus, progressionType);
-            }
+            ForEachServiceSafely("NonLevelProgressionEvent", s => s.NonLevelProgressionEvent(progressionStatus, progressionType));
         }
 
         public void ProgressionEvent(FlyingAcornProgressionStatus progressionStatus, string levelType,
@@ -240,10 +211,7 @@ namespace FlyingAcorn.Analytics
             MyDebug.Verbose("Sending progression event to analytics:" +
                             $" {progressionStatus} with levelType: {levelType} with " +
                             $"levelNumber: {levelNumber} with score: {score} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.ProgressionEvent(progressionStatus, levelType, levelNumber, score);
-            }
+            ForEachServiceSafely("ProgressionEvent(score)", s => s.ProgressionEvent(progressionStatus, levelType, levelNumber, score));
         }
 
         public void ProgressionEvent(FlyingAcornProgressionStatus progressionStatus, string levelType,
@@ -252,10 +220,7 @@ namespace FlyingAcorn.Analytics
             MyDebug.Verbose("Sending progression event to analytics:" +
                             $" {progressionStatus} with levelType: {levelType} with " +
                             $"levelNumber: {levelNumber} with score: {score} with customFields: {GetNames(customFields)} for these services: {GetServiceNames()}");
-            foreach (var service in _services.Where(service => service.IsInitialized))
-            {
-                service.ProgressionEvent(progressionStatus, levelType, levelNumber, score, customFields);
-            }
+            ForEachServiceSafely("ProgressionEvent(score,customFields)", s => s.ProgressionEvent(progressionStatus, levelType, levelNumber, score, customFields));
         }
 
         private static string GetNames(Dictionary<string, object> customFields)
@@ -267,6 +232,28 @@ namespace FlyingAcorn.Analytics
         private object GetServiceNames()
         {
             return string.Join(", ", _services.Select(x => x.GetType().Name));
+        }
+
+        /// <summary>
+        /// Executes an action for each initialized service in a safe manner so that one failing service
+        /// (e.g. due to missing Google Play Services on the device) does not prevent other analytics
+        /// providers from receiving the event.
+        /// </summary>
+        /// <param name="operation">Name of the analytic operation for logging.</param>
+        /// <param name="action">Action to perform per service.</param>
+        private void ForEachServiceSafely(string operation, Action<IAnalytics> action)
+        {
+            foreach (var service in _services.Where(s => s.IsInitialized))
+            {
+                try
+                {
+                    action(service);
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning($"[Analytics] Service {service.GetType().Name} threw during {operation}. Continuing. Exception: {ex.Message}\n{ex.StackTrace}");
+                }
+            }
         }
 
         #endregion

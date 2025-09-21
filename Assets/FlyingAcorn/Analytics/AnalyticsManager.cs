@@ -14,6 +14,7 @@ namespace FlyingAcorn.Analytics
         protected AnalyticServiceProvider AnalyticServiceProvider;
         protected internal static bool InitCalled;
         private static bool _started;
+        private static bool IsReady => Instance != null && Instance.AnalyticServiceProvider != null;
 
 
         protected virtual void Awake()
@@ -45,18 +46,17 @@ namespace FlyingAcorn.Analytics
 
         public virtual void SetConsents()
         {
-            if (AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             AnalyticServiceProvider.SetConsents();
         }
 
         public static void SaveUserIdentifier(string playerId)
         {
-            MyDebug.Info($"Saving user identifier: {playerId}");
+
             AnalyticsPlayerPrefs.CustomUserId = playerId;
         }
 
@@ -75,41 +75,40 @@ namespace FlyingAcorn.Analytics
             string cartType,
             StoreType storeType, string receipt, Dictionary<string, object> customData)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType,
                 receipt, customData);
         }
 
         public static void DesignEvent(Dictionary<string, object> customFields, params string[] eventSteps)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.DesignEvent(customFields, eventSteps);
         }
 
         // ATTENTION: DO NOT USE MYDEBUG HERE
         public static void ErrorEvent(Constants.ErrorSeverity.FlyingAcornErrorSeverity severity, string message)
         {
-            Instance?.AnalyticServiceProvider?.ErrorEvent(severity, message);
+            if (!IsReady)
+                return; // silent return to avoid recursion/log spam during early boot
+            Instance.AnalyticServiceProvider.ErrorEvent(severity, message);
         }
 
         public static void UserSegmentation(string name, string value, int dimension = -1)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.UserSegmentation(name, value, dimension);
         }
 
@@ -180,82 +179,75 @@ namespace FlyingAcorn.Analytics
         public static void ProgressionEvent(Constants.ProgressionStatus.FlyingAcornProgressionStatus progressionStatus,
             string levelType, string levelNumber)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.ProgressionEvent(progressionStatus, levelType, levelNumber);
         }
 
         public static void DesignEvent(string customFields, string levelType, string eventStep, string levelNumber)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.DesignEvent(customFields, levelType, eventStep, levelNumber);
         }
 
         public static void ProgressionEvent(Constants.ProgressionStatus.FlyingAcornProgressionStatus progressionStatus,
             string levelType, string levelNumber, int score)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.ProgressionEvent(progressionStatus, levelType, levelNumber, score);
         }
 
 
         public static void DesignEvent(string customFields, string interactionName)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.DesignEvent(customFields, interactionName);
         }
 
 
         public static void DesignEvent(string customFields, string levelType, string dialogName)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.DesignEvent(customFields, levelType, dialogName);
         }
 
         public static void DesignEvent(string[] customFields)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.DesignEvent(customFields);
         }
 
         public static void DesignEvent(float customFields, string interactionName, string dialogName,
             string levelNumber, string eventStep)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.DesignEvent(customFields, interactionName, dialogName, levelNumber,
                 eventStep);
         }
@@ -263,12 +255,11 @@ namespace FlyingAcorn.Analytics
         public static void ResourceEvent(Constants.ResourceFlowType.FlyingAcornResourceFlowType sourceFlow,
             string itemType, float amount, string reason, string source)
         {
-            if (Instance?.AnalyticServiceProvider == null)
+            if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-
             Instance.AnalyticServiceProvider.ResourceEvent(sourceFlow, itemType, amount, reason, source);
         }
     }
