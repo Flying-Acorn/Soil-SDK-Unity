@@ -265,14 +265,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    MyDebug.LogError($"Background image not found for {adFormat} ad");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdBackgroundImageNotFound");
                 }
 
                 Canvas.ForceUpdateCanvases();
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                MyDebug.LogError($"Exception during {adFormat} ad display: {ex.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdDisplayException");
             }
         }
 
@@ -549,7 +549,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             }
             else
             {
-                MyDebug.LogWarning($"LoadMainAsset - No cached image found for {adFormat} format");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdNoCachedImage");
                 // Let's also check what assets are available
                 var allAssets = Advertisement.GetCachedAssets(adFormat);
                 MyDebug.Verbose($"LoadMainAsset - Available {adFormat} assets: {allAssets?.Count ?? 0}");
@@ -613,7 +613,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Validate video compatibility for better sync
             if (!ValidateVideoCompatibility(videoUrl))
             {
-                MyDebug.LogWarning($"[AdDisplayComponent] Video compatibility validation failed for {videoUrl}, falling back to image");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoCompatibilityValidationFailed");
                 LoadImageAsset();
                 yield break;
             }
@@ -635,7 +635,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    MyDebug.LogError($"[AdDisplayComponent] Video HEAD request failed: {uwr.error}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdVideoHeadRequestFailed");
                     headFailed = true;
                 }
             }
@@ -689,7 +689,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    MyDebug.LogError($"[AdDisplayComponent] Failed to download/cached video asset: {videoId}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdVideoDownloadCacheFailed");
                     // fallback to image
                 }
             }
@@ -750,7 +750,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
             if (!isSupported)
             {
-                MyDebug.LogWarning($"[AdDisplayComponent] Video format may not be optimal for sync: {videoUrl}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoFormatNotOptimal");
                 // Still allow playback but log the warning
             }
 
@@ -779,9 +779,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     mainAssetVideoPlayer.Prepare();
                     MyDebug.Verbose($"[AdDisplayComponent] VideoPlayer preparation initiated successfully");
                 }
-                catch (System.Exception ex)
+                catch (System.Exception)
                 {
-                    MyDebug.LogError($"[AdDisplayComponent] Failed to prepare VideoPlayer: {ex.Message}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdVideoPlayerPreparationFailed");
                     preparationFailed = true;
                 }
 
@@ -800,7 +800,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             }
             else
             {
-                MyDebug.LogError("[AdDisplayComponent] VideoPlayer is not ready for preparation - falling back to image");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdVideoPlayerNotReady");
                 _isVideoAd = false;
                 LoadImageAsset();
             }
@@ -850,7 +850,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    MyDebug.LogError($"[AdDisplayComponent] Failed to load texture for main asset: {_currentMainAsset.Id} - Advertisement.LoadTexture returned null");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdTextureLoadFailed");
 
                     // Don't give up immediately - try to continue showing the ad without image
                     rawAssetImage.texture = null;
@@ -865,12 +865,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         mainAssetVideoPlayer.enabled = false;
                     }
 
-                    MyDebug.LogWarning($"[AdDisplayComponent] Continuing to show ad without main image asset");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdContinueWithoutMainImage");
                 }
             }
             else
             {
-                MyDebug.LogError($"[AdDisplayComponent] LoadImageAsset failed - _currentMainAsset is null: {_currentMainAsset == null}, rawAssetImage is null: {rawAssetImage == null}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdImageAssetLoadFailed");
 
                 if (rawAssetImage != null)
                 {
@@ -885,7 +885,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     mainAssetVideoPlayer.enabled = false;
                 }
 
-                MyDebug.LogWarning($"[AdDisplayComponent] Showing ad without main image asset due to missing data");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdShowWithoutMainImage");
             }
         }
 
@@ -906,7 +906,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    MyDebug.LogError($"Failed to load texture for logo asset: {_currentLogoAsset.Id}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdLogoTextureLoadFailed");
                     logoImage?.gameObject.SetActive(false);
                 }
             }
@@ -1289,7 +1289,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         private void OnVideoError(VideoPlayer vp, string message)
         {
-            MyDebug.LogError($"[AdDisplayComponent] Video error for {adFormat} ad: {message}");
+            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdVideoError");
 
             // Check for common sync-related errors
             bool isSyncError = message.Contains("audio") || message.Contains("sync") ||
@@ -1398,7 +1398,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
             }
 
-            MyDebug.LogWarning($"[AdDisplayComponent] Audio forcibly muted due to persistent sync issues ({_consecutiveSyncIssues} consecutive major drifts)");
             AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdAudioForceMutedDueToSync");
         }
 

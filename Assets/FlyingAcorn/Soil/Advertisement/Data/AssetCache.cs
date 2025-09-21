@@ -585,9 +585,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
                 MyDebug.Verbose($"Successfully cached asset: {cacheKey} -> {cachedAsset.Id}");
             }
-            catch (Exception ex)
+            catch
             {
-                MyDebug.LogError($"Failed to cache asset {cacheKey}: {ex.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToCacheAsset_{cacheKey}");
             }
             finally
             {
@@ -739,9 +739,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 MyDebug.Verbose($"Removed cached asset: {uuid}");
                 return true;
             }
-            catch (Exception ex)
+            catch
             {
-                MyDebug.LogError($"Failed to remove cached asset {uuid}: {ex.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToRemoveAsset_{uuid}");
 
                 // Re-add to cache if file deletion failed
                 lock (_lockObject)
@@ -817,7 +817,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             // Log results back on the main thread
             if (clearException != null)
             {
-                MyDebug.LogError($"Failed to clear cache: {clearException.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToClearCache");
             }
             else
             {
@@ -902,14 +902,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 if (!File.Exists(asset.LocalPath))
                 {
-                    MyDebug.LogError($"Asset file not found: {asset.LocalPath}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_AssetFileNotFound_{uuid}");
                     return null;
                 }
 
                 var data = File.ReadAllBytes(asset.LocalPath);
                 if (data == null || data.Length == 0)
                 {
-                    MyDebug.LogError($"Asset file is empty or could not be read: {asset.LocalPath}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_AssetFileEmpty_{uuid}");
                     return null;
                 }
 
@@ -921,13 +921,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     return texture;
                 }
 
-                MyDebug.LogError($"Failed to decode image data for asset {uuid}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToDecodeImage_{uuid}");
                 UnityEngine.Object.DestroyImmediate(texture);
                 return null;
             }
-            catch (Exception ex)
+            catch
             {
-                MyDebug.LogError($"Failed to load texture for asset {uuid}: {ex.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToLoadTexture_{uuid}");
                 return null;
             }
         }
@@ -960,9 +960,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 AdvertisementPlayerPrefs.CachedAssets = assets;
                 MyDebug.Verbose($"Persisted {assets.Count} cached assets to PlayerPrefs");
             }
-            catch (Exception ex)
+            catch
             {
-                MyDebug.LogError($"Failed to persist cached assets: {ex.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToPersistAssets");
             }
         }
 
@@ -980,9 +980,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 persistedAssets = AdvertisementPlayerPrefs.CachedAssets;
             }
-            catch (Exception ex)
+            catch
             {
-                MyDebug.LogError($"Failed to load cached assets from PlayerPrefs: {ex.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToLoadAssetsFromPlayerPrefs");
                 return;
             }
 
@@ -1018,7 +1018,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             // Finally, log the results back on the main thread
             if (loadException != null)
             {
-                MyDebug.LogError($"Failed to process cached assets: {loadException.Message}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToProcessAssets");
             }
             else if (loadedCount > 0)
             {
