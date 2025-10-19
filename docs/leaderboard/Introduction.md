@@ -6,7 +6,7 @@ Global and local leaderboards to enhance player competition. Supports top player
 
 ## Integration
 
-Integrate leaderboards to display rankings and submit scores.
+See [Integration](Integration.md) for detailed setup and usage.
 
 Demo scene: `Assets/FlyingAcorn/Soil/Leaderboard/Demo/SoilLeaderboardExample.unity`
 

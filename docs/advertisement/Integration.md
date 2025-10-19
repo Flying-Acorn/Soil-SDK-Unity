@@ -10,6 +10,10 @@ Use these FFmpeg commands to optimize video ads:
 ffmpeg -i input_video.mov -c:v libx264 -crf 25 -c:a aac -b:a 128k -movflags +faststart -fs 15000000 -y output_video_ad.mp4
 ```
 
+## Other Documentations
+
+See the [Services overview](../README.md#services) for information on other available modules.
+
 ## Usage
 
 ```csharp

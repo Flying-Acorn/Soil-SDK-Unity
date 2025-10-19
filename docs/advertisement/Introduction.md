@@ -6,6 +6,8 @@ Monetize your game with integrated advertisement solutions. Supports video ads a
 
 ## Integration
 
+See [Integration](Integration.md) for detailed setup and usage.
+
 Demo scene: `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample.unity`
 
 ## Dependencies

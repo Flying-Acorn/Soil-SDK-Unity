@@ -6,6 +6,8 @@ Integrated purchasing system for in-game items and currencies. Includes dynamic 
 
 ## Integration
 
+See [Integration](Integration.md) for detailed setup and usage.
+
 Demo scene: `Assets/FlyingAcorn/Soil/Purchasing/Demo/SoilPurchasingExample.unity`
 
 ## Dependencies

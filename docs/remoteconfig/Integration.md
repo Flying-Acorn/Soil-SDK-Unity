@@ -18,3 +18,7 @@ To surface experiment cohort ids in analytics / requests, open `UserInfo.cs` and
 ```csharp
 { $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() }
 ```
+
+## Other Documentations
+
+See the [Services overview](../README.md#services) for information on other available modules.

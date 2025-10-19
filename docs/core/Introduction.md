@@ -14,8 +14,12 @@ Core orchestrates service lifecycles. Each service exposes a facade (e.g., `Remo
 
 ## Integration
 
+See [Integration](Integration.md) for detailed setup and usage.
+
 Demo scene: `Assets/FlyingAcorn/Soil/Core/Demo/SoilExample.unity`
 
 ## Dependencies
-
-* [newtonsoft-json](https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html)
+* [Newtonsoft JSON](https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html)
+* [TextMeshPro](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html)
+* [FlyingAcorn/Analytics-Middleware-for-Unity](https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity)
+* [Cysharp/UniTask](https://github.com/Cysharp/UniTask)

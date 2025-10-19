@@ -10,7 +10,7 @@ Soil is a focused backend platform that provides authentication, leaderboards, c
 
 Flying Acorn is the studio behind Soil — bringing design and engineering experience to make the platform practical, reliable, and easy to use.
 
-[🌐 Visit Soil Website](https://soil.flyingacorn.studio/) | [📚 Documentation](./docs/README.md) | [🚀 Book a Demo](https://soil.flyingacorn.studio/#book)
+[📚 Documentation](./docs/README.md)
 
 </div>
 
@@ -27,11 +27,6 @@ Flying Acorn is the studio behind Soil — bringing design and engineering exper
 - 📢 **In-App Advertisement**: Monetize your game with integrated advertisement solutions.
 
 ## Quick Start
-
-1. Clone or download the Soil SDK for Unity.
-2. Import into your Unity project.
-3. Follow the [integration guides](./docs/README.md) for each service you need.
-4. Start building!
 
 For detailed setup and usage, check out the [documentation](./docs/README.md).
 

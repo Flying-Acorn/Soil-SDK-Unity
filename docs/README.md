@@ -4,6 +4,17 @@ Welcome to the Soil SDK for Unity documentation.
 
 For installation instructions, see [Installation](./Installation.md).
 
+## Services
+
+- [Core](./core/Introduction.md) - Unified initialization and orchestration.
+- [Leaderboards](./leaderboard/Introduction.md) - Player rankings.
+- [Cloud Save](./cloudsave/Introduction.md) - Data persistence.
+- [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
+- [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
+- [Socialization](./socialization/Introduction.md) - Friend systems.
+- [Purchasing](./purchasing/Introduction.md) - In-app purchases.
+- [Advertisement](./advertisement/Introduction.md) - Ad monetization.
+
 ## Demo Scenes
 
 All demo Unity scenes are located under `Assets/FlyingAcorn/Soil/**/Demo/`.
@@ -20,14 +31,3 @@ All demo Unity scenes are located under `Assets/FlyingAcorn/Soil/**/Demo/`.
 | Scene Switcher | `Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity`                     |
 
 > Tip: Start with the Scene Switcher to jump across feature demos during evaluation.
-
-## Services
-
-- [Core](./core/Introduction.md) - Unified initialization and orchestration.
-- [Leaderboards](./leaderboard/Introduction.md) - Player rankings.
-- [Cloud Save](./cloudsave/Introduction.md) - Data persistence.
-- [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
-- [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
-- [Socialization](./socialization/Introduction.md) - Friend systems.
-- [Purchasing](./purchasing/Introduction.md) - In-app purchases.
-- [Advertisement](./advertisement/Introduction.md) - Ad monetization.
