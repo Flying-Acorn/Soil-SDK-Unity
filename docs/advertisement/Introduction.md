@@ -12,4 +12,4 @@ Demo scene: `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample
 
 ## Dependencies
 
-- [RTL Text Mesh Pro](https://github.com/pnarimani/RTLTMPro/) (for localized text)
+- <a href="https://github.com/pnarimani/RTLTMPro/" target="_blank">RTL Text Mesh Pro</a> (for localized text)

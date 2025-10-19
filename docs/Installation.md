@@ -2,16 +2,16 @@
 
 ## Step 1: Download and Import the SDK
 
-Download and import the latest `.unitypackage` from [here](https://github.com/Flying-Acorn/Soil-SDK-Unity/releases/latest).
+Download and import the latest `.unitypackage` from <a href="https://github.com/Flying-Acorn/Soil-SDK-Unity/releases/latest" target="_blank">here</a>.
 
 ## Step 2: Ensure Dependencies
 
 Ensure the following are present in your project:
-- [Newtonsoft JSON](https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html)
-- [TextMeshPro](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html)
-- [External Dependency Manager for Google integrations](https://developers.google.com/unity/archive#external_dependency_manager_for_unity)
-- [FlyingAcorn/Analytics-Middleware-for-Unity](https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity)
-- [Cysharp/UniTask](https://github.com/Cysharp/UniTask)
+- <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a>
+- <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a>
+- <a href="https://developers.google.com/unity/archive#external_dependency_manager_for_unity" target="_blank">External Dependency Manager for Google integrations</a>
+- <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>
+- <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>
 
 ## Step 3: Create SDKSettings File
 

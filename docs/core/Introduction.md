@@ -21,5 +21,5 @@ Demo scene: `Assets/FlyingAcorn/Soil/Core/Demo/SoilExample.unity`
 ## Dependencies
 * [Newtonsoft JSON](https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html)
 * [TextMeshPro](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html)
-* [FlyingAcorn/Analytics-Middleware-for-Unity](https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity)
-* [Cysharp/UniTask](https://github.com/Cysharp/UniTask)
+* <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>
+* <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>
