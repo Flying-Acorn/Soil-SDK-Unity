@@ -18,9 +18,10 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData
             EditorRefreshScriptingBackend(EditorUserBuildSettings.activeBuildTarget);
 #if UNITY_IOS
             BuildNumber = PlayerSettings.iOS.buildNumber;
-#endif
-#if UNITY_ANDROID
+#elif UNITY_ANDROID
             BuildNumber = PlayerSettings.Android.bundleVersionCode.ToString();
+#else
+            Debug.LogWarning("Unsupported platform for BuildData BuildNumber retrieval.");
 #endif
         }
 

@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 {
@@ -43,7 +44,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
                 return;
             var configurations = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();
             var googleAndroid = configurations.Find(settings =>
-                settings.ThirdParty == Data.ThirdParty.google &&
+                settings.ThirdParty == ThirdParty.google &&
                 settings.Platform == RuntimePlatform.Android);
             if (googleAndroid == null)
                 throw new BuildFailedException("Third party settings not found");

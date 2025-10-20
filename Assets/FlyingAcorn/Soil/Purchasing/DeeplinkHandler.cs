@@ -22,9 +22,20 @@ namespace FlyingAcorn.Soil.Purchasing
                 return;
             }
 
+            if (!sdkSettings.DeepLinkEnabled)
+            {
+                return;
+            }
+
             DeepLinkHandler.OnDeepLinkActivated -= OnDeepLinkActivated;
             DeepLinkHandler.OnDeepLinkActivated += OnDeepLinkActivated;
-            PaymentDeeplink = new Uri(PurchasingPlayerPrefs.GetPurchaseDeeplink());
+            var purchaseDeeplink = PurchasingPlayerPrefs.GetPurchaseDeeplink();
+            if (string.IsNullOrEmpty(purchaseDeeplink))
+            {
+                Debug.LogError("Payment Deeplink Root is not set in SDKSettings, or set DeepLinkEnabled to false.");
+                return;
+            }
+            PaymentDeeplink = new Uri(purchaseDeeplink);
             OnDeepLinkActivated(DeepLinkHandler.LastDeeplinkURL);
         }
 

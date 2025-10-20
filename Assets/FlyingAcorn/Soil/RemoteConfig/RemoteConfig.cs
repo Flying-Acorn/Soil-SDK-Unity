@@ -37,7 +37,6 @@ namespace FlyingAcorn.Soil.RemoteConfig
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.PurchasingSettingsKey] as JObject;
 
         internal static UserInfo RemoteConfigUserInfo;
-        internal static Purchasing.Models.PurchasingSettings RemoteConfigPurchasingSettings;
 
         private static bool _fetchSuccessState;
 
