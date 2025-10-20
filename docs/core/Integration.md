@@ -45,11 +45,9 @@ That's it! The SDK will handle the rest automatically.
 
 ## Updating Player Information
 
-To update player profile information such as name, username, avatar asset, or custom properties, use the `UserApiHandler.UpdatePlayerInfoAsync` method. This method compares the provided `UserInfo` with the current user info and only sends changed fields to the server for efficiency.
+The safest way to update player information is using the fluent builder API, which automatically handles creating copies to avoid reference issues:
 
-### Modifying User Info
-
-First, create a modified copy of the current user info using the fluent methods:
+#### Fluent Builder API
 
 ```csharp
 using FlyingAcorn.Soil.Core.User;
@@ -61,27 +59,18 @@ if (!SoilServices.Ready)
     return;
 }
 
-// Modify the user info
-UserInfo updatedUser = SoilServices.UserInfo
-    .RecordName("New Display Name")
-    .RecordUsername("new_username")
-    .RecordAvatarAsset("https://example.com/avatar.png")
-    .RecordCustomProperty("player_level", 25)
-    .RecordCustomProperty("favorite_color", "blue");
-```
-
-### Sending the Update
-
-Then, call the update method asynchronously:
-
-```csharp
-using FlyingAcorn.Soil.Core.User;
-
 public async void UpdatePlayerProfile()
 {
     try
     {
-        UserInfo result = await UserApiHandler.UpdatePlayerInfoAsync(updatedUser);
+        // Use the fluent builder API - safest and most convenient
+        UserInfo result = await UserApiHandler.UpdatePlayerInfo()
+            .WithName("New Display Name")
+            .WithUsername("new_username")
+            .WithAvatarAsset("https://example.com/avatar.png")
+            .WithCustomProperty("player_level", 25)
+            .WithCustomProperty("favorite_color", "blue");
+        
         Debug.Log($"Profile updated successfully! New name: {result.name}");
         
         // The local UserInfo is automatically updated
@@ -106,9 +95,11 @@ public async void UpdatePlayerProfile()
 - **Incremental Updates**: Only fields that differ from the current user info are sent to the server. If no changes are detected, no request is made.
 - **Validation**: The method validates that the SDK is ready before proceeding.
 - **Automatic Local Update**: Upon successful server update, the local `SoilServices.UserInfo` is automatically replaced with the updated data.
-- **Custom Properties**: Use `RecordCustomProperty` to store game-specific data like player stats or preferences.
+- **Custom Properties**: Use `WithCustomProperty` in the fluent builder to store game-specific data like player stats or preferences. These are automatically merged into the `properties` field when sent to the server.
+- **Reserved Property Names**: Property keys starting with `flyingacorn_` are reserved for SDK use and cannot be used for custom properties. Attempting to use reserved keys will throw an exception.
 - **Username Uniqueness**: Usernames must be unique across the entire application. Attempting to set a duplicate username will result in an error.
 - **Error Handling**: Handle `SoilException` for network errors, invalid data, or SDK not ready.
+- **Safe by Design**: The fluent builder automatically creates copies to prevent reference issues that could cause updates to be skipped.
 
 ## Demo Scene
 

@@ -34,21 +34,21 @@ namespace FlyingAcorn.Soil.Core.User
         [JsonProperty] internal List<AppParty> linkable_parties;
 
         [CanBeNull]
-        public string RealtimeCountry()
+        internal string RealtimeCountry()
         {
             return properties is { flyingacorn_country_realtime: not null }
                 ? properties.flyingacorn_country_realtime
                 : null;
         }
 
-        public UserInfo ChangeUser(UserInfo newUser)
+        internal UserInfo ChangeUser(UserInfo newUser)
         {
             newUser.Validate();
             uuid = newUser.uuid;
             return RecordAvatarAsset(newUser.avatar_asset).RecordName(newUser.name).RecordUsername(newUser.username);
         }
 
-        public UserInfo ChangeRegionInfo(UserInfo comingUser)
+        internal UserInfo ChangeRegionInfo(UserInfo comingUser)
         {
             if (comingUser.country != null)
                 country = comingUser.country;
@@ -59,37 +59,90 @@ namespace FlyingAcorn.Soil.Core.User
             return this;
         }
 
-        public UserInfo RecordCustomProperty(string key, object value)
+        /// <summary>
+        /// Creates a deep copy of this UserInfo instance.
+        /// Use this when you need to modify user info without affecting the original.
+        /// </summary>
+        /// <returns>A new UserInfo instance with the same data</returns>
+        internal UserInfo Copy()
         {
-            this.custom_properties ??= new Dictionary<string, object>();
-            this.custom_properties[key] = value;
+            // Create a deep copy using JSON serialization
+            var json = JsonConvert.SerializeObject(this);
+            return JsonConvert.DeserializeObject<UserInfo>(json);
+        }
+
+        /// <summary>
+        /// Records a custom property. 
+        /// WARNING: This modifies the current instance. When updating user info,
+        /// use UserApiHandler.UpdatePlayerInfo() builder methods instead.
+        /// </summary>
+        /// <param name="key">Property key</param>
+        /// <param name="value">Property value</param>
+        /// <returns>This instance (for method chaining)</returns>
+        internal UserInfo RecordCustomProperty(string key, object value)
+        {
+            // Prevent users from overwriting reserved SDK properties
+            if (key.StartsWith("flyingacorn_"))
+            {
+                throw new ArgumentException($"Property key '{key}' is reserved for SDK use. Custom property keys cannot start with 'flyingacorn_'.", nameof(key));
+            }
+            
+            var newProps = new Dictionary<string, object>(this.custom_properties ?? new Dictionary<string, object>());
+            newProps[key] = value;
+            this.custom_properties = newProps;
             return this;
         }
 
-        public UserInfo RecordAvatarAsset(string avatarAsset)
+        /// <summary>
+        /// Records an avatar asset URL.
+        /// WARNING: This modifies the current instance. When updating user info,
+        /// use UserApiHandler.UpdatePlayerInfo() builder methods instead.
+        /// </summary>
+        /// <param name="avatarAsset">Avatar asset URL</param>
+        /// <returns>This instance (for method chaining)</returns>
+        internal UserInfo RecordAvatarAsset(string avatarAsset)
         {
             this.avatar_asset = avatarAsset;
             return this;
         }
 
-        public UserInfo RecordName(string name)
+        /// <summary>
+        /// Records a display name.
+        /// WARNING: This modifies the current instance. When updating user info,
+        /// use UserApiHandler.UpdatePlayerInfo() builder methods instead.
+        /// </summary>
+        /// <param name="name">Display name</param>
+        /// <returns>This instance (for method chaining)</returns>
+        internal UserInfo RecordName(string name)
         {
             this.name = name;
             return this;
         }
 
-        public UserInfo RecordUsername(string username)
+        /// <summary>
+        /// Records a username.
+        /// WARNING: This modifies the current instance. When updating user info,
+        /// use UserApiHandler.UpdatePlayerInfo() builder methods instead.
+        /// </summary>
+        /// <param name="username">Username</param>
+        /// <returns>This instance (for method chaining)</returns>
+        internal UserInfo RecordUsername(string username)
         {
             this.username = username;
             return this;
         }
 
-        public Dictionary<string, object> GetChangedFields(UserInfo userInfo)
+        internal Dictionary<string, object> GetChangedFields(UserInfo userInfo)
         {
             var changedFields = new Dictionary<string, object>();
             foreach (var propertyInfo in userInfo.GetType().GetAllFields())
             {
                 var value = propertyInfo.GetValue(userInfo);
+                
+                // Skip custom_properties field - we'll handle it separately
+                if (propertyInfo.Name == "custom_properties")
+                    continue;
+                    
                 var isNullOrEmpty = value == null || string.IsNullOrEmpty(value.ToString());
                 if (isNullOrEmpty)
                     continue;
@@ -97,6 +150,32 @@ namespace FlyingAcorn.Soil.Core.User
                 var objectValue = propertyInfo.GetValue(this);
                 if (objectValue == null || !objectValue.Equals(value))
                     changedFields.Add(propertyInfo.Name, value);
+            }
+            
+            // Merge custom_properties into properties for server compatibility
+            if (userInfo.custom_properties != null && userInfo.custom_properties.Count > 0)
+            {
+                // Get or create the properties dictionary
+                Dictionary<string, object> propertiesDict;
+                
+                if (changedFields.ContainsKey("properties"))
+                {
+                    propertiesDict = changedFields["properties"] as Dictionary<string, object> 
+                                   ?? new Dictionary<string, object>();
+                }
+                else
+                {
+                    // If properties haven't changed, start with existing properties
+                    propertiesDict = userInfo.properties?.ToDictionary() ?? new Dictionary<string, object>();
+                }
+                
+                // Add custom properties to the properties dictionary
+                foreach (var kvp in userInfo.custom_properties)
+                {
+                    propertiesDict[kvp.Key] = kvp.Value;
+                }
+                
+                changedFields["properties"] = propertiesDict;
             }
 
             return changedFields;

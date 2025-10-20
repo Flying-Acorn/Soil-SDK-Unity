@@ -76,9 +76,54 @@ namespace FlyingAcorn.Soil.RemoteConfig
 
         private static Dictionary<string, object> GetPlayerProperties()
         {
-            var properties = _sessionExtraProperties;
-            foreach (var property in Soil.Core.User.UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties())
-                properties[property.Key] = property.Value;
+            // Create a new dictionary to avoid mutating _sessionExtraProperties
+            var properties = new Dictionary<string, object>();
+            
+            // Add dynamic system properties first (lowest priority)
+            try
+            {
+                var systemProperties = Soil.Core.User.UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties();
+                if (systemProperties != null)
+                {
+                    foreach (var property in systemProperties)
+                    {
+                        if (!string.IsNullOrEmpty(property.Key) && property.Value != null)
+                        {
+                            properties[property.Key] = property.Value;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Analytics.MyDebug.LogWarning($"Failed to add system properties: {ex.Message}");
+            }
+            
+            // Add user's custom properties from UpdatePlayerInfo (medium priority, can override system properties)
+            if (SoilServices.UserInfo?.custom_properties != null)
+            {
+                foreach (var kvp in SoilServices.UserInfo.custom_properties)
+                {
+                    if (!string.IsNullOrEmpty(kvp.Key) && kvp.Value != null)
+                    {
+                        properties[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+            
+            // Add session-specific extra properties last (highest priority, can override everything)
+            // These are passed at FetchConfig call time and represent the most recent/contextual data
+            if (_sessionExtraProperties != null)
+            {
+                foreach (var kvp in _sessionExtraProperties)
+                {
+                    if (!string.IsNullOrEmpty(kvp.Key) && kvp.Value != null)
+                    {
+                        properties[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+            
             return properties;
         }
 

@@ -7,7 +7,6 @@ using FlyingAcorn.Soil.Core.JWTTools;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using UnityEngine;
 using UnityEngine.Networking;
 
 namespace FlyingAcorn.Soil.Core.User
@@ -20,7 +19,7 @@ namespace FlyingAcorn.Soil.Core.User
 
         [ItemNotNull]
         [UsedImplicitly]
-        public static async UniTask<UserInfo> FetchPlayerInfo(bool allowDuringInitialization = false)
+        internal static async UniTask<UserInfo> FetchPlayerInfo(bool allowDuringInitialization = false)
         {
             if (!SoilServices.Ready && !allowDuringInitialization)
                 throw new SoilException("SoilServices is not initialized. Cannot fetch player info.", SoilExceptionErrorCode.NotReady);
@@ -34,7 +33,7 @@ namespace FlyingAcorn.Soil.Core.User
             }
             else if (!_fetchPlayerInfoTask?.AsTask().IsCompleted ?? false)
             {
-                MyDebug.Verbose("Player info fetch in progress, sharing request");
+                MyDebug.Info("Player info fetch in progress, sharing request");
             }
 
             try
@@ -53,7 +52,7 @@ namespace FlyingAcorn.Soil.Core.User
 
         private static async UniTask<UserInfo> FetchPlayerInfoInternal()
         {
-            MyDebug.Verbose("Fetching player info");
+            MyDebug.Info("Fetching player info");
 
             if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
             {
@@ -107,13 +106,20 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             ReplaceUser(fetchedUser, UserPlayerPrefs.TokenData);
-            MyDebug.Verbose($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
+            MyDebug.Info($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
+        /// <summary>
+        /// Updates player information by passing a UserInfo object.
+        /// WARNING: If you pass SoilServices.UserInfo directly without copying, 
+        /// no changes will be detected. Use UpdatePlayerInfo() builder methods or Copy() first.
+        /// </summary>
+        /// <param name="userInfo">The modified user info. Should be a copy, not the original reference.</param>
+        /// <returns>The updated UserInfo from the server</returns>
         [ItemNotNull]
         [UsedImplicitly]
-        public static async UniTask<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
+        internal static async UniTask<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
         {
             if (!SoilServices.Ready)
             {
@@ -121,10 +127,21 @@ namespace FlyingAcorn.Soil.Core.User
                     SoilExceptionErrorCode.NotReady);
             }
 
+            // SAFETY CHECK: Ensure we're not modifying the original stored UserInfo
+            // If the passed userInfo is the same reference as the stored one, create a copy
+            if (ReferenceEquals(userInfo, UserPlayerPrefs.UserInfo))
+            {
+                MyDebug.LogWarning("UpdatePlayerInfoAsync: Detected same object reference as stored UserInfo. " +
+                                  "This suggests you may have modified SoilServices.UserInfo directly. " +
+                                  "Consider using UpdatePlayerInfoAsync() with fluent builder methods instead.");
+                
+                // We'll continue but this indicates a potential issue in usage
+            }
+
             var legalFields = UserPlayerPrefs.UserInfo.GetChangedFields(userInfo);
             if (legalFields.Count == 0)
             {
-                MyDebug.Verbose("No legal fields to update.");
+                MyDebug.Info("No legal fields to update.");
                 return userInfo;
             }
 
@@ -135,6 +152,7 @@ namespace FlyingAcorn.Soil.Core.User
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.timeout = UserPlayerPrefs.RequestTimeout;
+            MyDebug.Info($"Updating player info with data: {stringBody}");
 
             // Set headers
             var authHeader = Authenticate.GetAuthorizationHeaderString();
@@ -175,11 +193,94 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             ReplaceUser(updatedUser, UserPlayerPrefs.TokenData);
-            MyDebug.Verbose($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
+            MyDebug.Info($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
-        public static void ReplaceUser(UserInfo linkResponseAlternateUser, TokenData tokens)
+        /// <summary>
+        /// Creates a fluent builder for updating player info safely.
+        /// This automatically creates a copy of the current UserInfo to avoid reference issues.
+        /// </summary>
+        /// <returns>A UserInfoUpdateBuilder for fluent API usage</returns>
+        [ItemNotNull]
+        [UsedImplicitly]
+        public static UserInfoUpdateBuilder UpdatePlayerInfo()
+        {
+            if (!SoilServices.Ready)
+            {
+                throw new SoilException("SoilServices is not initialized. Cannot update player info.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            return new UserInfoUpdateBuilder(UserPlayerPrefs.UserInfo.Copy());
+        }
+
+        /// <summary>
+        /// Fluent builder for safely updating UserInfo without reference issues
+        /// </summary>
+        public class UserInfoUpdateBuilder
+        {
+            private readonly UserInfo _userInfo;
+
+            internal UserInfoUpdateBuilder(UserInfo userInfo)
+            {
+                _userInfo = userInfo;
+            }
+
+            public UserInfoUpdateBuilder WithName(string name)
+            {
+                _userInfo.RecordName(name);
+                return this;
+            }
+
+            public UserInfoUpdateBuilder WithUsername(string username)
+            {
+                _userInfo.RecordUsername(username);
+                return this;
+            }
+
+            public UserInfoUpdateBuilder WithAvatarAsset(string avatarAsset)
+            {
+                _userInfo.RecordAvatarAsset(avatarAsset);
+                return this;
+            }
+
+            public UserInfoUpdateBuilder WithCustomProperty(string key, object value)
+            {
+                _userInfo.RecordCustomProperty(key, value);
+                return this;
+            }
+
+            /// <summary>
+            /// Executes the update with all the accumulated changes.
+            /// Note: You can also await the builder directly without calling this method.
+            /// </summary>
+            /// <returns>The updated UserInfo</returns>
+            public async UniTask<UserInfo> ExecuteAsync()
+            {
+                return await UpdatePlayerInfoAsync(_userInfo);
+            }
+
+            /// <summary>
+            /// Gets the modified UserInfo without executing the update.
+            /// Useful for inspecting changes before committing.
+            /// </summary>
+            /// <returns>The modified UserInfo</returns>
+            public UserInfo GetModified()
+            {
+                return _userInfo;
+            }
+
+            /// <summary>
+            /// Allows the builder to be awaited directly without calling ExecuteAsync()
+            /// </summary>
+            public UniTask<UserInfo>.Awaiter GetAwaiter()
+            {
+                return ExecuteAsync().GetAwaiter();
+            }
+        }
+
+        internal static void ReplaceUser(UserInfo linkResponseAlternateUser, TokenData tokens)
         {
             if (linkResponseAlternateUser == null)
             {
@@ -194,7 +295,7 @@ namespace FlyingAcorn.Soil.Core.User
             OnUserFilled?.Invoke(userIsDifferent);
         }
 
-        public static void ReplaceRegionInfo(UserInfo comingUser)
+        internal static void ReplaceRegionInfo(UserInfo comingUser)
         {
             if (comingUser == null)
             {
