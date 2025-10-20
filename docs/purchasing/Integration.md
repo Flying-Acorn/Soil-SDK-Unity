@@ -2,6 +2,8 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md).
 
+**Service Enablement**: Ensure the Purchasing service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ## Full Purchase Sequence
 
 Follow this complete flow for implementing in-app purchases:

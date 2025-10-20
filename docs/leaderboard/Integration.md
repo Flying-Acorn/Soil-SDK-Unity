@@ -6,6 +6,8 @@ Before integrating, ensure you have completed the [Installation](../Installation
 
 Leaderboard requires the Core SDK to be initialized first.
 
+**Service Enablement**: Ensure the Leaderboard service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ### Initializing SoilServices
 
 ```csharp

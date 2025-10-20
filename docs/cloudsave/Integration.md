@@ -6,6 +6,8 @@ Before integrating, ensure you have completed the [Installation](../Installation
 
 CloudSave requires the Core SDK to be initialized first. Initialize SoilServices before using any CloudSave operations.
 
+**Service Enablement**: Ensure the Cloud Save service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ### Initializing SoilServices
 
 ```csharp

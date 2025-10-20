@@ -2,6 +2,8 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md).
 
+**Service Enablement**: Ensure the Remote Config service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ## Full Remote Config Sequence
 
 Follow this complete flow for implementing remote configuration:

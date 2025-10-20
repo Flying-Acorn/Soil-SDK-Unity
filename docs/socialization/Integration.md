@@ -2,6 +2,8 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md).
 
+**Service Enablement**: Ensure the Socialization service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ## Full Socialization Sequence
 
 Follow this complete flow for implementing friend systems:

@@ -4,6 +4,10 @@
 
 Download and import the latest `.unitypackage` from <a href="https://github.com/Flying-Acorn/Soil-SDK-Unity/releases/latest" target="_blank">here</a>.
 
+## Platform Support
+
+The Soil SDK officially supports **Android** and **iOS** platforms. While the SDK may work on other platforms, unexpected behavior may occur. For the best experience and full feature support, we recommend developing and deploying on Android or iOS platforms.
+
 ## Step 2: Ensure Dependencies
 
 Ensure the following are present in your project:
@@ -12,6 +16,8 @@ Ensure the following are present in your project:
 - <a href="https://developers.google.com/unity/archive#external_dependency_manager_for_unity" target="_blank">External Dependency Manager for Google integrations</a>
 - <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>
 - <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>
+
+**Note for Demo Scenes**: If you plan to use the demo scenes included with the SDK, you must import the TextMeshPro Essential Resources. Go to `Window > TextMeshPro > Import TMP Essential Resources` in the Unity Editor.
 
 ## Step 3: Create SDKSettings File
 

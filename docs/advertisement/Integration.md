@@ -2,6 +2,8 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md).
 
+**Service Enablement**: Ensure the Advertisement service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ## Complete Ad Integration Flow
 
 Follow this complete flow for implementing advertisement in your game:

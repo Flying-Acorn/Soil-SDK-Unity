@@ -2,6 +2,8 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md) and understand the [Introduction](Introduction.md).
 
+**Service Enablement**: Ensure the Social Authentication service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ## Complete Account Linking Sequence
 
 Follow this complete flow to implement third-party account linking:

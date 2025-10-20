@@ -7,6 +7,8 @@ Before integrating the Soil SDK Core, ensure you have completed the [Installatio
 - Configuring SDK settings (App ID, SDK Token, etc.)
 - Installing required dependencies
 
+**Service Enablement**: Ensure the Core service is enabled for your account. Reach out to your Soil contact to enable the service for you.
+
 ## Basic Integration
 
 To integrate the Soil SDK Core, initialize it at the start of your application and handle success/failure events:
