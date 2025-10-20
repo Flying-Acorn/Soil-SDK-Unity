@@ -43,7 +43,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
                 return;
             var configurations = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();
             var googleAndroid = configurations.Find(settings =>
-                settings.ThirdParty == Data.Constants.ThirdParty.google &&
+                settings.ThirdParty == Data.ThirdParty.google &&
                 settings.Platform == RuntimePlatform.Android);
             if (googleAndroid == null)
                 throw new BuildFailedException("Third party settings not found");

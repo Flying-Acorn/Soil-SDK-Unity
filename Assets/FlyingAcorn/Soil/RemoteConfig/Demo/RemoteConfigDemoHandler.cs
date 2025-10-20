@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
 using Newtonsoft.Json;
@@ -28,6 +29,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.Demo
         {
             SetDevButton();
             fetchedDataText.text = "Initializing...";
+            AnalyticsManager.Initialize(new List<IAnalytics>());
 
             SoilServices.OnServicesReady += OnSoilServicesReady;
 

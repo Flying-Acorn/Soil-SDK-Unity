@@ -14,7 +14,7 @@ SoilServices.OnServicesReady += () =>
 };
 
 // Link a Google account
-SocialAuthentication.Link(Constants.ThirdParty.google);
+SocialAuthentication.Link(ThirdParty.google);
 
 // Handle success/failure
 SocialAuthentication.OnLinkSuccessCallback += (response) =>

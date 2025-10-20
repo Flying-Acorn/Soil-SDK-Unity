@@ -1,29 +1,30 @@
 using FlyingAcorn.Soil.Core.Data;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 {
     public static class ThirdPartyExtensions
     {
-        public static Constants.ThirdParty ToThirdParty(this ThirdPartyType type)
+        public static ThirdParty ToThirdParty(this ThirdPartyType type)
         {
             return type switch
             {
-                ThirdPartyType.google => Constants.ThirdParty.google,
-                ThirdPartyType.facebook => Constants.ThirdParty.facebook,
-                ThirdPartyType.unity => Constants.ThirdParty.unity,
-                ThirdPartyType.apple => Constants.ThirdParty.apple,
-                _ => Constants.ThirdParty.none
+                ThirdPartyType.google => ThirdParty.google,
+                ThirdPartyType.facebook => ThirdParty.facebook,
+                ThirdPartyType.unity => ThirdParty.unity,
+                ThirdPartyType.apple => ThirdParty.apple,
+                _ => ThirdParty.none
             };
         }
 
-        public static ThirdPartyType ToThirdPartyType(this Constants.ThirdParty party)
+        public static ThirdPartyType ToThirdPartyType(this ThirdParty party)
         {
             return party switch
             {
-                Constants.ThirdParty.google => ThirdPartyType.google,
-                Constants.ThirdParty.facebook => ThirdPartyType.facebook,
-                Constants.ThirdParty.unity => ThirdPartyType.unity,
-                Constants.ThirdParty.apple => ThirdPartyType.apple,
+                ThirdParty.google => ThirdPartyType.google,
+                ThirdParty.facebook => ThirdPartyType.facebook,
+                ThirdParty.unity => ThirdPartyType.unity,
+                ThirdParty.apple => ThirdPartyType.apple,
                 _ => ThirdPartyType.none
             };
         }

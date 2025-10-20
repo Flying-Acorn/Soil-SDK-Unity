@@ -10,13 +10,12 @@ using FlyingAcorn.Soil.Core.JWTTools;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine.Networking;
-using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.Authentication
 {
     public static class Authenticate
     {
-        internal static string UserBaseUrl => $"{Constants.ApiUrl}/users";
+        internal static string UserBaseUrl => $"{Core.Data.Constants.ApiUrl}/users";
 
         private static string RegisterPlayerUrl => $"{UserBaseUrl}/register/";
         private static string RefreshTokenUrl => $"{UserBaseUrl}/refreshtoken/";

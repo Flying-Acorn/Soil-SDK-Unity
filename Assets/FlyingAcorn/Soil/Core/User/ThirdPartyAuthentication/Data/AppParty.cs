@@ -1,5 +1,6 @@
 using System;
 using Newtonsoft.Json;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 {
@@ -7,6 +8,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
     public class AppParty
     {
         [JsonProperty] public string id;
-        [JsonProperty] public Constants.ThirdParty party;
+        [JsonProperty] public ThirdParty party;
     }
 }

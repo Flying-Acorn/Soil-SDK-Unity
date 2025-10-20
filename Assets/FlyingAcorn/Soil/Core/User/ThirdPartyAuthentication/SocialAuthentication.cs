@@ -8,7 +8,7 @@ using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
 using UnityEngine;
-using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
@@ -22,10 +22,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public static Action<LinkPostResponse> OnLinkSuccessCallback { get; set; }
         public static Action<UnlinkResponse> OnUnlinkSuccessCallback { get; set; }
         public static Action<LinkGetResponse> OnGetAllLinksSuccessCallback { get; set; }
-        public static Action<Constants.ThirdParty> OnAccessRevoked { get; set; }
-        public static Action<Constants.ThirdParty, SoilException> OnLinkFailureCallback { get; set; }
-        public static Action<Constants.ThirdParty, SoilException> OnUnlinkFailureCallback { get; set; }
-        public static Action<Constants.ThirdParty, SoilException> OnGetAllLinksFailureCallback { get; set; }
+        public static Action<ThirdParty> OnAccessRevoked { get; set; }
+        public static Action<ThirdParty, SoilException> OnLinkFailureCallback { get; set; }
+        public static Action<ThirdParty, SoilException> OnUnlinkFailureCallback { get; set; }
+        public static Action<ThirdParty, SoilException> OnGetAllLinksFailureCallback { get; set; }
 
         private static List<IPlatformAuthentication> _availableHandlers = new();
         protected static bool _isInitializing;
@@ -112,7 +112,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             FireInitSuccess();
         }
 
-        private static void OnGetAllLinksFailure(Constants.ThirdParty party, SoilException exception)
+        private static void OnGetAllLinksFailure(ThirdParty party, SoilException exception)
         {
             FireInitFailed(exception);
         }
@@ -141,7 +141,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             Unlink(party);
         }
 
-        private static bool IsPartyAvailable(Constants.ThirdParty party)
+        private static bool IsPartyAvailable(ThirdParty party)
         {
             var settings = GetConfigFile(party);
             if (!settings)
@@ -150,7 +150,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                    SoilServices.UserInfo.linkable_parties.Any(linkableParty => linkableParty.party.ToThirdParty() == party);
         }
 
-        public static void Link(Constants.ThirdParty party)
+        public static void Link(ThirdParty party)
         {
             if (!Ready)
             {
@@ -185,23 +185,23 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         {
             return settings.ThirdParty switch
             {
-                Constants.ThirdParty.google => Application.platform switch
+                ThirdParty.google => Application.platform switch
                 {
                     RuntimePlatform.Android => new GoogleAndroidAuthentication(settings),
                     RuntimePlatform.IPhonePlayer => new GoogleIOSAuthentication(settings),
                     _ => new GoogleOtherPlatformAuthentication(settings)
                 },
-                Constants.ThirdParty.apple => new AppleSignIn(settings),
-                Constants.ThirdParty.facebook => null,
-                Constants.ThirdParty.unity => null,
-                Constants.ThirdParty.none => null,
+                ThirdParty.apple => new AppleSignIn(settings),
+                ThirdParty.facebook => null,
+                ThirdParty.unity => null,
+                ThirdParty.none => null,
                 _ => throw new SoilException("Unsupported third party", SoilExceptionErrorCode.ServiceUnavailable)
             };
         }
 
-        private static readonly Dictionary<Constants.ThirdParty, bool> _unlinkInProgress = new();
+        private static readonly Dictionary<ThirdParty, bool> _unlinkInProgress = new();
 
-        public static void Unlink(Constants.ThirdParty party)
+        public static void Unlink(ThirdParty party)
         {
             MyDebug.Verbose($"SocialAuthentication.Unlink called for {party}");
 
@@ -219,7 +219,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             UnlinkAsync(party).Forget();
         }
 
-        private static async UniTask UnlinkAsync(Constants.ThirdParty party)
+        private static async UniTask UnlinkAsync(ThirdParty party)
         {
             try
             {
@@ -279,7 +279,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             if (!SoilServices.Ready) // Only needs to check if SoilServices is ready
             {
                 MyDebug.LogWarning("Social Authentication not initialized");
-                OnGetAllLinksFailureCallback?.Invoke(Constants.ThirdParty.none,
+                OnGetAllLinksFailureCallback?.Invoke(ThirdParty.none,
                     new SoilException("Social Authentication not initialized", SoilExceptionErrorCode.NotReady));
                 return;
             }
@@ -291,13 +291,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             }
             catch (SoilException e)
             {
-                OnGetAllLinksFailureCallback?.Invoke(Constants.ThirdParty.none, e);
+                OnGetAllLinksFailureCallback?.Invoke(ThirdParty.none, e);
             }
             catch (Exception e)
             {
                 MyDebug.LogWarning(e);
                 var soilException = new SoilException(e.Message);
-                OnGetAllLinksFailureCallback?.Invoke(Constants.ThirdParty.none, soilException);
+                OnGetAllLinksFailureCallback?.Invoke(ThirdParty.none, soilException);
             }
         }
 
@@ -331,7 +331,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             }
         }
 
-        private static ThirdPartySettings GetConfigFile(Constants.ThirdParty party)
+        private static ThirdPartySettings GetConfigFile(ThirdParty party)
         {
             return _thirdPartySettings?.Find(settings =>
                 settings.ThirdParty == party && settings.Platform == Application.platform);
@@ -343,7 +343,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 link.Update();
         }
 
-        public static void UpdateSpecific(Constants.ThirdParty party)
+        public static void UpdateSpecific(ThirdParty party)
         {
             foreach (var link in _availableHandlers.Where(link => link.ThirdPartySettings.ThirdParty == party))
                 link.Update();

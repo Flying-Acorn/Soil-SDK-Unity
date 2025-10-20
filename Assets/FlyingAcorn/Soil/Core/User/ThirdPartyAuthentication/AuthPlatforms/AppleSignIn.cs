@@ -8,6 +8,7 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
@@ -35,7 +36,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         private void SetUp()
         {
             MyDebug.Info("Setting up Apple Sign In");
-            var userID = LinkingPlayerPrefs.GetUserId(Constants.ThirdParty.apple);
+            var userID = LinkingPlayerPrefs.GetUserId(ThirdParty.apple);
             if (!string.IsNullOrEmpty(userID))
                 CheckCredentialStatusForUserId(userID);
         }
@@ -93,23 +94,23 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             switch (authorizationErrorCode)
             {
                 case AuthorizationErrorCode.Unknown:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.apple,
                         new SoilException("Unknown error", SoilExceptionErrorCode.Unknown));
                     break;
                 case AuthorizationErrorCode.Canceled:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.apple,
                         new SoilException("User canceled", SoilExceptionErrorCode.Canceled));
                     break;
                 case AuthorizationErrorCode.InvalidResponse:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.apple,
                         new SoilException("Invalid response", SoilExceptionErrorCode.InvalidResponse));
                     break;
                 case AuthorizationErrorCode.NotHandled:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.apple,
                         new SoilException("Not handled", SoilExceptionErrorCode.Unknown));
                     break;
                 case AuthorizationErrorCode.Failed:
-                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                    IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.apple,
                         new SoilException("Failed", SoilExceptionErrorCode.Unknown));
                     break;
                 default:
@@ -119,11 +120,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 
         private void FinishSignIn(ICredential credential)
         {
-            LinkingPlayerPrefs.SetUserId(Constants.ThirdParty.apple, credential.User);
+            LinkingPlayerPrefs.SetUserId(ThirdParty.apple, credential.User);
             if (credential is not IAppleIDCredential appleIdCredential)
             {
                 MyDebug.LogError("Sign in with Apple failed, credential is null");
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.apple,
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.apple,
                     new SoilException("Credential is null", SoilExceptionErrorCode.InvalidResponse));
                 return;
             }

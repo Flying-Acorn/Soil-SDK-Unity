@@ -1,5 +1,5 @@
-using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using UnityEngine;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
@@ -7,7 +7,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
     public class ThirdPartySettings : ScriptableObject
     {
         [SerializeField] private RuntimePlatform platform;
-        [SerializeField] private Constants.ThirdParty thirdParty;
+        [SerializeField] private ThirdParty thirdParty;
         [SerializeField] private string clientId;
         [SerializeField] private string clientSecret;
         [SerializeField] private string scope = "email profile";
@@ -18,6 +18,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public string Scope => scope;
         public string RedirectUri => redirectUri;
         public string ClientSecret => clientSecret;
-        public Constants.ThirdParty ThirdParty => thirdParty;
+        public ThirdParty ThirdParty => thirdParty;
     }
 }

@@ -99,6 +99,20 @@ namespace FlyingAcorn.Soil.RemoteConfig
                 Analytics.MyDebug.LogWarning($"Failed to add system properties: {ex.Message}");
             }
             
+            // Add AB Testing cohort ID if available
+            try
+            {
+                var cohortId = ABTestingPlayerPrefs.GetLastExperimentId();
+                if (!string.IsNullOrEmpty(cohortId))
+                {
+                    properties[ABTesting.Constants.CohortIdPropertyKey] = cohortId;
+                }
+            }
+            catch (Exception ex)
+            {
+                Analytics.MyDebug.LogWarning($"Failed to add cohort_id property: {ex.Message}");
+            }
+            
             // Add user's custom properties from UpdatePlayerInfo (medium priority, can override system properties)
             if (SoilServices.UserInfo?.custom_properties != null)
             {

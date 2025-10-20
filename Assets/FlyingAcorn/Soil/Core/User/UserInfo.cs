@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
-using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -184,7 +183,7 @@ namespace FlyingAcorn.Soil.Core.User
         [Serializable]
         public class Properties
         {
-            private const string KeysPrefix = "flyingacorn_";
+            internal const string KeysPrefix = "flyingacorn_";
             public string flyingacorn_build;
             public string flyingacorn_build_time;
             public string flyingacorn_device_model;
@@ -211,31 +210,28 @@ namespace FlyingAcorn.Soil.Core.User
                 var timezone = JsonConvert.DeserializeObject<TimeZoneInfo>(JsonConvert.SerializeObject(System.TimeZoneInfo.Local));
                 return new Dictionary<string, object>
                 {
-                    { $"{KeysPrefix}platform", Application.platform.ToString() },
-                    { $"{KeysPrefix}version", Application.version },
-                    { $"{KeysPrefix}build", DataUtils.GetUserBuildNumber() },
-                    { $"{KeysPrefix}build_time", DataUtils.GetBuildDate() },
-                    { $"{KeysPrefix}scripting_backend", DataUtils.GetScriptingBackend() },
-                    { $"{KeysPrefix}unity_version", Application.unityVersion },
-                    { $"{KeysPrefix}store_name", DataUtils.GetStore().ToString() },
-                    { $"{KeysPrefix}package", Application.identifier },
-                    { $"{KeysPrefix}device_model", SystemInfo.deviceModel },
-                    { $"{KeysPrefix}device_type", SystemInfo.deviceType.ToString() },
-                    { $"{KeysPrefix}device_name", SystemInfo.deviceName },
-                    { $"{KeysPrefix}device_unique_id", SystemInfo.deviceUniqueIdentifier },
-                    { $"{KeysPrefix}graphics_device_name", SystemInfo.graphicsDeviceName },
-                    { $"{KeysPrefix}graphics_device_type", SystemInfo.graphicsDeviceType.ToString() },
-                    { $"{KeysPrefix}graphics_device_vendor", SystemInfo.graphicsDeviceVendor },
-                    { $"{KeysPrefix}graphics_device_id", SystemInfo.graphicsDeviceID },
-                    { $"{KeysPrefix}graphics_device_vendor_id", SystemInfo.graphicsDeviceVendorID },
-                    { $"{KeysPrefix}graphics_device_version", SystemInfo.graphicsDeviceVersion },
-                    { $"{KeysPrefix}analytics_debug_mode", AnalyticsPlayerPrefs.UserDebugMode },
-                    { $"{KeysPrefix}installation_version", AnalyticsPlayerPrefs.InstallationVersion },
-                    { $"{KeysPrefix}installation_build", AnalyticsPlayerPrefs.InstallationBuild },
-                    { $"{KeysPrefix}timezone", timezone },
-                    {
-                        $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId()
-                    } // Uncomment where A/B testing is used
+                    { Constants.PlatformKey, Application.platform.ToString() },
+                    { Constants.VersionKey, Application.version },
+                    { Constants.BuildKey, DataUtils.GetUserBuildNumber() },
+                    { Constants.BuildTimeKey, DataUtils.GetBuildDate() },
+                    { Constants.ScriptingBackendKey, DataUtils.GetScriptingBackend() },
+                    { Constants.UnityVersionKey, Application.unityVersion },
+                    { Constants.StoreNameKey, DataUtils.GetStore().ToString() },
+                    { Constants.PackageKey, Application.identifier },
+                    { Constants.DeviceModelKey, SystemInfo.deviceModel },
+                    { Constants.DeviceTypeKey, SystemInfo.deviceType.ToString() },
+                    { Constants.DeviceNameKey, SystemInfo.deviceName },
+                    { Constants.DeviceUniqueIdKey, SystemInfo.deviceUniqueIdentifier },
+                    { Constants.GraphicsDeviceNameKey, SystemInfo.graphicsDeviceName },
+                    { Constants.GraphicsDeviceTypeKey, SystemInfo.graphicsDeviceType.ToString() },
+                    { Constants.GraphicsDeviceVendorKey, SystemInfo.graphicsDeviceVendor },
+                    { Constants.GraphicsDeviceIdKey, SystemInfo.graphicsDeviceID },
+                    { Constants.GraphicsDeviceVendorIdKey, SystemInfo.graphicsDeviceVendorID },
+                    { Constants.GraphicsDeviceVersionKey, SystemInfo.graphicsDeviceVersion },
+                    { Constants.AnalyticsDebugModeKey, AnalyticsPlayerPrefs.UserDebugMode },
+                    { Constants.InstallationVersionKey, AnalyticsPlayerPrefs.InstallationVersion },
+                    { Constants.InstallationBuildKey, AnalyticsPlayerPrefs.InstallationBuild },
+                    { Constants.TimezoneKey, timezone }
                 };
             }
 

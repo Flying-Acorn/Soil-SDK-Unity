@@ -10,7 +10,7 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
 using UnityEngine;
-using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
@@ -29,7 +29,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         {
             if (_authenticationSession == null)
             {
-                if (ThirdPartySettings.ThirdParty != Constants.ThirdParty.google)
+                if (ThirdPartySettings.ThirdParty != ThirdParty.google)
                 {
                     _authenticationSession = null;
                 }
@@ -65,25 +65,25 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             catch (AuthorizationCodeRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.google,
                     new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidRequest));
             }
             catch (AccessTokenRequestException ex)
             {
                 MyDebug.LogWarning(ex.error.description);
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.google,
                     new SoilException(ex.error.description, SoilExceptionErrorCode.InvalidToken));
             }
             catch (HttpListenerException ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                IPlatformAuthentication.OnSignInFailureCallback(Constants.ThirdParty.google,
+                IPlatformAuthentication.OnSignInFailureCallback(ThirdParty.google,
                     new SoilException(ex.Message, SoilExceptionErrorCode.AnotherOngoingInstance));
             }
             catch (Exception ex)
             {
                 MyDebug.LogWarning(ex.Message);
-                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(Constants.ThirdParty.google,
+                IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.google,
                     new SoilException(ex.Message));
             }
         }

@@ -4,6 +4,7 @@ using System.Linq;
 using FlyingAcorn.Analytics;
 using Newtonsoft.Json;
 using UnityEngine;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 {
@@ -31,7 +32,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
             RemoveLink(unlinkResponse.detail.app_party.party);
         }
 
-        internal static void RemoveLink(Constants.ThirdParty party)
+        internal static void RemoveLink(ThirdParty party)
         {
             MyDebug.Info($"Removing link for {party}");
             var links = Links;
@@ -72,7 +73,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
             }
         }
 
-        public static List<Constants.ThirdParty> SilentUnlinkQueue
+        public static List<ThirdParty> SilentUnlinkQueue
         {
             get
             {
@@ -81,14 +82,14 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
                 try
                 {
                     return string.IsNullOrEmpty(silentUnlinksString)
-                        ? new List<Constants.ThirdParty>()
-                        : JsonConvert.DeserializeObject<List<Constants.ThirdParty>>(silentUnlinksString);
+                        ? new List<ThirdParty>()
+                        : JsonConvert.DeserializeObject<List<ThirdParty>>(silentUnlinksString);
                 }
                 catch (Exception e)
                 {
                     MyDebug.LogWarning(
                         $"Failed to parse silent unlinks from PlayerPrefs: {e.Message} - {silentUnlinksString}");
-                    return new List<Constants.ThirdParty>();
+                    return new List<ThirdParty>();
                 }
             }
 
@@ -108,17 +109,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
 
         private static string ThirdPartyPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}thirdparty_";
 
-        internal static string GetUserId(Constants.ThirdParty thirdParty)
+        internal static string GetUserId(ThirdParty thirdParty)
         {
             return PlayerPrefs.GetString(ThirdPartyPrefix + thirdParty, "");
         }
 
-        internal static void SetUserId(Constants.ThirdParty thirdParty, string userId)
+        internal static void SetUserId(ThirdParty thirdParty, string userId)
         {
             PlayerPrefs.SetString(ThirdPartyPrefix + thirdParty, userId);
         }
 
-        public static void EnqueueSilentUnlink(Constants.ThirdParty party)
+        public static void EnqueueSilentUnlink(ThirdParty party)
         {
             var silentUnlinks = SilentUnlinkQueue;
             if (silentUnlinks.Contains(party)) return;
@@ -127,7 +128,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
             SilentUnlinkQueue = silentUnlinks;
         }
 
-        private static void DequeueSilentUnlink(Constants.ThirdParty party)
+        private static void DequeueSilentUnlink(ThirdParty party)
         {
             var silentUnlinks = SilentUnlinkQueue;
             if (!silentUnlinks.Contains(party)) return;

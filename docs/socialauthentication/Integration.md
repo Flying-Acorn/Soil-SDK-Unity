@@ -60,12 +60,12 @@ Trigger the authentication flow for a specific platform:
 ```csharp
 public void LinkGoogleAccount()
 {
-    SocialAuthentication.Link(Constants.ThirdParty.google);
+    SocialAuthentication.Link(ThirdParty.google);
 }
 
 public void LinkAppleAccount()
 {
-    SocialAuthentication.Link(Constants.ThirdParty.apple);
+    SocialAuthentication.Link(ThirdParty.apple);
 }
 ```
 
@@ -85,7 +85,7 @@ private void OnLinkSuccess(LinkPostResponse response)
     PlayerPrefs.SetString($"linked_{response.detail.app_party.party}", "true");
 }
 
-private void OnLinkFailed(Constants.ThirdParty party, SoilException exception)
+private void OnLinkFailed(ThirdParty party, SoilException exception)
 {
     Debug.LogError($"Failed to link {party}: {exception.Message}");
     
@@ -127,7 +127,7 @@ private void OnGetLinksSuccess(LinkGetResponse response)
     UpdateLinkedAccountsUI();
 }
 
-private void OnGetLinksFailed(Constants.ThirdParty party, SoilException exception)
+private void OnGetLinksFailed(ThirdParty party, SoilException exception)
 {
     Debug.LogError($"Failed to get links: {exception.Message}");
 }
@@ -138,7 +138,7 @@ private void OnGetLinksFailed(Constants.ThirdParty party, SoilException exceptio
 Remove linked accounts when needed:
 
 ```csharp
-public void UnlinkAccount(Constants.ThirdParty party)
+public void UnlinkAccount(ThirdParty party)
 {
     SocialAuthentication.Unlink(party);
 }
@@ -152,7 +152,7 @@ private void OnUnlinkSuccess(UnlinkResponse response)
     PlayerPrefs.DeleteKey($"linked_{response.detail?.app_party?.party}");
 }
 
-private void OnUnlinkFailure(Constants.ThirdParty party, SoilException exception)
+private void OnUnlinkFailure(ThirdParty party, SoilException exception)
 {
     Debug.LogError($"Failed to unlink {party}: {exception.Message}");
     ShowErrorDialog($"Unable to unlink {party} account. Please try again.");
@@ -164,7 +164,7 @@ private void OnUnlinkFailure(Constants.ThirdParty party, SoilException exception
 Respond to external account access changes:
 
 ```csharp
-private void OnAccessRevoked(Constants.ThirdParty party)
+private void OnAccessRevoked(ThirdParty party)
 {
     Debug.Log($"Access revoked for {party}");
     
@@ -217,8 +217,8 @@ public class SocialAuthManager : MonoBehaviour
     void Awake()
     {
         // Setup UI
-        linkGoogleButton.onClick.AddListener(() => LinkAccount(Constants.ThirdParty.google));
-        linkAppleButton.onClick.AddListener(() => LinkAccount(Constants.ThirdParty.apple));
+        linkGoogleButton.onClick.AddListener(() => LinkAccount(ThirdParty.google));
+        linkAppleButton.onClick.AddListener(() => LinkAccount(ThirdParty.apple));
         unlinkButton.onClick.AddListener(UnlinkFirstAccount);
         refreshButton.onClick.AddListener(RefreshLinkedAccounts);
 
@@ -250,7 +250,7 @@ public class SocialAuthManager : MonoBehaviour
 
     #region Authentication Methods
 
-    private void LinkAccount(Constants.ThirdParty party)
+    private void LinkAccount(ThirdParty party)
     {
         statusText.text = $"Linking {party} account...";
         SocialAuthentication.Link(party);
@@ -294,7 +294,7 @@ public class SocialAuthManager : MonoBehaviour
         UpdateButtons();
     }
 
-    private void OnLinkFailed(Constants.ThirdParty party, SoilException exception)
+    private void OnLinkFailed(ThirdParty party, SoilException exception)
     {
         statusText.text = $"✗ Failed to link {party}: {exception.Message}";
     }

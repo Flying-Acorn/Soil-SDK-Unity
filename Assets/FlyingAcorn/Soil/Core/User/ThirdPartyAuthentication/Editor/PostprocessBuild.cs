@@ -3,6 +3,7 @@ using FlyingAcorn.Soil.Core.Data.BuildData.Editor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 {
@@ -25,7 +26,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 
             var configurations = Resources.LoadAll<ThirdPartySettings>("ThirdParties").ToList();
             var googleIOS = configurations.Find(settings =>
-                settings.ThirdParty == Data.Constants.ThirdParty.google &&
+                settings.ThirdParty == ThirdParty.google &&
                 settings.Platform == RuntimePlatform.IPhonePlayer);
             if (!googleIOS)
                 throw new BuildFailedException("Third party settings not found");

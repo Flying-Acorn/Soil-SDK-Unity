@@ -8,8 +8,8 @@ using Newtonsoft.Json;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 using Button = UnityEngine.UI.Button;
-using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
 {
@@ -108,7 +108,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
                 getAllLinksButton.onClick.RemoveListener(GetLinks);
         }
 
-        private void OnAccessRevoked(Constants.ThirdParty obj)
+        private void OnAccessRevoked(ThirdParty obj)
         {
             statusText.text = $"Access revoked for {obj}";
             UpdateButtons();
@@ -142,13 +142,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         private void LinkGoogle()
         {
             statusText.text = "Linking Google account...";
-            SocialAuthentication.Link(Constants.ThirdParty.google);
+            SocialAuthentication.Link(ThirdParty.google);
         }
 
         private void LinkApple()
         {
             statusText.text = "Linking Apple account...";
-            SocialAuthentication.Link(Constants.ThirdParty.apple);
+            SocialAuthentication.Link(ThirdParty.apple);
         }
 
         private void OnGetAllLinksSuccess(LinkGetResponse linkGetResponse)
@@ -168,7 +168,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
             UpdateButtons();
         }
 
-        private void OnFailure(Constants.ThirdParty thirdParty, SoilException soilException)
+        private void OnFailure(ThirdParty thirdParty, SoilException soilException)
         {
             statusText.text = $"Link failure: {thirdParty} - {soilException}";
         }

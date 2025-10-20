@@ -9,7 +9,7 @@ using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using Constants = FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
+using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
@@ -87,20 +87,20 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
             switch (linkResponse.detail.code)
             {
-                case Constants.LinkStatus.LinkFound:
+                case LinkStatus.LinkFound:
                     if (linkResponse.alternate_user == null)
                         throw new SoilException("Link found but alternate user is null",
                             SoilExceptionErrorCode.Conflict);
                     var tokens = linkResponse.alternate_user.tokens;
                     UserApiHandler.ReplaceUser(linkResponse.alternate_user, tokens);
                     break;
-                case Constants.LinkStatus.AlreadyLinked:
-                case Constants.LinkStatus.LinkCreated:
+                case LinkStatus.AlreadyLinked:
+                case LinkStatus.LinkCreated:
                     break;
-                case Constants.LinkStatus.LinkDeleted:
-                case Constants.LinkStatus.AnotherLinkExists:
-                case Constants.LinkStatus.LinkNotFound:
-                case Constants.LinkStatus.PartyNotFound:
+                case LinkStatus.LinkDeleted:
+                case LinkStatus.AnotherLinkExists:
+                case LinkStatus.LinkNotFound:
+                case LinkStatus.PartyNotFound:
                 default:
                     throw new SoilException(
                         $"Unaccepted link status: {linkResponse.detail.code} - {linkResponse.detail.message}",
@@ -142,8 +142,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 {
                     detail = new LinkStatusResponse
                     {
-                        code = Constants.LinkStatus.LinkNotFound,
-                        message = nameof(Constants.LinkStatus.LinkNotFound)
+                        code = LinkStatus.LinkNotFound,
+                        message = nameof(LinkStatus.LinkNotFound)
                     },
                     linked_accounts = new List<LinkPostResponse>()
                 };

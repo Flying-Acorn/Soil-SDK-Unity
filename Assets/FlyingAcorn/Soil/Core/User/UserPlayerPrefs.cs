@@ -47,7 +47,7 @@ namespace FlyingAcorn.Soil.Core.User
             {
                 var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
                 var appIdIsValid = settings && !string.IsNullOrEmpty(settings.AppID);
-                return appIdIsValid ? settings.AppID : PlayerPrefs.GetString(AppIDKey, Constants.DemoAppID);
+                return appIdIsValid ? settings.AppID : PlayerPrefs.GetString(AppIDKey, Data.Constants.DemoAppID);
             }
         }
 
@@ -59,7 +59,7 @@ namespace FlyingAcorn.Soil.Core.User
                 var sdkTokenIsValid = settings && !string.IsNullOrEmpty(settings.SdkToken);
                 return sdkTokenIsValid
                     ? settings.SdkToken
-                    : PlayerPrefs.GetString(SDKTokenKey, Constants.DemoAppSDKToken);
+                    : PlayerPrefs.GetString(SDKTokenKey, Data.Constants.DemoAppSDKToken);
             }
         }
 
@@ -77,7 +77,7 @@ namespace FlyingAcorn.Soil.Core.User
             get
             {
                 var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
-                return settings ? settings.RequestTimeout : Constants.DefaultTimeout;
+                return settings ? settings.RequestTimeout : Data.Constants.DefaultTimeout;
             }
         }
 

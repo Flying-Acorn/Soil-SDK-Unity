@@ -14,7 +14,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 
         internal static string GetLastExperimentId()
         {
-            return PlayerPrefs.GetString(LastExperimentKey, "");
+            return PlayerPrefs.GetString(LastExperimentKey, Constants.NoCohortName);
         }
 
         internal static void SetLastExperimentId(string experimentId)
