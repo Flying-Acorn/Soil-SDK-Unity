@@ -14,7 +14,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
     public abstract class SocialAuthentication
     {
-        private static bool Ready => SoilServices.Ready && _initialized;
+        public static bool Ready => SoilServices.Ready && _initialized;
 
         private static List<ThirdPartySettings> _thirdPartySettings;
         public static Action OnInitializationSuccess { get; set; }
