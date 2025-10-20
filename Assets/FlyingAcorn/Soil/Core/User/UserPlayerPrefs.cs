@@ -11,8 +11,8 @@ namespace FlyingAcorn.Soil.Core.User
 
         private static string TokenDataKey => $"{GetKeysPrefix()}token_data";
         private static string UserInfoKey => $"{GetKeysPrefix()}player_info";
-        private static string AppIDKey => $"{GetKeysPrefix()}app_id";
-        private static string SDKTokenKey => $"{GetKeysPrefix()}sdk_token";
+        private static string AppIDKey => "FA_soil_app_id";
+        private static string SDKTokenKey => "FA_soil_sdk_token";
 
         internal static void ResetSetInMemoryCache()
         {
