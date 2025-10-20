@@ -12,4 +12,4 @@ Demo scene: `Assets/FlyingAcorn/Soil/CloudSave/Demo/SoilCloudSaveExample.unity`
 
 ## Dependencies
 
-- Core SDK dependencies
+- Core SDK

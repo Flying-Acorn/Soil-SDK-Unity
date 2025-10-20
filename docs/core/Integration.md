@@ -101,7 +101,6 @@ public async void UpdatePlayerProfile()
 - **Validation**: The method validates that the SDK is ready before proceeding.
 - **Automatic Local Update**: Upon successful server update, the local `SoilServices.UserInfo` is automatically replaced with the updated data.
 - **Custom Properties**: Use `WithCustomProperty` in the fluent builder to store game-specific data like player stats or preferences. These are automatically merged into the `properties` field when sent to the server.
-- **Reserved Property Names**: Property keys starting with `flyingacorn_` are reserved for SDK use and cannot be used for custom properties. Attempting to use reserved keys will throw an exception.
 - **Username Uniqueness**: Usernames must be unique across the entire application. Attempting to set a duplicate username will result in an error.
 - **Error Handling**: Handle `SoilException` for network errors, invalid data, or SDK not ready.
 - **Safe by Design**: The fluent builder automatically creates copies to prevent reference issues that could cause updates to be skipped.

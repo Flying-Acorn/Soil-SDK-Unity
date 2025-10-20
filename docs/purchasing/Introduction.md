@@ -28,5 +28,6 @@ Demo scene: `Assets/FlyingAcorn/Soil/Purchasing/Demo/SoilPurchasingExample.unity
 
 ## Dependencies
 
-- Core SDK (for authentication and networking)
+- Core SDK
 - Remote Config (for dynamic purchasing settings)
+- Economy (for rewarding users based on your defined currencies/inventory items)

@@ -5,16 +5,20 @@ Welcome to the Soil SDK for Unity documentation.
 For installation instructions, see [Installation](./Installation.md).
 
 ## Services
+- Development Booster Pack
+    - [Core](./core/Introduction.md) - Unified initialization and orchestration.
+    - [Leaderboards](./leaderboard/Introduction.md) - Player rankings.
+    - [Cloud Save](./cloudsave/Introduction.md) - Data persistence.
+    - [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
+    - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
+    - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
+    - [Socialization](./socialization/Introduction.md) - Friend systems.
 
-- [Core](./core/Introduction.md) - Unified initialization and orchestration.
-- [Leaderboards](./leaderboard/Introduction.md) - Player rankings.
-- [Cloud Save](./cloudsave/Introduction.md) - Data persistence.
-- [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
-- [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
-- [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
-- [Socialization](./socialization/Introduction.md) - Friend systems.
-- [Purchasing](./purchasing/Introduction.md) - In-app purchases.
-- [Advertisement](./advertisement/Introduction.md) - Ad monetization.
+- Purchasing
+    - [Purchasing](./purchasing/Introduction.md) - In-app purchases.
+
+- Advertisement
+    - [Advertisement](./advertisement/Introduction.md) - Ad monetization.
 
 ## Demo Scenes
 

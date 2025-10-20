@@ -13,4 +13,3 @@ Demo scene: `Assets/FlyingAcorn/Soil/Purchasing/Demo/SoilPurchasingExample.unity
 ## Dependencies
 
 - Core SDK
-- Remote Config (for experimentation)

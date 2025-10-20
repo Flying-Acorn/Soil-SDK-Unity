@@ -12,4 +12,4 @@ Demo scene: `Assets/FlyingAcorn/Soil/Leaderboard/Demo/SoilLeaderboardExample.uni
 
 ## Dependencies
 
-- Core Soil SDK dependencies (UniTask, Newtonsoft JSON)
+- Core SDK

@@ -68,3 +68,9 @@ SocialAuthentication.OnLinkSuccessCallback += (response) =>
 
 See [Integration Guide](Integration.md) for detailed implementation with complete code examples.</content>
 <parameter name="filePath">/Users/amir/Workspace/Soil-SDK-Unity/docs/socialauthentication/Introduction.md
+
+
+## Dependencies
+
+- Core SDK (for authentication and networking)
+- Google External Dependency Manager

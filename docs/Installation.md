@@ -2,7 +2,25 @@
 
 ## Step 1: Download and Import the SDK
 
-Download and import the latest `.unitypackage` from <a href="https://github.com/Flying-Acorn/Soil-SDK-Unity/releases/latest" target="_blank">here</a>.
+Based on your needs, only import the package you need from <a href="https://github.com/Flying-Acorn/Soil-SDK-Unity/releases/latest" target="_blank">here</a>.
+
+### How to choose
+- BoosterPack - `Soil-X.Y.Z-BoosterPack.unitypackage`
+    - [Core](./core/Introduction.md) - Unified initialization and orchestration.
+        - [SocialAuthentication](./socialauthentication/Integration.md) (Only when using, import SocialAuthentication - `Soil-X.Y.Z-SocialAuthentication_Extension.unitypackage` along with the BoosterPack)
+    - [Leaderboards](./leaderboard/Introduction.md) - Player rankings.
+    - [Cloud Save](./cloudsave/Introduction.md) - Data persistence.
+    - [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
+    - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
+    - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
+    - [Socialization](./socialization/Introduction.md) - Friend systems.
+
+- Purchasing - `Soil-X.Y.Z-Purchasing.unitypackage`
+    - [Purchasing](./purchasing/Introduction.md) - In-app purchases.
+
+- Advertisement - `Soil-X.Y.Z-Advertisement.unitypackage`
+    - [Advertisement](./advertisement/Introduction.md) - Ad monetization.
+
 
 ## Platform Support
 
@@ -11,11 +29,10 @@ The Soil SDK officially supports **Android** and **iOS** platforms. While the SD
 ## Step 2: Ensure Dependencies
 
 Ensure the following are present in your project:
-- <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a>
-- <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a>
-- <a href="https://developers.google.com/unity/archive#external_dependency_manager_for_unity" target="_blank">External Dependency Manager for Google integrations</a>
-- <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>
-- <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>
+- <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a>: Within Package Manager, import `com.unity.nuget.newtonsoft-json` package by name
+- <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a> - Embedded within Unity
+- <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>(Embedded within downloaded packages)
+- <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>(Embedded within downloaded packages)
 
 **Note for Demo Scenes**: If you plan to use the demo scenes included with the SDK, you must import the TextMeshPro Essential Resources. Go to `Window > TextMeshPro > Import TMP Essential Resources` in the Unity Editor.
 
