@@ -175,7 +175,7 @@ namespace FlyingAcorn.Soil.Core.Data
             {
                 // Abort the underlying request; some platforms may still invoke completed later, but tcs already resolved or will be ignored.
                 try { request.Abort(); } catch { /* ignore */ }
-                throw new SoilException($"Request timeout after {timeoutSeconds}s (url: {request.url})", SoilExceptionErrorCode.Timeout);
+                throw new SoilException($"Request timed out (url: {request.url})", SoilExceptionErrorCode.Timeout);
             }
 
             // Cancel timeout so Delay task stops (avoids needless continuation work)

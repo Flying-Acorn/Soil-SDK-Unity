@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 {
-    public class FaPostBuildTools : UnityEditor.Editor, IPostprocessBuildWithReport
+    public class FaPostBuildTools : IPostprocessBuildWithReport
     {
         public int callbackOrder { get; }
 

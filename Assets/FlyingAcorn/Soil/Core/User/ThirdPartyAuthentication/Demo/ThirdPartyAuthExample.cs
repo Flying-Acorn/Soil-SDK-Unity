@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using Cdm.Authentication.Browser;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using Newtonsoft.Json;
@@ -21,9 +19,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Demo
         public Button unlinkButton;
         public Button getAllLinksButton;
         [SerializeField] private List<ThirdPartySettings> mySettings;
-
-
-        private CrossPlatformBrowser _crossPlatformBrowser;
 
         protected override void Awake()
         {

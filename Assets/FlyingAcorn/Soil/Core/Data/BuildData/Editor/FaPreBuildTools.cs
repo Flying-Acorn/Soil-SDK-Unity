@@ -7,7 +7,7 @@ using Debug = UnityEngine.Debug;
 
 namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
 {
-    public class FaPreBuildTools : UnityEditor.Editor, IPreprocessBuildWithReport
+    public class FaPreBuildTools : IPreprocessBuildWithReport
     {
         public int callbackOrder => 0;
 
