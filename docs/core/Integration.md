@@ -17,15 +17,18 @@ using FlyingAcorn.Soil.Core;
 
 public class GameStart : MonoBehaviour
 {
-    private void Awake()
-    {
-        SoilServices.OnServicesReady += OnServicesReady;
-        SoilServices.OnInitializationFailed += OnInitializationFailed;
-    }
-
     private void Start()
     {
-        SoilServices.InitializeAsync();
+        if (!SoilServices.Ready)
+        {
+            SoilServices.OnServicesReady += OnServicesReady;
+            SoilServices.OnInitializationFailed += OnInitializationFailed;
+            SoilServices.InitializeAsync();
+        }
+        else
+        {
+            OnServicesReady();
+        }
     }
 
     private void OnServicesReady()
@@ -109,18 +112,9 @@ See the [Core Demo](./../README.md#demo-scenes) (`SoilExample.unity`) for a comp
 
 For detailed event handling, status checking, error management, and advanced usage patterns, see the [Advanced Integration Guide](AdvancedIntegration.md).
 
-## Other Documentations
-
-See the [Services overview](../README.md#services) for information on other available modules.
 
 ## Next Steps
 
 After setting up the core SDK, you can integrate additional modules as needed:
 
-- [Advertisement](../advertisement/Integration.md)
-- [Cloud Save](../cloudsave/Integration.md)
-- [Economy](../economy/Integration.md)
-- [Leaderboards](../leaderboard/Integration.md)
-- [Purchasing](../purchasing/Integration.md)
-- [Remote Config](../remoteconfig/Integration.md)
-- [Socialization](../socialization/Integration.md)
+See the [Services overview](../README.md#services) for information on other available modules.

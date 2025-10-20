@@ -17,6 +17,7 @@ Flying Acorn is the studio behind Soil — bringing design and engineering exper
 ## Features
 
 - 🔐 **Authentication**: Secure and reliable user authentication for your games.
+- 🔗 **Social Authentication**: Third-party authentication integration for linking external accounts (Google, Apple, etc.) to Soil user accounts.
 - 🏆 **Leaderboards**: Global and local leaderboards to enhance player competition.
 - ☁️ **Cloud Save**: Seamless cloud save functionality to keep player progress safe.
 - ⚙️ **Remote Config**: Update game configurations in real-time without app updates.

@@ -11,9 +11,17 @@ Leaderboard requires the Core SDK to be initialized first.
 ```csharp
 using FlyingAcorn.Soil.Core;
 
-if (!SoilServices.Ready)
+if (SoilServices.Ready)
 {
+    // Directly call services ready
+    OnServicesReady();
+}
+else
+{
+    // Subscribe to events
     SoilServices.OnServicesReady += OnServicesReady;
+    
+    // Initialize
     SoilServices.InitializeAsync();
 }
 
@@ -23,19 +31,6 @@ private void OnServicesReady()
     Debug.Log("SoilServices initialized, Leaderboard ready!");
 }
 ```
-
-### Checking Readiness
-
-Ensure Leaderboard is ready before operations:
-
-```csharp
-if (Leaderboard.Ready)
-{
-    // Proceed with score submission, fetching, etc.
-}
-```
-
-Note: `Leaderboard.Ready` is equivalent to `SoilServices.Ready`.
 
 ### Submitting Scores
 

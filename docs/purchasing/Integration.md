@@ -11,21 +11,14 @@ Follow this complete flow for implementing in-app purchases:
 ```csharp
 using FlyingAcorn.Soil.Purchasing;
 
-// Subscribe to events first
+// Subscribe to events
 Purchasing.OnPurchasingInitialized += OnPurchasingReady;
 Purchasing.OnItemsReceived += OnItemsLoaded;
 Purchasing.OnPurchaseStart += OnPurchaseStarted;
 Purchasing.OnPurchaseSuccessful += OnPurchaseCompleted;
 
 // Initialize purchasing
-if (!Purchasing.Ready)
-{
-    Purchasing.Initialize(verifyOnInitialize: true);
-}
-else
-{
-    OnPurchasingReady();
-}
+Purchasing.Initialize(verifyOnInitialize: false);
 ```
 
 **Note**: Setting `verifyOnInitialize: true` enables automatic verification of any previously unverified purchases when the purchasing system initializes. This ensures that purchases completed while the app was closed are properly validated and items are granted to the player.
@@ -51,6 +44,9 @@ private void OnItemsLoaded(List<Item> items)
         // Display items in your UI
         CreateItemButton(item);
     }
+    
+    // Alternatively, you can access items directly via Purchasing.AvailableItems
+    // var availableItems = Purchasing.AvailableItems;
 }
 ```
 

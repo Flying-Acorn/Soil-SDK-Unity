@@ -39,23 +39,16 @@ private void OnSDKReady()
 Fetch configuration data from the server:
 
 ```csharp
-private async void FetchRemoteConfig()
+private void FetchRemoteConfig()
 {
-    try
+    // Optional: Pass extra properties for server-side logic
+    var extraProps = new Dictionary<string, object>
     {
-        // Optional: Pass extra properties for server-side logic
-        var extraProps = new Dictionary<string, object>
-        {
-            { "level", currentPlayerLevel },
-        };
-        
-        RemoteConfig.FetchConfig(extraProps);
-        // Note: FetchConfig is fire-and-forget, results come via events
-    }
-    catch (SoilException e)
-    {
-        Debug.LogError($"Failed to start config fetch: {e.Message}");
-    }
+        { "level", currentPlayerLevel },
+    };
+    
+    RemoteConfig.FetchConfig(extraProps);
+    // Note: FetchConfig is fire-and-forget, results come via events
 }
 ```
 
@@ -66,28 +59,10 @@ private async void FetchRemoteConfig()
 Respond to fetch success/failure:
 
 ```csharp
-private void OnConfigFetched(JObject configData)
+private void OnConfigFetched()
 {
-    Debug.Log($"Received config: {configData}");
-    
-    // Config is automatically cached and available via properties
-    // The 4 main configuration properties are now accessible:
-    
-    // 1. UserDefinedConfigs - Custom game configuration values set by developers
     var userConfigs = RemoteConfig.UserDefinedConfigs;
-    // Example: game difficulty, feature flags, balance values
-    
-    // 2. ExchangeRates - Currency conversion rates for in-app purchases
-    var rates = RemoteConfig.ExchangeRates;
-    // Example: USD to EUR, real-time currency conversions
-    
-    // 3. UserInfo (internal) - User-specific information and region data
-    // var userInfo = RemoteConfig.UserInfo;
-    // Used internally for user management and regional settings
-    
-    // 4. PurchasingSettings (internal) - Purchase-related configuration
-    // var purchaseSettings = RemoteConfig.PurchasingSettings;
-    // Used internally by the purchasing module
+    Debug.Log($"Received config: {userConfigs}");
 }
 
 private void OnFetchResult(bool success)

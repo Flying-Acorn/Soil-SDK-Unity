@@ -11,9 +11,17 @@ CloudSave requires the Core SDK to be initialized first. Initialize SoilServices
 ```csharp
 using FlyingAcorn.Soil.Core;
 
-if (!SoilServices.Ready)
+if (SoilServices.Ready)
 {
+    // Directly call services ready
+    OnServicesReady();
+}
+else
+{
+    // Subscribe to events
     SoilServices.OnServicesReady += OnServicesReady;
+    
+    // Initialize
     SoilServices.InitializeAsync();
 }
 
