@@ -45,7 +45,6 @@ namespace FlyingAcorn.Soil.Purchasing
         private static UniTask? _verifyTask;
         private static bool _verifyOnInitialize;
 
-        private static bool _waitingForRemoteConfig;
         private static UniTaskCompletionSource<bool> _remoteConfigCompletionSource;
 
         [UsedImplicitly]
@@ -103,7 +102,6 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void OnRemoteConfigAnswer(bool success)
         {
             MyDebug.Verbose($"[Purchasing] Remote config fetch completed with success: {success}");
-            _waitingForRemoteConfig = false;
             _remoteConfigCompletionSource?.TrySetResult(success);
             _remoteConfigCompletionSource = null;
             try
@@ -208,7 +206,6 @@ namespace FlyingAcorn.Soil.Purchasing
             {
                 _remoteConfigCompletionSource = new UniTaskCompletionSource<bool>();
             }
-            _waitingForRemoteConfig = true;
 
             // Ensure we have only one subscription set
             UnsubscribeFromRemoteConfig();
@@ -265,7 +262,6 @@ namespace FlyingAcorn.Soil.Purchasing
             _initialized = false;
             _verifyTask = null;
             _verifyOnInitialize = false;
-            _waitingForRemoteConfig = false;
             _remoteConfigCompletionSource?.TrySetResult(false);
             _remoteConfigCompletionSource = null;
             OnPaymentDeeplinkActivated = null;
