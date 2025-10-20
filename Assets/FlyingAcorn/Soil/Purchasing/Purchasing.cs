@@ -119,7 +119,7 @@ namespace FlyingAcorn.Soil.Purchasing
             }
         }
 
-        private static void OnRemoteConfigSuccess(Newtonsoft.Json.Linq.JObject config)
+        private static void OnRemoteConfigSuccess()
         {
             MyDebug.Verbose("[Purchasing] Remote config successfully fetched and applied");
         }

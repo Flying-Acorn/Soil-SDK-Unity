@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using Newtonsoft.Json;
+using FlyingAcorn.Soil.Core.Data;
 
 // ReSharper disable InconsistentNaming
 

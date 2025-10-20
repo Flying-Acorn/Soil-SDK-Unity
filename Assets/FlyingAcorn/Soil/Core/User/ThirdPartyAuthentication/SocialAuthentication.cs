@@ -14,8 +14,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 {
     public abstract class SocialAuthentication
     {
-        private static bool Initialized => SoilServices.Ready && _initialized;
-        public static bool IsInitialized => SoilServices.Ready && _initialized;
+        private static bool Ready => SoilServices.Ready && _initialized;
 
         private static List<ThirdPartySettings> _thirdPartySettings;
         public static Action OnInitializationSuccess { get; set; }
@@ -36,7 +35,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
 
         public static void Initialize(List<ThirdPartySettings> thirdPartySettings = null)
         {
-            if (Initialized)
+            if (Ready)
                 return;
             if (_isInitializing)
                 return;
@@ -54,6 +53,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             UnlistenCore();
             SoilServices.OnInitializationFailed += SoilInitFailed;
             SoilServices.OnServicesReady += SoilInitSuccess;
+            
+            // Initialize SoilServices if not ready
+            SoilServices.InitializeAsync();
         }
 
         private static void UnlistenCore()
@@ -145,12 +147,12 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             if (!settings)
                 return false;
             return SoilServices.UserInfo.linkable_parties != null &&
-                   SoilServices.UserInfo.linkable_parties.Any(linkableParty => linkableParty.party == party);
+                   SoilServices.UserInfo.linkable_parties.Any(linkableParty => linkableParty.party.ToThirdParty() == party);
         }
 
         public static void Link(Constants.ThirdParty party)
         {
-            if (!Initialized)
+            if (!Ready)
             {
                 MyDebug.LogWarning("Social Authentication not initialized");
                 OnLinkFailureCallback?.Invoke(party, new SoilException("Social Authentication not initialized",
@@ -222,7 +224,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             try
             {
                 MyDebug.Verbose($"UnlinkAsync called for {party}");
-                if (!Initialized)
+                if (!Ready)
                 {
                     MyDebug.LogWarning("Social Authentication not initialized");
                     OnUnlinkFailureCallback?.Invoke(party, new SoilException("Social Authentication not initialized",

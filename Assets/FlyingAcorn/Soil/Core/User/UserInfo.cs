@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
-using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting;
 using JetBrains.Annotations;
 using Newtonsoft.Json;

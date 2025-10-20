@@ -30,11 +30,11 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             };
         }
 
-        private static AppParty GetParty(ThirdPartySettings settings)
+        private static FlyingAcorn.Soil.Core.Data.AppParty GetParty(ThirdPartySettings settings)
         {
             if (SoilServices.UserInfo.linkable_parties == null)
                 throw new SoilException("No parties to link to", SoilExceptionErrorCode.InvalidRequest);
-            var party = SoilServices.UserInfo.linkable_parties.Find(p => p.party == settings.ThirdParty);
+            var party = SoilServices.UserInfo.linkable_parties.Find(p => p.party.ToThirdParty() == settings.ThirdParty);
             if (party == null)
                 throw new SoilException("Third party not found in linkable parties",
                     SoilExceptionErrorCode.InvalidRequest);

@@ -16,7 +16,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
 {
     public static class RemoteConfig
     {
-        [UsedImplicitly] public static Action<JObject> OnSuccessfulFetch;
+        [UsedImplicitly] public static Action OnSuccessfulFetch;
         [UsedImplicitly] public static Action<bool> OnServerAnswer;
 
 
@@ -71,7 +71,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
             _fetching = false;
             OnServerAnswer?.Invoke(_fetchSuccessState);
             if (_fetchSuccessState)
-                OnSuccessfulFetch?.Invoke(RemoteConfigPlayerPrefs.CachedRemoteConfigData);
+                OnSuccessfulFetch?.Invoke();
         }
 
         private static Dictionary<string, object> GetPlayerProperties()
