@@ -72,12 +72,23 @@ namespace FlyingAcorn.Soil.Purchasing
         public static string GetPurchaseDeeplink()
         {
             var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
-            if (settings == null || string.IsNullOrEmpty(settings.PaymentDeeplinkRoot))
+            if (settings == null)
             {
-                MyDebug.LogWarning("[Soil] Payment deeplink is not set in SDKSettings. Please set it.");
                 return null;
             }
+
+            if (!settings.DeepLinkEnabled)
+            {
+                return null;
+            }
+
             var bundleId = Application.identifier.ToLower();
+            
+            if (string.IsNullOrEmpty(settings.PaymentDeeplinkRoot))
+            {
+                return new Uri($"{bundleId}://").ToString();
+            }
+            
             var uri = new Uri($"{bundleId}://{settings.PaymentDeeplinkRoot}");
             return uri.ToString();
         }

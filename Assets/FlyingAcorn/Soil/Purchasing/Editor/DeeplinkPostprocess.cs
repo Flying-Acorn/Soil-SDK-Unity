@@ -14,24 +14,24 @@ namespace FlyingAcorn.Soil.Purchasing.Editor
         public void OnPostprocessBuild(BuildReport report)
         {
 #if UNITY_IOS
-            var guids = AssetDatabase.FindAssets($"t:{typeof(SDKSettings)}");
-            switch (guids.Length)
+            var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
+            if (settings == null)
             {
-                case > 1:
-                    Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
-                        guids.Length);
-                    break;
-                case <= 0:
-                    throw new UnityEditor.Build.BuildFailedException(
-                        "[FABuildTools] Couldn't find Build Settings, please create one!");
+                Debug.LogWarning("[FABuildTools] SDKSettings not found, skipping deeplink setup.");
+                return;
             }
 
-            var path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            if (!settings.DeepLinkEnabled)
+            {
+                Debug.Log("[FABuildTools] Deeplink is disabled in SDKSettings, skipping deeplink setup.");
+                return;
+            }
+
             var link = PurchasingPlayerPrefs.GetPurchaseDeeplink();
             if (string.IsNullOrEmpty(link))
             {
-                Debug.LogError("[FABuildTools] Deeplink is empty, please set it in Build Settings!");
-                return;
+                throw new UnityEditor.Build.BuildFailedException(
+                    "[FABuildTools] Purchase deeplink is empty! DeepLinkEnabled is true but failed to generate deeplink. Please check SDKSettings configuration.");
             }
             DeeplinkTools.AddIOSDeeplink(report, link);
 #endif

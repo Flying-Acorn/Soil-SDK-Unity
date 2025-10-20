@@ -21,6 +21,12 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             const string androidManifestPath = "Plugins/Android/AndroidManifest.xml";
             var fullPath = Path.Combine(Application.dataPath, androidManifestPath);
 
+            if (!File.Exists(fullPath))
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    $"[FABuildTools] AndroidManifest.xml not found at {fullPath}. Please ensure the file exists.");
+            }
+
             var scheme = fullLink.Split(':')[0];
             var subScheme = "";
             if (fullLink.Contains("//"))
@@ -33,11 +39,39 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             subScheme = subScheme.Split('?')[0];
 
             var doc = new XmlDocument();
-            doc.Load(fullPath);
+            try
+            {
+                doc.Load(fullPath);
+            }
+            catch (Exception ex)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    $"[FABuildTools] Failed to load AndroidManifest.xml: {ex.Message}");
+            }
+
             var manifest = doc.DocumentElement;
+            if (manifest == null)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    "[FABuildTools] AndroidManifest.xml has no root element.");
+            }
+
             var application = manifest["application"];
+            if (application == null)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    "[FABuildTools] AndroidManifest.xml has no <application> element.");
+            }
+
             var activity = application["activity"];
+            if (activity == null)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    "[FABuildTools] AndroidManifest.xml has no <activity> element in <application>.");
+            }
+
             var namespaceOfPrefix = application.GetNamespaceOfPrefix("android");
+            
             // if scheme already exists, do not add it again
             var intentFilters = doc.GetElementsByTagName("intent-filter");
             foreach (XmlNode intentFilter in intentFilters)
@@ -49,8 +83,11 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                 if (schemeAttr.Value != scheme)
                     continue;
                 var hostAttr = data.Attributes["android:host"];
-                if (hostAttr.Value == subScheme)
+                if (hostAttr != null && hostAttr.Value == subScheme)
+                {
+                    Debug.Log($"[FABuildTools] Intent filter for scheme {scheme} and host {subScheme} already exists, skipping.");
                     return;
+                }
             }
 
             var intentFilterNode = doc.CreateElement("intent-filter");
@@ -65,14 +102,21 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
             intentFilterNode.AppendChild(categoryNode);
             var dataNode = doc.CreateElement("data");
             dataNode.SetAttribute("scheme", namespaceOfPrefix, scheme);
-            if (subScheme != null)
+            if (!string.IsNullOrEmpty(subScheme))
                 dataNode.SetAttribute("host", namespaceOfPrefix, subScheme);
             intentFilterNode.AppendChild(dataNode);
             activity.AppendChild(intentFilterNode);
 
-            doc.Save(fullPath);
-
-            Debug.Log($"[FABuildTools] Added intent filter for scheme {scheme} and host {subScheme}");
+            try
+            {
+                doc.Save(fullPath);
+                Debug.Log($"[FABuildTools] Added intent filter for scheme {scheme} and host {subScheme}");
+            }
+            catch (Exception ex)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    $"[FABuildTools] Failed to save AndroidManifest.xml: {ex.Message}");
+            }
         }
 #endif
 
@@ -83,23 +127,66 @@ namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
                 return;
 
             var plistPath = report.summary.outputPath + "/Info.plist";
+            
+            if (!File.Exists(plistPath))
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    $"[FABuildTools] Info.plist not found at {plistPath}");
+            }
+
             var plist = new PlistDocument();
-            plist.ReadFromString(File.ReadAllText(plistPath));
+            try
+            {
+                plist.ReadFromString(File.ReadAllText(plistPath));
+            }
+            catch (Exception ex)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    $"[FABuildTools] Failed to read Info.plist: {ex.Message}");
+            }
+
+            var scheme = new Uri(fullUrl).Scheme;
 
             // Register ios URL scheme for external apps to launch this app.
             var urlTypes = !plist.root.values.ContainsKey("CFBundleURLTypes")
                 ? plist.root.CreateArray("CFBundleURLTypes")
                 : plist.root["CFBundleURLTypes"].AsArray();
+
+            // Check if scheme already exists
+            foreach (var urlType in urlTypes.values)
+            {
+                if (urlType is PlistElementDict dict && dict.values.ContainsKey("CFBundleURLSchemes"))
+                {
+                    var schemes = dict["CFBundleURLSchemes"].AsArray();
+                    foreach (var existingScheme in schemes.values)
+                    {
+                        if (existingScheme.AsString() == scheme)
+                        {
+                            Debug.Log($"[FABuildTools] URL scheme {scheme} already exists in Info.plist, skipping.");
+                            return;
+                        }
+                    }
+                }
+            }
+
             var urlTypeDict = urlTypes.AddDict();
-            urlTypeDict.SetString("CFBundleURLName", "");
+            urlTypeDict.SetString("CFBundleURLName", $"{Application.identifier}.{scheme}");
             urlTypeDict.SetString("CFBundleTypeRole", "Editor");
 
             var urlSchemes = urlTypeDict.CreateArray("CFBundleURLSchemes");
-
-            urlSchemes.AddString(new Uri(fullUrl).Scheme);
+            urlSchemes.AddString(scheme);
 
             // Save all changes.
-            File.WriteAllText(plistPath, plist.WriteToString());
+            try
+            {
+                File.WriteAllText(plistPath, plist.WriteToString());
+                Debug.Log($"[FABuildTools] Added URL scheme {scheme} to Info.plist");
+            }
+            catch (Exception ex)
+            {
+                throw new UnityEditor.Build.BuildFailedException(
+                    $"[FABuildTools] Failed to save Info.plist: {ex.Message}");
+            }
         }
 #endif
     }
