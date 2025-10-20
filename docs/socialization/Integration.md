@@ -129,6 +129,87 @@ private async void LoadFriendsLeaderboard(string leaderboardId)
 
 **Note**: The `relative` parameter determines if ranks are relative to the current user or absolute.
 
+## Advanced Integration Patterns
+
+### Handling Friend Invites via Deep Links
+
+In your game, you can handle friend invites through deep links. When a user shares a link to invite friends, the app can parse the deep link to add the friend automatically upon app launch or link activation.
+
+```csharp
+// Example deep link handler (integrate with your app's deep link system)
+private void OnDeepLinkActivated(string url)
+{
+    // Parse the URL for friend UUID (e.g., yourapp://invite?friend=uuid123)
+    var uri = new Uri(url);
+    var query = HttpUtility.ParseQueryString(uri.Query);
+    var friendUuid = query["friend"];
+
+    if (!string.IsNullOrEmpty(friendUuid))
+    {
+        // Add the friend asynchronously
+        _ = AddFriendFromInvite(friendUuid);
+    }
+}
+
+private async Task AddFriendFromInvite(string friendUuid)
+{
+    try
+    {
+        var response = await Socialization.AddFriendWithUUID(friendUuid);
+        Debug.Log($"Friend added from invite: {response.detail.message}");
+        
+        // Optionally award a prize for accepting the invite
+        AwardFriendInvitePrize();
+        
+        // Refresh friends list
+        LoadFriends();
+    }
+    catch (SoilException e)
+    {
+        Debug.LogError($"Failed to add friend from invite: {e.Message}");
+    }
+}
+```
+
+### Syncing Friend-Related Data with Cloud Save
+
+Store and retrieve friend-related data, such as prizes awarded for adding friends or friend-specific achievements, using Cloud Save.
+
+```csharp
+using FlyingAcorn.Soil.CloudSave;
+
+// Save friend prize data
+private async void SaveFriendPrizes(Dictionary<string, int> prizes)
+{
+    try
+    {
+        await CloudSave.SaveAsync("friendPrizes", prizes);
+        Debug.Log("Friend prizes saved to cloud");
+    }
+    catch (Exception e)
+    {
+        Debug.LogError($"Failed to save friend prizes: {e.Message}");
+    }
+}
+
+// Load friend prize data
+private async void LoadFriendPrizes()
+{
+    try
+    {
+        var saveModel = await CloudSave.LoadAsync("friendPrizes");
+        var prizes = JsonConvert.DeserializeObject<Dictionary<string, int>>(saveModel.value);
+        // Use prizes data
+    }
+    catch (Exception e)
+    {
+        Debug.LogError($"Failed to load friend prizes: {e.Message}");
+    }
+}
+```
+
+This allows persisting friend-related rewards across devices and sessions.
+
 ## Additional Features
 
 ### Check Readiness

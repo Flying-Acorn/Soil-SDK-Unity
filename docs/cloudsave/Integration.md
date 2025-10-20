@@ -155,6 +155,70 @@ var saves = CloudSavePlayerPrefs.Saves;
 string cachedValue = CloudSavePlayerPrefs.Load("key");
 ```
 
+## Advanced Integration Patterns
+
+### Middleware for Conflict Resolution and Data Synchronization
+
+For games with complex player data, implement a middleware to handle cloud save conflicts, data merging, and synchronization with other services.
+
+```csharp
+using FlyingAcorn.Soil.CloudSave;
+using FlyingAcorn.Soil.Core;
+
+public class CloudSaveMiddleware : MonoBehaviour
+{
+    private void Start()
+    {
+        // Wait for SDK readiness
+        if (SoilServices.Ready)
+            InitializeCloudSync();
+        else
+            SoilServices.OnServicesReady += InitializeCloudSync;
+    }
+
+    private async void InitializeCloudSync()
+    {
+        // Attempt to load cloud data
+        await LoadAndResolveConflicts();
+    }
+
+    private async UniTask LoadAndResolveConflicts()
+    {
+        try
+        {
+            var saveModel = await CloudSave.LoadAsync("playerData");
+            var cloudData = JsonConvert.DeserializeObject<PlayerData>(saveModel.value);
+            
+            var localData = GetLocalPlayerData();
+            
+            if (DataConflicts(cloudData, localData))
+            {
+                // Show conflict resolution UI
+                ShowConflictDialog(cloudData, localData);
+            }
+            else
+            {
+                // Auto-sync
+                ApplyCloudData(cloudData);
+            }
+        }
+        catch (SoilNotFoundException)
+        {
+            // No cloud data, upload local
+            await SaveToCloud();
+        }
+    }
+
+    private async UniTask SaveToCloud()
+    {
+        var data = GetLocalPlayerData();
+        await CloudSave.SaveAsync("playerData", data);
+    }
+}
+```
+
+This ensures seamless data synchronization across devices and handles edge cases like account linking/unlinking.
+
 ## Demo Scene
 
 See the [Cloud Save Demo](../README.md#demo-scenes) (`SoilCloudSaveExample.unity`) for a complete working example of saving, loading, and managing cloud data.

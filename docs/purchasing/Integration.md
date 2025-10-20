@@ -210,6 +210,113 @@ private void OnPurchaseCompleted(Purchase purchase)
 
 **Note**: Always verify the purchase details (SKU, amount, etc.) before granting rewards to prevent exploitation. The item data contains the server-defined rewards that should be granted for each SKU.
 
+## Advanced Integration Patterns
+
+### Integrating with Custom IAP Managers
+
+If your project uses a custom IAP manager (e.g., IAPManager), integrate Soil Purchasing to handle the purchase flow while using your existing UI and product management.
+
+```csharp
+using FlyingAcorn.Soil.Purchasing;
+// Assuming you have an IAPManager class
+
+public class IAPManager : MonoBehaviour
+{
+    private void Start()
+    {
+        // Subscribe to Soil Purchasing events
+        Purchasing.OnPurchasingInitialized += OnPurchasingReady;
+        Purchasing.OnItemsReceived += OnItemsLoaded;
+        Purchasing.OnPurchaseStart += OnPurchaseStarted;
+        Purchasing.OnPurchaseSuccessful += OnPurchaseCompleted;
+        
+        // Initialize with verification
+        Purchasing.Initialize(verifyOnInitialize: true);
+    }
+
+    private void OnPurchasingReady()
+    {
+        Debug.Log("Soil Purchasing ready");
+        // Your IAP manager is now ready
+    }
+
+    private void OnItemsLoaded(List<Item> items)
+    {
+        // Populate your UI with items
+        foreach (var item in items)
+        {
+            CreatePurchaseButton(item);
+        }
+    }
+
+    // When user initiates purchase through your UI
+    public async void BuyItem(string sku)
+    {
+        try
+        {
+            await Purchasing.BuyItem(sku);
+            // Purchase flow handled by Soil Purchasing
+        }
+        catch (SoilException e)
+        {
+            Debug.LogError($"Purchase failed: {e.Message}");
+        }
+    }
+
+    private void OnPurchaseCompleted(Purchase purchase)
+    {
+        // Grant rewards based on purchase
+        GrantPurchaseRewards(purchase);
+    }
+}
+```
+
+### Using Remote Config for Dynamic Product Catalogs
+
+Fetch product configurations from Remote Config to enable dynamic pricing, seasonal items, or A/B testing of purchase options.
+
+```csharp
+using FlyingAcorn.Soil.RemoteConfig;
+
+private void Start()
+{
+    // Subscribe to config fetch
+    RemoteConfig.OnSuccessfulFetch += OnConfigFetched;
+    
+    // Fetch config (assuming SDK is ready)
+    RemoteConfig.FetchConfig();
+}
+
+private void OnConfigFetched(JObject config)
+{
+    // Load product overrides from remote config
+    var userConfigs = RemoteConfig.UserDefinedConfigs;
+    if (userConfigs != null && userConfigs.ContainsKey("product_catalog"))
+    {
+        var catalog = userConfigs["product_catalog"];
+        // Parse and apply to Purchasing.AvailableItems or your product list
+        UpdateProductCatalog(catalog);
+    }
+}
+```
+
+### Ensuring Purchase Verification on App Resume
+
+To handle purchases completed while the app was in the background (e.g., external payment flow), always verify purchases when the app regains focus.
+
+```csharp
+private void OnApplicationFocus(bool hasFocus)
+{
+    if (hasFocus)
+    {
+        // Verify any pending purchases
+        Purchasing.SafeVerifyAllPurchases();
+    }
+}
+```
+
+This ensures that purchases made in external browsers or payment apps are properly validated and rewards granted when the user returns to your game.
+
 ## Additional Features
 
 ### Manual Verification
@@ -223,14 +330,6 @@ await Purchasing.VerifyPurchase("purchase_id_123");
 // Multiple purchases
 var ids = new List<string> { "id1", "id2" };
 await Purchasing.BatchVerifyPurchases(ids);
-```
-
-### Opening Invoices
-
-Show payment details for completed purchases:
-
-```csharp
-Purchasing.OpenInvoice("purchase_id_123");
 ```
 
 ### Deinitialization
@@ -253,7 +352,7 @@ Purchasing.DeInitialize();
 Purchasing.RollbackUnpaidPurchases();
 ```
 
-**When to use**: On app startup or periodically to maintain clean purchase state. This doesn't affect completed purchases.
+**When to use**: Particularly when for any reason you don't want the previous unpai purchases to be in the flow of verifications. .eg when player uuid is different(like when user is linked to a third party and is not the same user anymore)
 
 ## Demo Scene
 
