@@ -16,8 +16,8 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
             Debug.Log(
                 $"[FABuildTools] OnPreprocessBuild for target {report.summary.platform} at path {report.summary.outputPath}");
 
-            //FindAssets uses tags check documentation for more info
-            var guids = AssetDatabase.FindAssets($"t:{typeof(BuildData)}");
+            // Find the BuildData asset by type name (more robust than fully-qualified type in FindAssets)
+            var guids = AssetDatabase.FindAssets($"t:{nameof(BuildData)}");
             switch (guids.Length)
             {
                 case > 1:
@@ -31,6 +31,11 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
 
             var path = AssetDatabase.GUIDToAssetPath(guids[0]);
             var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
+            if (buildSettings == null)
+            {
+                throw new BuildFailedException(
+                    $"[FABuildTools] Found asset at '{path}' but failed to load as BuildData. Ensure a BuildData asset exists and matches the type.");
+            }
             buildSettings.LastBuildTime = DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss"); // case sensitive
             buildSettings.EditorRefreshScriptingBackend(report.summary.platform);
 #if UNITY_IOS
@@ -42,6 +47,22 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
 #if UNITY_CLOUD_BUILD
             buildSettings.RepositoryVersion += "-cloud";
 #endif
+
+            if (buildSettings.EnforceStoreOnBuild)
+            {
+                var selectedStore = ShowStoreSelectionDialog();
+                if (selectedStore != Constants.Store.Unknown)
+                {
+                    buildSettings.StoreName = selectedStore;
+                    EditorUtility.SetDirty(buildSettings);
+                    AssetDatabase.SaveAssets();
+                }
+                else
+                {
+                    throw new BuildFailedException("[FABuildTools] Store name is not set, either set it from `Build Settings` or disable `Enforce Store On Build`");
+                }
+            }
+
             switch (buildSettings.StoreName)
             {
                 case Constants.Store.GooglePlay:
@@ -50,13 +71,15 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
 #if !UNITY_ANDROID
                     throw new BuildFailedException(
                         "[FABuildTools] Store name is set to Android store but the platform is not Android");
-#endif
+#else
                     break;
+#endif
                 case Constants.Store.AppStore:
 #if !UNITY_IOS
-                        throw new BuildFailedException("[FABuildTools] Store name is set to iOS store but the platform is not iOS");
-#endif
+                    throw new BuildFailedException("[FABuildTools] Store name is set to iOS store but the platform is not iOS");
+#else
                     break;
+#endif
                 case Constants.Store.BetaChannel:
                 case Constants.Store.Postman:
                 case Constants.Store.Github:
@@ -64,14 +87,75 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
                     break;
                 case Constants.Store.Unknown:
                 default:
-                    if (buildSettings.EnforceStoreOnBuild)
-                        throw new BuildFailedException("[FABuildTools] Store name is not set, either set it from `Build Settings` or disable `Enforce Store On Build`");
                     break;
             }
 
             EditorUtility.SetDirty(buildSettings);
             Debug.LogFormat("[FABuildTools] Updated settings LastBuildDate to \"{0}\". Settings Path: {1}",
                 buildSettings.LastBuildTime, path);
+        }
+
+        private Constants.Store ShowStoreSelectionDialog()
+        {
+            // Do not attempt to show UI in batchmode (e.g., CI/Cloud Build). Force the user to set it beforehand.
+            if (Application.isBatchMode)
+            {
+                throw new BuildFailedException(
+                    "[FABuildTools] Cannot prompt for Store selection in batchmode. Set StoreName in Build Settings or disable Enforce Store On Build.");
+            }
+
+            var window = ScriptableObject.CreateInstance<StoreSelectionWindow>();
+            window.titleContent = new GUIContent("Select Store");
+            // Provide a reasonable default size/position to avoid layout hiccups
+            if (window.position.width <= 0 || window.position.height <= 0)
+            {
+                window.position = new Rect(100, 100, 400, 100);
+            }
+
+            try
+            {
+                // Use modal utility window which is safer for editor modal interactions
+                window.ShowModalUtility();
+                return window.SelectedStore;
+            }
+            finally
+            {
+                // Ensure resources are released to avoid TLS allocator warnings
+                if (window != null)
+                {
+                    window.Close();
+                    ScriptableObject.DestroyImmediate(window);
+                }
+                // Note: Avoid UnloadUnusedAssetsImmediate here as it may destroy assets still in use
+            }
+        }
+    }
+
+    internal class StoreSelectionWindow : EditorWindow
+    {
+        public Constants.Store SelectedStore = Constants.Store.Unknown;
+        private string[] storeNames;
+        private int selectedIndex = 0;
+
+        void OnEnable()
+        {
+            storeNames = Enum.GetNames(typeof(Constants.Store));
+            minSize = new Vector2(380, 80);
+        }
+
+        void OnGUI()
+        {
+            selectedIndex = EditorGUILayout.Popup("Store", selectedIndex, storeNames);
+            if (GUILayout.Button("OK"))
+            {
+                SelectedStore = (Constants.Store)Enum.Parse(typeof(Constants.Store), storeNames[selectedIndex]);
+                Close();
+            }
+            if (GUILayout.Button("Cancel"))
+            {
+                SelectedStore = Constants.Store.Unknown;
+                Close();
+            }
         }
     }
 }

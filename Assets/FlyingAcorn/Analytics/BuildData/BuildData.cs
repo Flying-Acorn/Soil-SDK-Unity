@@ -7,7 +7,7 @@ namespace FlyingAcorn.Analytics.BuildData
     public class BuildData : ScriptableObject
     {
         public Constants.Store StoreName;
-        public bool EnforceStoreOnBuild;
+        public bool EnforceStoreOnBuild = true;
         [HideInInspector] public string BuildNumber;
         [HideInInspector] public string LastBuildTime;
         [HideInInspector] public string ScriptingBackend;

@@ -37,7 +37,7 @@ namespace FlyingAcorn.Analytics
             internal set => PlayerPrefs.SetInt($"{Prefix}UserDebugMode", value ? 1 : 0);
         }
 
-        public static BuildData.Constants.Store Store
+        internal static BuildData.Constants.Store Store
         {
             get => (BuildData.Constants.Store)PlayerPrefs.GetInt($"{Prefix}Store",
                 (int)BuildData.Constants.Store.Unknown);

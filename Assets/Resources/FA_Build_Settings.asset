@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: FA_Build_Settings
   m_EditorClassIdentifier: 
   StoreName: 0
-  BuildNumber: 24
-  LastBuildTime: 2025/10/20-16:51:23
+  EnforceStoreOnBuild: 1
+  BuildNumber: 25
+  LastBuildTime: 2025/10/25-19:45:01
   ScriptingBackend: IL2CPP

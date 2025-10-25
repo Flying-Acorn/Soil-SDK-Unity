@@ -117,12 +117,13 @@ namespace FlyingAcorn.Soil.Core.User
         /// no changes will be detected. Use UpdatePlayerInfo() builder methods or Copy() first.
         /// </summary>
         /// <param name="userInfo">The modified user info. Should be a copy, not the original reference.</param>
+        /// <param name="allowDuringInitialization">Allow this call during SDK initialization before Ready is true</param>
         /// <returns>The updated UserInfo from the server</returns>
         [ItemNotNull]
         [UsedImplicitly]
-        internal static async UniTask<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo)
+        internal static async UniTask<UserInfo> UpdatePlayerInfoAsync(UserInfo userInfo, bool allowDuringInitialization = false)
         {
-            if (!SoilServices.Ready)
+            if (!SoilServices.Ready && !allowDuringInitialization)
             {
                 throw new SoilException("SoilServices is not initialized. Cannot update player info.",
                     SoilExceptionErrorCode.NotReady);
@@ -230,15 +231,28 @@ namespace FlyingAcorn.Soil.Core.User
         }
 
         /// <summary>
+        /// Creates a fluent builder for updating player info during initialization.
+        /// This bypasses the SoilServices.Ready check for internal SDK use.
+        /// </summary>
+        /// <returns>A UserInfoUpdateBuilder for fluent API usage</returns>
+        [ItemNotNull]
+        internal static UserInfoUpdateBuilder UpdatePlayerInfoInternal()
+        {
+            return new UserInfoUpdateBuilder(UserPlayerPrefs.UserInfo.Copy(), allowDuringInitialization: true);
+        }
+
+        /// <summary>
         /// Fluent builder for safely updating UserInfo without reference issues
         /// </summary>
         public class UserInfoUpdateBuilder
         {
             private readonly UserInfo _userInfo;
+            private bool _allowDuringInitialization;
 
-            internal UserInfoUpdateBuilder(UserInfo userInfo)
+            internal UserInfoUpdateBuilder(UserInfo userInfo, bool allowDuringInitialization = false)
             {
                 _userInfo = userInfo;
+                _allowDuringInitialization = allowDuringInitialization;
             }
 
             public UserInfoUpdateBuilder WithName(string name)
@@ -283,7 +297,7 @@ namespace FlyingAcorn.Soil.Core.User
             /// </summary>
             public void Forget()
             {
-                UpdatePlayerInfoAsync(_userInfo).Forget();
+                UpdatePlayerInfoAsync(_userInfo, _allowDuringInitialization).Forget();
             }
 
             // Note: Await the builder directly instead of calling ExecuteAsync().
@@ -303,7 +317,7 @@ namespace FlyingAcorn.Soil.Core.User
             /// </summary>
             public UniTask<UserInfo>.Awaiter GetAwaiter()
             {
-                return UpdatePlayerInfoAsync(_userInfo).GetAwaiter();
+                return UpdatePlayerInfoAsync(_userInfo, _allowDuringInitialization).GetAwaiter();
             }
         }
 
@@ -336,6 +350,44 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             UserPlayerPrefs.UserInfo = UserPlayerPrefs.UserInfo.ChangeRegionInfo(comingUser);
+        }
+
+        internal static async UniTask ValidateAndUpdateStoreIfNeeded()
+        {
+            try
+            {
+                var userInfo = UserPlayerPrefs.UserInfoInstance;
+                if (userInfo == null || userInfo.properties == null)
+                {
+                    MyDebug.Verbose("[ValidateAndUpdateStoreIfNeeded] UserInfo or properties is null, skipping store validation");
+                    return;
+                }
+
+                var currentStore = DataUtils.GetStore().ToString();
+                var storedStore = userInfo.properties.flyingacorn_store_name;
+
+                if (string.IsNullOrEmpty(storedStore))
+                {
+                    MyDebug.Info($"[ValidateAndUpdateStoreIfNeeded] No stored store name found, updating to: {currentStore}");
+                    await UpdatePlayerInfoInternal()
+                        .WithInternalProperty(User.Constants.StoreNameKey, currentStore);
+                }
+                else if (storedStore != currentStore)
+                {
+                    MyDebug.Info($"[ValidateAndUpdateStoreIfNeeded] Store changed from {storedStore} to {currentStore}, updating server");
+                    await UpdatePlayerInfoInternal()
+                        .WithInternalProperty(User.Constants.StoreNameKey, currentStore);
+                }
+                else
+                {
+                    MyDebug.Verbose($"[ValidateAndUpdateStoreIfNeeded] Store name unchanged: {currentStore}");
+                }
+            }
+            catch (Exception e)
+            {
+                MyDebug.LogWarning($"[ValidateAndUpdateStoreIfNeeded] Failed to validate/update store: {e.Message}");
+                // Don't throw - this is not critical enough to fail authentication
+            }
         }
     }
 }

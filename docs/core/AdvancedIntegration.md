@@ -143,3 +143,45 @@ UserApiHandler.OnUserFilled += (userChanged) =>
     }
 };
 ```
+
+## Build Configuration
+
+The SDK includes build-time configuration to ensure proper store targeting and analytics setup. Create a `FA_Build_Settings.asset` in `Assets/Resources/` as described in the [Installation guide](../Installation.md).
+
+### Store Settings
+
+Set the target store for your build using the `StoreName` field. Available options:
+
+- **Unknown**: Default, not set
+- **BetaChannel**: For beta testing channels
+- **Postman**: For Postman testing
+- **GooglePlay**: Google Play Store
+- **AppStore**: Apple App Store
+- **CafeBazaar**: Android store
+- **Myket**: Android store
+- **Github**: GitHub releases
+- **LandingPage**: Web landing page
+
+### Enforce Store on Build
+
+The `EnforceStoreOnBuild` option controls whether the build process requires store selection:
+
+- **Enabled**: If no store is selected (StoreName is Unknown), the build process will display a modal dialog prompting you to choose a store. The build will fail if you cancel without selecting a store. This ensures proper store attribution for analytics tracking.
+- **Disabled**: Allows building without setting a store (useful for development). If not set, you cannot track which players are coming from which store. Options:
+  - Disable EnforceStoreOnBuild, but set `AnalyticsManager.SetStore()` during runtime.
+  - **Suggested**: Enable EnforceStoreOnBuild and set the store in build settings before building.
+
+### Automatic Build Data
+
+During the build process, the SDK automatically populates:
+
+- **BuildNumber**: Platform-specific build number (e.g., bundle version code for Android, build number for iOS)
+- **LastBuildTime**: Timestamp of the build in `yyyy/MM/dd-HH:mm:ss` format
+- **ScriptingBackend**: The Unity scripting backend used (Mono or IL2CPP)
+
+This data is used internally for analytics and can be accessed via `BuildDataUtils` in code.
+
+**Build Process Validation**: The SDK validates build settings during the build process and provides clear error messages for common issues:
+- Missing BuildData asset: `"Couldn't find Build Settings, please create one!"`
+- Invalid asset type: `"Found asset at '{path}' but failed to load as BuildData"`
+- Store selection cancelled: `"Store name is not set, either set it from 'Build Settings' or disable 'Enforce Store On Build'"`

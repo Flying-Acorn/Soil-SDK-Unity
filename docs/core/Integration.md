@@ -139,7 +139,7 @@ See the [Core Demo](./../README.md#demo-scenes) (`SoilExample.unity`) for a comp
 
 ## Advanced Integration
 
-For detailed event handling, status checking, error management, and advanced usage patterns, see the [Advanced Integration Guide](AdvancedIntegration.md).
+For detailed event handling, status checking, error management, advanced usage patterns, and build configuration, see the [Advanced Integration Guide](AdvancedIntegration.md).
 
 
 ## Next Steps

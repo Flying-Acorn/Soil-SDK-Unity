@@ -30,7 +30,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
         [UsedImplicitly] public static Action<UserInfo> OnUserReady;
 
         internal static async UniTask AuthenticateUser(bool forceRegister = false,
-            bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+            bool forceRefresh = false, bool forceSyncPlayerInfo = false)
         {
             MyDebug.Verbose($"[AuthenticateUser] Starting authentication - forceRegister: {forceRegister}, forceRefresh: {forceRefresh}");
             
@@ -100,7 +100,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
 
             var currentPlayerInfo = UserPlayerPrefs.UserInfoInstance;
             var playerInfoIsMissing = currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid);
-            if (forceFetchPlayerInfo || playerInfoIsMissing)
+            if (forceSyncPlayerInfo || playerInfoIsMissing)
             {
                 try
                 {
@@ -109,12 +109,13 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 }
                 catch (Exception e)
                 {
-                    if (playerInfoIsMissing || forceFetchPlayerInfo)
+                    if (playerInfoIsMissing || forceSyncPlayerInfo)
                         throw new Exception($"Failed to fetch player info: {e.Message}, abandoning the process.");
                     MyDebug.Info($"Failed to fetch player info: {e.Message}, continuing with the existing info.");
                 }
             }
 
+            UserApiHandler.ValidateAndUpdateStoreIfNeeded().Forget();
             OnUserReady?.Invoke(UserPlayerPrefs.UserInfoInstance);
         }
 

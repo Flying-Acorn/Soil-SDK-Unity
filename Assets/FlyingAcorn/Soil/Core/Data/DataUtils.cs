@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using FlyingAcorn.Analytics;
-using FlyingAcorn.Analytics.BuildData;
-using UnityEngine;
 using Cysharp.Threading.Tasks;
 using static FlyingAcorn.Soil.Core.Data.Constants;
 

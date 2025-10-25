@@ -329,7 +329,7 @@ namespace FlyingAcorn.Soil.Core
                     {
                         var authValid = IsAuthenticationCurrentlyValid();
                         _initTask = authValid
-                            ? PerformAuthentication(forceFetchPlayerInfo: true).AsTask()
+                            ? PerformAuthentication(forceSyncPlayerInfo: true).AsTask()
                             : PerformAuthentication(forceRefresh: true).AsTask();
                     }
                     else
@@ -502,16 +502,16 @@ namespace FlyingAcorn.Soil.Core
             }
         }
 
-        private static UniTask PerformAuthentication(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+        private static UniTask PerformAuthentication(bool forceRefresh = false, bool forceSyncPlayerInfo = false)
         {
-            return Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
+            return Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceSyncPlayerInfo: forceSyncPlayerInfo);
         }
 
-        private static async UniTaskVoid PerformAuthenticationBackground(bool forceRefresh = false, bool forceFetchPlayerInfo = false)
+        private static async UniTaskVoid PerformAuthenticationBackground(bool forceRefresh = false, bool forceSyncPlayerInfo = false)
         {
             try
             {
-                await Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceFetchPlayerInfo: forceFetchPlayerInfo);
+                await Authenticate.AuthenticateUser(forceRefresh: forceRefresh, forceSyncPlayerInfo: forceSyncPlayerInfo);
                 MyDebug.Verbose("Soil-Core: Background authentication completed successfully");
             }
             catch (Exception ex)

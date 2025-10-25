@@ -56,6 +56,11 @@ Inside your `Assets/Resources/` create a `FA_Build_Settings.asset` using the fol
 
 <img src="./images/FA_Build_Settings2.jpeg" width="800" alt="Set store FA_Build_Settings.asset" />
 
+### Build Settings Configuration
+
+- **StoreName**: Select the target store for your build (e.g., GooglePlay, AppStore, CafeBazaar). This ensures analytics and other services are configured correctly for the platform.
+- **EnforceStoreOnBuild**: When enabled, the build process will prompt you to select a store if none is set. The build will fail if you cancel the selection dialog without choosing a store. This ensures proper store attribution for analytics tracking.
+
 ## Installation Complete
 
 Your Soil SDK is now installed and configured! You can start integrating services. We recommend beginning with the [Core module](./core/Integration.md) for basic setup, then add other modules as needed. See the [Services overview](./README.md#services) for all available integrations.
