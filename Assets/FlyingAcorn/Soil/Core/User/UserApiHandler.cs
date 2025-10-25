@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
@@ -192,6 +193,19 @@ namespace FlyingAcorn.Soil.Core.User
                     SoilExceptionErrorCode.TransportError);
             }
 
+            // Merge custom_properties from the request into the server response
+            // The server doesn't return custom_properties, so we need to preserve them locally
+            if (userInfo.custom_properties != null && userInfo.custom_properties.Count > 0)
+            {
+                updatedUser.custom_properties = new Dictionary<string, object>(
+                    updatedUser.custom_properties ?? new Dictionary<string, object>());
+                
+                foreach (var kvp in userInfo.custom_properties)
+                {
+                    updatedUser.custom_properties[kvp.Key] = kvp.Value;
+                }
+            }
+
             ReplaceUser(updatedUser, UserPlayerPrefs.TokenData);
             MyDebug.Info($"Player info updated successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
@@ -252,14 +266,27 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             /// <summary>
-            /// Executes the update with all the accumulated changes.
-            /// Note: You can also await the builder directly without calling this method.
+            /// Sets an internal SDK property (flyingacorn_*) bypassing normal restrictions.
+            /// For internal SDK use only.
             /// </summary>
-            /// <returns>The updated UserInfo</returns>
-            public async UniTask<UserInfo> ExecuteAsync()
+            /// <param name="key">Property key (can start with flyingacorn_)</param>
+            /// <param name="value">Property value</param>
+            /// <returns>This builder instance (for method chaining)</returns>
+            internal UserInfoUpdateBuilder WithInternalProperty(string key, object value)
             {
-                return await UpdatePlayerInfoAsync(_userInfo);
+                _userInfo.RecordInternalProperty(key, value);
+                return this;
             }
+
+            /// <summary>
+            /// Executes the update with all the accumulated changes in a fire-and-forget manner.
+            /// </summary>
+            public void Forget()
+            {
+                UpdatePlayerInfoAsync(_userInfo).Forget();
+            }
+
+            // Note: Await the builder directly instead of calling ExecuteAsync().
 
             /// <summary>
             /// Gets the modified UserInfo without executing the update.
@@ -272,11 +299,11 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             /// <summary>
-            /// Allows the builder to be awaited directly without calling ExecuteAsync()
+            /// Allows the builder to be awaited directly (implicit await style).
             /// </summary>
             public UniTask<UserInfo>.Awaiter GetAwaiter()
             {
-                return ExecuteAsync().GetAwaiter();
+                return UpdatePlayerInfoAsync(_userInfo).GetAwaiter();
             }
         }
 

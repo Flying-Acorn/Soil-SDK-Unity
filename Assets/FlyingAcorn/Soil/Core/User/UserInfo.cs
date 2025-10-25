@@ -58,15 +58,23 @@ namespace FlyingAcorn.Soil.Core.User
         }
 
         /// <summary>
-        /// Creates a deep copy of this UserInfo instance.
-        /// Use this when you need to modify user info without affecting the original.
+        /// Creates a copy of this UserInfo instance for safe modification.
+        /// Uses shallow copy for server-managed fields (properties, linkable_parties)
+        /// to preserve reference equality for change detection.
         /// </summary>
         /// <returns>A new UserInfo instance with the same data</returns>
         internal UserInfo Copy()
         {
             // Create a deep copy using JSON serialization
             var json = JsonConvert.SerializeObject(this);
-            return JsonConvert.DeserializeObject<UserInfo>(json);
+            var copy = JsonConvert.DeserializeObject<UserInfo>(json);
+            
+            // Preserve references to server-managed complex objects
+            // so they won't be detected as "changed" during comparison
+            copy.properties = this.properties;
+            copy.linkable_parties = this.linkable_parties;
+            
+            return copy;
         }
 
         /// <summary>
@@ -80,11 +88,31 @@ namespace FlyingAcorn.Soil.Core.User
         internal UserInfo RecordCustomProperty(string key, object value)
         {
             // Prevent users from overwriting reserved SDK properties
-            if (key.StartsWith("flyingacorn_"))
+            if (key.StartsWith(Constants.PropertyKeyPrefix))
             {
                 throw new ArgumentException($"Property key '{key}' is reserved for SDK use. Custom property keys cannot start with 'flyingacorn_'.", nameof(key));
             }
             
+            var newProps = new Dictionary<string, object>(this.custom_properties ?? new Dictionary<string, object>());
+            newProps[key] = value;
+            this.custom_properties = newProps;
+            return this;
+        }
+
+        /// <summary>
+        /// Records an internal SDK property (flyingacorn_*).
+        /// This method bypasses the restriction on flyingacorn_ prefixed keys.
+        /// For internal SDK use only.
+        /// WARNING: This modifies the current instance.
+        /// </summary>
+        /// <param name="key">Property key (can start with flyingacorn_)</param>
+        /// <param name="value">Property value</param>
+        /// <returns>This instance (for method chaining)</returns>
+        internal UserInfo RecordInternalProperty(string key, object value)
+        {
+            // If you want to enforce the prefix, uncomment the following lines:
+            if (!key.StartsWith(Constants.PropertyKeyPrefix))
+                key = Constants.PropertyKeyPrefix + key;
             var newProps = new Dictionary<string, object>(this.custom_properties ?? new Dictionary<string, object>());
             newProps[key] = value;
             this.custom_properties = newProps;
@@ -151,29 +179,82 @@ namespace FlyingAcorn.Soil.Core.User
             }
             
             // Merge custom_properties into properties for server compatibility
+            // Only include properties that have actually changed
             if (userInfo.custom_properties != null && userInfo.custom_properties.Count > 0)
             {
                 // Get or create the properties dictionary
-                Dictionary<string, object> propertiesDict;
+                Dictionary<string, object> propertiesDict = null;
                 
-                if (changedFields.ContainsKey("properties"))
-                {
-                    propertiesDict = changedFields["properties"] as Dictionary<string, object> 
-                                   ?? new Dictionary<string, object>();
-                }
-                else
-                {
-                    // If properties haven't changed, start with existing properties
-                    propertiesDict = userInfo.properties?.ToDictionary() ?? new Dictionary<string, object>();
-                }
+                // Get cached internal properties for comparison
+                var cachedInternalProps = UserPlayerPrefs.InternalProperties;
                 
-                // Add custom properties to the properties dictionary
+                // Check each custom property to see if it has changed
                 foreach (var kvp in userInfo.custom_properties)
                 {
-                    propertiesDict[kvp.Key] = kvp.Value;
+                    // Skip invalid keys or null values - they should not be included in properties
+                    if (string.IsNullOrEmpty(kvp.Key) || kvp.Value == null)
+                        continue;
+                        
+                    // Compare with existing custom_properties
+                    bool hasChanged = true;
+                    
+                    // For internal properties (flyingacorn_*), check against cached values
+                    if (kvp.Key.StartsWith(Constants.PropertyKeyPrefix))
+                    {
+                        if (cachedInternalProps != null && cachedInternalProps.ContainsKey(kvp.Key))
+                        {
+                            var cachedValue = cachedInternalProps[kvp.Key];
+                            if (cachedValue != null && cachedValue.Equals(kvp.Value))
+                            {
+                                hasChanged = false;
+                            }
+                        }
+                    }
+                    // For regular custom properties, check against in-memory custom_properties
+                    else if (this.custom_properties != null && this.custom_properties.ContainsKey(kvp.Key))
+                    {
+                        var existingValue = this.custom_properties[kvp.Key];
+                        // Check if the value is actually different
+                        if (existingValue != null && existingValue.Equals(kvp.Value))
+                        {
+                            hasChanged = false;
+                        }
+                    }
+                    
+                    // Only add changed properties
+                    if (hasChanged)
+                    {
+                        // Lazily initialize propertiesDict only if we have changes
+                        if (propertiesDict == null)
+                        {
+                            if (changedFields.ContainsKey(nameof(properties)))
+                            {
+                                propertiesDict = changedFields[nameof(properties)] as Dictionary<string, object> 
+                                               ?? new Dictionary<string, object>();
+                            }
+                            else
+                            {
+                                // Initialize empty dictionary - we only want to send changed properties
+                                propertiesDict = new Dictionary<string, object>();
+                            }
+                        }
+                        
+                        propertiesDict[kvp.Key] = kvp.Value;
+                        
+                        // Cache internal properties for future comparison
+                        if (kvp.Key.StartsWith(Constants.PropertyKeyPrefix))
+                        {
+                            cachedInternalProps[kvp.Key] = kvp.Value;
+                            UserPlayerPrefs.InternalProperties = cachedInternalProps;
+                        }
+                    }
                 }
                 
-                changedFields["properties"] = propertiesDict;
+                // Only update changedFields if we actually have changed properties
+                if (propertiesDict != null)
+                {
+                    changedFields[nameof(properties)] = propertiesDict;
+                }
             }
 
             return changedFields;
@@ -202,7 +283,6 @@ namespace FlyingAcorn.Soil.Core.User
             public string flyingacorn_store_name;
             public string flyingacorn_unity_version;
             public string flyingacorn_version;
-            public string flyingacorn_cohort_id;
             public string flyingacorn_country_realtime;
 
             public static Dictionary<string, object> GeneratePropertiesDynamicPlayerProperties()

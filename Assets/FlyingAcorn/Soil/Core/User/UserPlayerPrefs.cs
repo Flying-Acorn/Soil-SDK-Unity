@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FlyingAcorn.Soil.Core.Data;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -40,6 +41,21 @@ namespace FlyingAcorn.Soil.Core.User
             get => JsonConvert.DeserializeObject<TokenData>(PlayerPrefs.GetString(TokenDataKey));
             set => PlayerPrefs.SetString(TokenDataKey, JsonConvert.SerializeObject(value));
         }
+
+        public static Dictionary<string, object> InternalProperties
+        {
+            get
+            {
+                var json = PlayerPrefs.GetString($"{GetKeysPrefix()}internal_properties", "{}");
+                return JsonConvert.DeserializeObject<Dictionary<string, object>>(json) ?? new Dictionary<string, object>();
+            }
+            set
+            {
+                var json = JsonConvert.SerializeObject(value);
+                PlayerPrefs.SetString($"{GetKeysPrefix()}internal_properties", json);
+            }
+        }
+
 
         public static string AppID
         {
