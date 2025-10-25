@@ -105,6 +105,34 @@ public async void UpdatePlayerProfile()
 - **Error Handling**: Handle `SoilException` for network errors, invalid data, or SDK not ready.
 - **Safe by Design**: The fluent builder automatically creates copies to prevent reference issues that could cause updates to be skipped.
 
+#### Fire-and-Forget Updates
+
+For updates where you don't need to wait for the result:
+
+```csharp
+// Update player level without awaiting
+UserApiHandler.UpdatePlayerInfo()
+    .WithCustomProperty("player_level", currentLevel)
+    .Forget(); // Executes in background
+```
+
+#### Inspecting Changes Before Committing
+
+You can preview the changes before sending to server:
+
+```csharp
+var builder = UserApiHandler.UpdatePlayerInfo()
+    .WithName("Preview Name")
+    .WithCustomProperty("test", "value");
+
+// Inspect the modified user info
+UserInfo preview = builder.GetModified();
+Debug.Log($"Preview name: {preview.name}");
+
+// Then commit if desired
+await builder; // Executes the update
+```
+
 ## Demo Scene
 
 See the [Core Demo](./../README.md#demo-scenes) (`SoilExample.unity`) for a complete working example of SDK initialization and basic usage.

@@ -125,14 +125,45 @@ else
 
 ### 5. Handle A/B Testing
 
-If using A/B testing, ensure cohort IDs are included in analytics:
+A/B testing allows you to run experiments by serving different configuration values to different user segments. Experiments are configured server-side and automatically applied when remote config is fetched.
+
+#### How A/B Testing Works
+
+- Experiments are defined with "challengers" that override specific config keys
+- Users are randomly assigned to cohorts (control or challenger variants)
+- Challenger values replace the default config values for assigned users
+- Cohort assignments are persisted and sent to analytics for tracking
+
+#### Accessing A/B Test Values
+
+A/B test values are accessed the same way as regular remote config values:
 
 ```csharp
-// In your analytics setup (e.g., UserInfo.cs)
-{ $"{KeysPrefix}cohort_id", ABTestingPlayerPrefs.GetLastExperimentId() }
+// After fetching config, check for A/B test modifications
+if (RemoteConfig.IsFetchedAndReady)
+{
+    var userConfigs = RemoteConfig.UserDefinedConfigs;
+    
+    // This value may be modified by an active A/B test
+    var gameDifficulty = userConfigs["game_difficulty"]?.ToString();
+    
+    // Apply the config in your game logic
+    SetGameDifficulty(gameDifficulty);
+}
 ```
 
-**Note**: A/B testing experiments are automatically initialized when config is fetched successfully.
+#### Cohort Tracking
+
+The current cohort ID is automatically tracked and can be included in analytics:
+
+```csharp
+// The cohort ID is available via player prefs
+var currentCohort = ABTestingPlayerPrefs.GetLastExperimentId();
+
+// This is automatically sent to analytics when experiments change
+```
+
+**Note**: A/B testing experiments are automatically initialized when config is fetched successfully. No additional setup is required in code - experiments are managed server-side.
 
 ## Additional Features
 
