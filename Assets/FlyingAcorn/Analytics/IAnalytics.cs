@@ -41,5 +41,6 @@ namespace FlyingAcorn.Analytics
             int score, Dictionary<string, object> customFields);
 
         void NonLevelProgressionEvent(FlyingAcornNonLevelStatus progressionStatus, string progressionType);
+        void SignUpEvent(string method, Dictionary<string, object> extraFields = null);
     }
 }

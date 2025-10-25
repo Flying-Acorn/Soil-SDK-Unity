@@ -15,6 +15,7 @@ namespace FlyingAcorn.Analytics
         protected internal static bool InitCalled;
         private static bool _started;
         private static bool IsReady => Instance != null && Instance.AnalyticServiceProvider != null;
+        public static event Action OnInitCalled;
 
 
         protected virtual void Awake()
@@ -157,7 +158,14 @@ namespace FlyingAcorn.Analytics
 
             InitCalled = true;
             AnalyticServiceProvider.Initialize();
-            // UserSegmentation("Store", DataUtils.GetStore().ToString(), 1);
+            try
+            {
+                OnInitCalled?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[Analytics] OnInitCalled listeners threw: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         public static IAnalytics GetRunningService([NotNull] Type type)
@@ -230,14 +238,14 @@ namespace FlyingAcorn.Analytics
             Instance.AnalyticServiceProvider.DesignEvent(customFields, levelType, dialogName);
         }
 
-        public static void DesignEvent(string[] customFields)
+        public static void DesignEvent(string[] event_steps)
         {
             if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-            Instance.AnalyticServiceProvider.DesignEvent(customFields);
+            Instance.AnalyticServiceProvider.DesignEvent(event_steps);
         }
 
         public static void DesignEvent(float customFields, string interactionName, string dialogName,
@@ -261,6 +269,16 @@ namespace FlyingAcorn.Analytics
                 return;
             }
             Instance.AnalyticServiceProvider.ResourceEvent(sourceFlow, itemType, amount, reason, source);
+        }
+
+        internal static void SignUpEvent(string method, Dictionary<string, object> extraFields = null)
+        {
+            if (!IsReady)
+            {
+                MyDebug.LogWarning("Analytics not initialized");
+                return;
+            }
+            Instance.AnalyticServiceProvider.SignUpEvent(method, extraFields);
         }
     }
 }

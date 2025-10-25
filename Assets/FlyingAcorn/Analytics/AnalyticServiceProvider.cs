@@ -114,6 +114,14 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt, customData));
         }
 
+
+        public void SignUpEvent(string method, Dictionary<string, object> extraFields = null)
+        {
+            MyDebug.Verbose($" Sending sign up event to analytics with extraFields: {GetNames(extraFields)} for these services: {GetServiceNames()}");
+            ForEachServiceSafely("SignUpEvent", s => s.SignUpEvent(method, extraFields));
+        }
+
+
         /// <summary>
         /// Track any type of design event that you want to measure i.e. GUI elements or tutorial steps.
         /// </summary>
@@ -225,6 +233,8 @@ namespace FlyingAcorn.Analytics
 
         private static string GetNames(Dictionary<string, object> customFields)
         {
+            if (customFields == null || customFields.Count == 0)
+                return "none";
             return string.Join(",", customFields.Select(x => x.Key + ":" + x.Value));
         }
 
@@ -255,7 +265,6 @@ namespace FlyingAcorn.Analytics
                 }
             }
         }
-
         #endregion
     }
 
