@@ -3,7 +3,7 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
-namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
+namespace FlyingAcorn.Analytics.BuildData.Editor
 {
     public class FaPostBuildTools : IPostprocessBuildWithReport
     {

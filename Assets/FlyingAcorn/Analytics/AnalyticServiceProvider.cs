@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static FlyingAcorn.Analytics.BuildData.Constants;
 using static FlyingAcorn.Analytics.Constants.ErrorSeverity;
 using static FlyingAcorn.Analytics.Constants.ProgressionStatus;
 using static FlyingAcorn.Analytics.Constants.ResourceFlowType;
@@ -97,21 +98,21 @@ namespace FlyingAcorn.Analytics
         }
 
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
-            StoreType storeType, string receipt = null)
+            Store Store, string receipt = null)
         {
             MyDebug.Verbose($" Sending business event to analytics: {currency} with amount: " +
                             $"{amount} with itemType: {itemType} with itemID: {itemId} with cartType: " +
                             $"{cartType} with receipt: {receipt} for these services: {GetServiceNames()}");
-            ForEachServiceSafely("BusinessEvent", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt));
+            ForEachServiceSafely("BusinessEvent", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, Store, receipt));
         }
 
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
-            StoreType storeType, string receipt, Dictionary<string, object> customData)
+            Store Store, string receipt, Dictionary<string, object> customData)
         {
             MyDebug.Info($"Tracking business event to analytics: {currency} with amount: " +
                          $"{amount} with itemType: {itemType} with itemID: {itemId} with cartType: " +
                          $"{cartType} with receipt: {receipt} with customData: {GetNames(customData)}");
-            ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType, receipt, customData));
+            ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, Store, receipt, customData));
         }
 
 
@@ -266,12 +267,5 @@ namespace FlyingAcorn.Analytics
             }
         }
         #endregion
-    }
-
-    public enum StoreType
-    {
-        GooglePlay,
-        AppStore,
-        Other
     }
 }

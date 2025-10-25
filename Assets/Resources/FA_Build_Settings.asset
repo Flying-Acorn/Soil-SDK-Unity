@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: df22a131f7417413c989eb82bf0c02bd, type: 3}
+  m_Script: {fileID: 11500000, guid: af94e56110e27416280662306031a6ff, type: 3}
   m_Name: FA_Build_Settings
   m_EditorClassIdentifier: 
   StoreName: 0

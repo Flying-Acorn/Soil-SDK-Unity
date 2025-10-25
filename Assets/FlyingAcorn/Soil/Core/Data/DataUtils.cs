@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using FlyingAcorn.Analytics;
+using FlyingAcorn.Analytics.BuildData;
 using UnityEngine;
 using Cysharp.Threading.Tasks;
 using static FlyingAcorn.Soil.Core.Data.Constants;
@@ -11,52 +12,27 @@ namespace FlyingAcorn.Soil.Core.Data
 {
     public static class DataUtils
     {
-        private static BuildData.BuildData _buildSettings;
-
         internal static string GetScriptingBackend()
         {
-            if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
-            var scriptingBackend = "Unknown";
-            if (_buildSettings && !string.IsNullOrEmpty(_buildSettings.ScriptingBackend))
-                scriptingBackend = _buildSettings.ScriptingBackend;
-
-            return scriptingBackend;
+            return Analytics.BuildData.BuildDataUtils.GetScriptingBackend();
         }
 
         public static string GetUserBuildNumber()
         {
-            if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
-            var build = "Unknown";
-            if (_buildSettings && !string.IsNullOrEmpty(_buildSettings.BuildNumber))
-                build = _buildSettings.BuildNumber;
-
-            return build;
+            return Analytics.BuildData.BuildDataUtils.GetUserBuildNumber();
         }
         
         public static DateTime GetBuildDate()
         {
-            _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
-            var buildTime = _buildSettings ? _buildSettings.LastBuildTime : null; // Format is "yyyy/MM/dd-HH:mm:ss"
-            var buildDate = DateTime.TryParseExact(buildTime, "yyyy/MM/dd-HH:mm:ss", null,
-                System.Globalization.DateTimeStyles.None, out var parsedDate)
-                ? parsedDate
-                : DateTime.MinValue;
-            return buildDate;
+            return Analytics.BuildData.BuildDataUtils.GetBuildDate();
         }
 
-        public static Store GetStore()
+        public static Analytics.BuildData.Constants.Store GetStore()
         {
-            if (!_buildSettings)
-                _buildSettings = Resources.Load<BuildData.BuildData>(BuildSettingsName);
-            var storeName = Store.Unknown;
-            if (_buildSettings && _buildSettings.StoreName != Store.Unknown)
-                storeName = _buildSettings.StoreName;
-            if (storeName != Store.Unknown) return storeName;
-            if (!Application.isEditor)
-                MyDebug.LogError("Store name is not set in BuildData");
-            return Store.Unknown;
+            var store = AnalyticsPlayerPrefs.Store;
+            if (store != Analytics.BuildData.Constants.Store.Unknown)
+                return store;
+            return Analytics.BuildData.BuildDataUtils.GetStore();
         }
 
         public static IEnumerable<FieldInfo> GetAllFields(this Type t)
@@ -101,16 +77,16 @@ namespace FlyingAcorn.Soil.Core.Data
             
             switch (store)
             {
-                case Store.CafeBazaar:
-                case Store.Myket:
+                case Analytics.BuildData.Constants.Store.CafeBazaar:
+                case Analytics.BuildData.Constants.Store.Myket:
                     return IRApiUrl;
-                case Store.LandingPage:
-                case Store.Unknown:
-                case Store.BetaChannel:
-                case Store.Postman:
-                case Store.GooglePlay:
-                case Store.AppStore:
-                case Store.Github:
+                case Analytics.BuildData.Constants.Store.LandingPage:
+                case Analytics.BuildData.Constants.Store.Unknown:
+                case Analytics.BuildData.Constants.Store.BetaChannel:
+                case Analytics.BuildData.Constants.Store.Postman:
+                case Analytics.BuildData.Constants.Store.GooglePlay:
+                case Analytics.BuildData.Constants.Store.AppStore:
+                case Analytics.BuildData.Constants.Store.Github:
                 default:
                     break;
             }

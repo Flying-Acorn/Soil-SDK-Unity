@@ -1,6 +1,6 @@
 using System.Linq;
 using FlyingAcorn.Analytics;
-using FlyingAcorn.Soil.Core.Data.BuildData.Editor;
+using FlyingAcorn.Analytics.BuildData.Editor;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;

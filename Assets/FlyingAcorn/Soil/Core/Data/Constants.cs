@@ -7,7 +7,6 @@ namespace FlyingAcorn.Soil.Core.Data
     {
         internal const string DemoAppID = "c425a46d-5a49-4986-b3fe-e9d61cd957d3";
         internal const string DemoAppSDKToken = "8c500e120772a66a1daad9cdfebedbaa3f31d6949ce8d41c94b49f125401ff00";
-        internal const string BuildSettingsName = "FA_Build_Settings";
         internal static string ApiUrl
         {
             get
@@ -37,19 +36,6 @@ namespace FlyingAcorn.Soil.Core.Data
         {
             WW,
             IR
-        }
-
-        public enum Store
-        {
-            Unknown,
-            BetaChannel,
-            Postman,
-            GooglePlay,
-            AppStore,
-            CafeBazaar, // Iran Local Store
-            Myket, // Iran Local Store
-            Github,
-            LandingPage
         }
 
         public enum DataScopes

@@ -11,7 +11,7 @@ using UnityEditor.Build.Reporting;
 using System.IO;
 using UnityEngine;
 
-namespace FlyingAcorn.Soil.Core.Data.BuildData.Editor
+namespace FlyingAcorn.Analytics.BuildData.Editor
 {
     public static class DeeplinkTools
     {

@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
-using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Analytics.BuildData;
 using JetBrains.Annotations;
 using UnityEngine;
+using static FlyingAcorn.Analytics.BuildData.Constants;
 
 namespace FlyingAcorn.Analytics
 {
@@ -55,9 +56,14 @@ namespace FlyingAcorn.Analytics
             AnalyticServiceProvider.SetConsents();
         }
 
+        // Try setting once, or use the `Build Settings` to enforce store on build
+        public static void SetStore(Analytics.BuildData.Constants.Store store)
+        {
+            AnalyticsPlayerPrefs.Store = store;
+        }
+
         public static void SaveUserIdentifier(string playerId)
         {
-
             AnalyticsPlayerPrefs.CustomUserId = playerId;
         }
 
@@ -74,14 +80,14 @@ namespace FlyingAcorn.Analytics
 
         public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId,
             string cartType,
-            StoreType storeType, string receipt, Dictionary<string, object> customData)
+            Store Store, string receipt, Dictionary<string, object> customData)
         {
             if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-            Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, storeType,
+            Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, Store,
                 receipt, customData);
         }
 
@@ -137,7 +143,7 @@ namespace FlyingAcorn.Analytics
             if (AnalyticsPlayerPrefs.SessionCount <= 0)
             {
                 AnalyticsPlayerPrefs.InstallationVersion = Application.version;
-                AnalyticsPlayerPrefs.InstallationBuild = DataUtils.GetUserBuildNumber();
+                AnalyticsPlayerPrefs.InstallationBuild = BuildDataUtils.GetUserBuildNumber();
                 Instance.AnalyticServiceProvider?.DesignEvent("FA_session", "first");
             }
 
