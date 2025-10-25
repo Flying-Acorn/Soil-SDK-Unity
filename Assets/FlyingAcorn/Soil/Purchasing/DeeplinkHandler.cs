@@ -11,7 +11,7 @@ namespace FlyingAcorn.Soil.Purchasing
     public static class DeeplinkHandler
     {
         private static Uri PaymentDeeplink;
-        [UsedImplicitly] internal static Action<Dictionary<string, string>> OnPaymentDeeplinkActivated;
+        [UsedImplicitly] public static Action<Dictionary<string, string>> OnPaymentDeeplinkActivated;
 
         static DeeplinkHandler()
         {
@@ -32,7 +32,7 @@ namespace FlyingAcorn.Soil.Purchasing
             var purchaseDeeplink = PurchasingPlayerPrefs.GetPurchaseDeeplink();
             if (string.IsNullOrEmpty(purchaseDeeplink))
             {
-                Debug.LogError("Failed to get purchase deeplink. Please check SDKSettings configuration.");
+                Debug.LogError("Payment Deeplink Root is not set in SDKSettings, or set DeepLinkEnabled to false.");
                 return;
             }
             PaymentDeeplink = new Uri(purchaseDeeplink);
@@ -53,6 +53,8 @@ namespace FlyingAcorn.Soil.Purchasing
                 if (!string.Equals(invokedUri.Host, configuredHost, StringComparison.OrdinalIgnoreCase))
                     return;
             }
+            if (invokedUri.GetLeftPart(UriPartial.Authority) !=
+                PaymentDeeplink.GetLeftPart(UriPartial.Authority)) return;
             MyDebug.Info(
                 $"OnDeepLinkActivated {invokedUri.GetLeftPart(UriPartial.Authority)} {PaymentDeeplink.GetLeftPart(UriPartial.Authority)}");
             var parameters = invokedUri.Query.TrimStart('?').Split('&');
