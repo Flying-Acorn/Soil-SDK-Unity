@@ -62,9 +62,21 @@ namespace FlyingAcorn.Soil.RemoteConfig
             }
             catch (Exception)
             {
-                _fetching = false;
                 _fetchSuccessState = false;
-                OnServerAnswer?.Invoke(false);
+
+                // Initialize AB Testing with cached data on fetch failure
+                // This ensures users remain in their experiments even when using fallback/cached configs
+                if (RemoteConfigPlayerPrefs.CachedRemoteConfigData != null && UserDefinedConfigs != null)
+                {
+                    try
+                    {
+                        ABTestHandler.InitializeAbTesting(UserDefinedConfigs);
+                    }
+                    catch (Exception ex)
+                    {
+                        Analytics.MyDebug.LogWarning($"Failed to initialize AB Testing with cached data: {ex.Message}");
+                    }
+                }
             }
 
             _fetching = false;
@@ -77,7 +89,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
         {
             // Create a new dictionary to avoid mutating _sessionExtraProperties
             var properties = new Dictionary<string, object>();
-            
+
             // Add dynamic system properties first (lowest priority)
             try
             {
@@ -97,21 +109,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
             {
                 Analytics.MyDebug.LogWarning($"Failed to add system properties: {ex.Message}");
             }
-            
-            // Add AB Testing cohort ID if available
-            try
-            {
-                var cohortId = ABTestingPlayerPrefs.GetLastExperimentId();
-                if (!string.IsNullOrEmpty(cohortId))
-                {
-                    properties[ABTesting.Constants.CohortIdPropertyKey] = cohortId;
-                }
-            }
-            catch (Exception ex)
-            {
-                Analytics.MyDebug.LogWarning($"Failed to add cohort_id property: {ex.Message}");
-            }
-            
+
             // Add user's custom properties from UpdatePlayerInfo (medium priority, can override system properties)
             if (SoilServices.UserInfo?.custom_properties != null)
             {
@@ -123,7 +121,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
                     }
                 }
             }
-            
+
             // Add session-specific extra properties last (highest priority, can override everything)
             // These are passed at FetchConfig call time and represent the most recent/contextual data
             if (_sessionExtraProperties != null)
@@ -136,7 +134,7 @@ namespace FlyingAcorn.Soil.RemoteConfig
                     }
                 }
             }
-            
+
             return properties;
         }
 

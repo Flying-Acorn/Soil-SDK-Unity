@@ -5,7 +5,6 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.RemoteConfig.ABTesting.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using UnityEngine;
 using Random = UnityEngine.Random;
 
 namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
@@ -16,25 +15,33 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         private static List<string> _seenChallengers = new();
         private static bool _canAcceptChallengers;
         private static bool _abTestingInitialized;
+        private static string _pendingCohortIdForAnalytics;
 
         internal static void InitializeAbTesting(JObject remoteConfigData)
         {
             if (!AnalyticsManager.InitCalled)
             {
-                Debug.LogException(new Exception("FA_ABTesting ====> AnalyticsManager is not initialized, AbTesting can't be initialized"));
-                return;
+                // Proceed with A/B logic regardless; defer analytics segmentation until analytics is ready
+                MyDebug.LogWarning("AnalyticsManager not initialized yet. Proceeding with A/B testing; will defer cohort segmentation to analytics until ready.");
             }
 
-            try
+            // Parse AB testing config; if missing or invalid, fall back to empty config so we can cleanly set NoCohort
+            if (remoteConfigData != null && remoteConfigData.TryGetValue(Constants.AbTestingExperimentsParentKey, out var experimentsToken) && experimentsToken != null)
             {
-                // ReSharper disable once PossibleNullReferenceException
-                _aBTestingConfig = JsonConvert.DeserializeObject<ABTestingConfig>(remoteConfigData
-                    .GetValue(Constants.AbTestingExperimentsParentKey).ToString());
+                try
+                {
+                    _aBTestingConfig = JsonConvert.DeserializeObject<ABTestingConfig>(experimentsToken.ToString());
+                }
+                catch (Exception e)
+                {
+                    MyDebug.LogException(new Exception($"AbTestingConfig is not valid - {experimentsToken}", e));
+                    _aBTestingConfig = new ABTestingConfig { Challengers = new List<Challenger>() };
+                }
             }
-            catch (Exception)
+            else
             {
-                Debug.LogWarning("FA_ABTesting ====> AbTestingConfig is not valid");
-                return;
+                MyDebug.LogError("ABTesting experiments key not found in remote config; proceeding with empty A/B config.");
+                _aBTestingConfig = new ABTestingConfig { Challengers = new List<Challenger>() };
             }
 
             _aBTestingConfig.Challengers ??= new List<Challenger>();
@@ -45,6 +52,11 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
                 ActivateAbTestingExperiment(Constants.SessionStartEventName);
             AnalyticServiceProvider.OnEventSent -= ActivateAbTestingExperiment;
             AnalyticServiceProvider.OnEventSent += ActivateAbTestingExperiment;
+            // Subscribe to analytics readiness to flush any pending cohort immediately when analytics becomes ready
+            AnalyticsManager.OnInitCalled -= TryFlushPendingCohortSegmentation;
+            AnalyticsManager.OnInitCalled += TryFlushPendingCohortSegmentation;
+            // If analytics is already ready, try flushing now as well
+            TryFlushPendingCohortSegmentation();
         }
 
         private static void HandleBasicAbTestingTasks()
@@ -85,8 +97,12 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 
         private static void ManipulateRemoteConfig(JObject currentData)
         {
-            RemoteConfigPlayerPrefs.CachedRemoteConfigData[Soil.RemoteConfig.Constants.UserDefinedParentKey] =
-                currentData;
+            // Get the full cached data
+            var fullCache = RemoteConfigPlayerPrefs.CachedRemoteConfigData;
+            // Update the user defined configs
+            fullCache[Soil.RemoteConfig.Constants.UserDefinedParentKey] = currentData;
+            // Trigger the setter to persist to disk by reassigning the whole object
+            RemoteConfigPlayerPrefs.CachedRemoteConfigData = fullCache;
         }
 
         private static void ActivateAbTestingExperiment(string activationEvent)
@@ -94,7 +110,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
             if (!_abTestingInitialized || !_canAcceptChallengers)
             {
                 if (!_abTestingInitialized)
-                    Debug.Log("FA_ABTesting ====> a/b testing is not yet initialized");
+                    MyDebug.Info("a/b testing is not yet initialized");
                 return;
             }
 
@@ -121,7 +137,18 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         private static void HandleCohortChange(string cohortName)
         {
             ABTestingPlayerPrefs.SetLastExperimentId(cohortName);
-            SendExperimentIdToAnalyze(cohortName);
+            SendExperimentIdToAnalytics(cohortName);
+            RecordCohortInSoil(cohortName);
+
+            // Attempt immediate send to analytics if possible; otherwise will be deferred
+            TryFlushPendingCohortSegmentation();
+        }
+
+        private static void RecordCohortInSoil(string cohortName)
+        {
+            FlyingAcorn.Soil.Core.User.UserApiHandler.UpdatePlayerInfo()
+                .WithInternalProperty(Constants.CohortIdPropertyKey, cohortName)
+                .Forget();
         }
 
         private static Challenger PickAChallenger(List<Challenger> challengers)
@@ -149,10 +176,31 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
             return challengers.Sum(challenger => (float)challenger.PercentInWholeUsers);
         }
 
-        private static void SendExperimentIdToAnalyze(string keyToSend)
+        private static void SendExperimentIdToAnalytics(string keyToSend)
         {
-            Debug.Log("FA_ABTesting ====> Current experiment changed to " + keyToSend);
-            AnalyticsManager.UserSegmentation("ABTestingCohortID", keyToSend, 3);
+            MyDebug.Info("Current experiment changed to " + keyToSend);
+
+            // If analytics isn't initialized yet, defer segmentation and flush when ready
+            if (AnalyticsManager.InitCalled)
+            {
+                AnalyticsManager.UserSegmentation("ABTestingCohortID", keyToSend, 3);
+            }
+            else
+            {
+                _pendingCohortIdForAnalytics = keyToSend;
+                MyDebug.Info($"Deferring analytics cohort segmentation: {_pendingCohortIdForAnalytics}");
+            }
+        }
+
+        private static void TryFlushPendingCohortSegmentation()
+        {
+            if (!string.IsNullOrEmpty(_pendingCohortIdForAnalytics) && AnalyticsManager.InitCalled)
+            {
+                var cohort = _pendingCohortIdForAnalytics;
+                _pendingCohortIdForAnalytics = null; // clear before sending to avoid reentrancy issues
+                MyDebug.Info($"Flushing deferred analytics cohort segmentation: {cohort}");
+                AnalyticsManager.UserSegmentation("ABTestingCohortID", cohort, 3);
+            }
         }
     }
 }
