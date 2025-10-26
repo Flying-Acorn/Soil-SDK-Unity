@@ -56,7 +56,7 @@ namespace FlyingAcorn.Analytics
             AnalyticServiceProvider.SetConsents();
         }
 
-        // Try setting once, or use the `Build Settings` to enforce store on build
+        // Try setting once, or (recommended) use the `Build Settings` to enforce store on build
         public static void SetStore(Analytics.BuildData.Constants.Store store)
         {
             AnalyticsPlayerPrefs.Store = store;

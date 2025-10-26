@@ -22,7 +22,8 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
                         guids.Length);
                     break;
                 case <= 0:
-                    throw new BuildFailedException("[FABuildTools] Couldn't find Build Settings, please create one!");
+                    Debug.LogWarning("[FABuildTools] No Build Properties found!");
+                    return;
             }
 
             var path = AssetDatabase.GUIDToAssetPath(guids[0]);

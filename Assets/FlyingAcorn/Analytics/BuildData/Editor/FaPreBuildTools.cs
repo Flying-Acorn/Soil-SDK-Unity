@@ -18,36 +18,32 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
 
             // Find the BuildData asset by type name (more robust than fully-qualified type in FindAssets)
             var guids = AssetDatabase.FindAssets($"t:{nameof(BuildData)}");
-            switch (guids.Length)
+            
+            // If no BuildData exists, Analytics module is optional - allow build to proceed
+            if (guids.Length <= 0)
             {
-                case > 1:
-                    Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
-                        guids.Length);
-                    break;
-                case <= 0:
-                    throw new UnityEditor.Build.BuildFailedException(
-                        "[FABuildTools] Couldn't find Build Settings, please create one!");
+                Debug.Log("[FABuildTools] No Build Properties found. Analytics module is optional; proceeding with build.");
+                return;
             }
-
+            
+            if (guids.Length > 1)
+            {
+                Debug.LogErrorFormat("[FABuildTools] Found more than 1 Build Properties: {0}. Using first one!",
+                    guids.Length);
+            }
+            
             var path = AssetDatabase.GUIDToAssetPath(guids[0]);
             var buildSettings = AssetDatabase.LoadAssetAtPath<BuildData>(path);
+
             if (buildSettings == null)
             {
                 throw new BuildFailedException(
                     $"[FABuildTools] Found asset at '{path}' but failed to load as BuildData. Ensure a BuildData asset exists and matches the type.");
             }
-            buildSettings.LastBuildTime = DateTime.Now.ToString("yyyy/MM/dd-HH:mm:ss"); // case sensitive
-            buildSettings.EditorRefreshScriptingBackend(report.summary.platform);
-#if UNITY_IOS
-            buildSettings.BuildNumber = PlayerSettings.iOS.buildNumber;
-#endif
-#if UNITY_ANDROID
-            buildSettings.BuildNumber = PlayerSettings.Android.bundleVersionCode.ToString();
-#endif
-#if UNITY_CLOUD_BUILD
-            buildSettings.RepositoryVersion += "-cloud";
-#endif
+            
+            buildSettings.FillCurrentSettings();
 
+            // Only enforce store selection if user has explicitly enabled it
             if (buildSettings.EnforceStoreOnBuild)
             {
                 var selectedStore = ShowStoreSelectionDialog();
@@ -59,7 +55,7 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
                 }
                 else
                 {
-                    throw new BuildFailedException("[FABuildTools] Store name is not set, either set it from `Build Settings` or disable `Enforce Store On Build`");
+                    Debug.LogWarning("[FABuildTools] Store name not selected. Proceeding with Unknown store. You can set it manually via AnalyticsManager.SetStore() at runtime.");
                 }
             }
 
