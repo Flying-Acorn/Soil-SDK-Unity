@@ -8,7 +8,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
     /// </summary>
     public class TMPFontHelper
     {
-        [MenuItem("Soil/Advertisement/Font Tools/Open TMP Font Asset Creator")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Open TMP Font Asset Creator")]
         public static void OpenFontAssetCreator()
         {
             // Open the TMP Font Asset Creator window
@@ -29,7 +29,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("11. Save as 'NotoSansArabic_Persian_TMP' in TMP_FontAssets folder");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Essential Arabic Range")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Essential Arabic Range")]
         public static void CopyEssentialArabicRange()
         {
             // Reduced range focusing on essential Arabic characters
@@ -39,7 +39,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("This includes basic Latin + core Arabic characters only");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Full Persian/Arabic Range")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Full Persian/Arabic Range")]
         public static void CopyFullPersianArabicRange()
         {
             // Complete range including Persian extensions
@@ -49,7 +49,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Includes: Latin, Hebrew, Arabic, Arabic Supplement, Arabic Extended-A, Arabic Presentation Forms A & B");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Essential Characters")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Essential Characters")]
         public static void CopyEssentialCharacters()
         {
             // Essential characters as text (not Unicode ranges)
@@ -63,7 +63,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Use 'Character Set > Custom Characters' in Font Asset Creator and paste this");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Essential Persian Characters")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Essential Persian Characters")]
         public static void CopyEssentialPersianCharacters()
         {
             // Essential characters including Persian-specific ones
@@ -82,7 +82,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("This includes Persian-specific: پ چ ژ ک گ ی");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Minimal Persian Range")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Minimal Persian Range")]
         public static void CopyMinimalPersianRange()
         {
             // Absolutely minimal range - just what you need for Persian ads
@@ -94,7 +94,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Use this if you can't fit larger character sets");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Ultra Minimal Persian Range")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Ultra Minimal Persian Range")]
         public static void CopyUltraMinimalPersianRange()
         {
             // Ultra minimal - only the most essential characters for ads
@@ -105,7 +105,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Should be under 2MB");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Just Persian Letters")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Just Persian Letters")]
         public static void CopyJustPersianLetters()
         {
             // Just the Persian-specific letters as characters (not Unicode)
@@ -115,7 +115,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Add these to an existing Arabic font asset");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Contextual Forms Only")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Contextual Forms Only")]
         public static void CopyContextualFormsOnly()
         {
             // Only the contextual/connected forms for common letters
@@ -125,7 +125,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("These are the connected versions of Arabic letters");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Generate Test Arabic Text")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Generate Test Arabic Text")]
         public static void GenerateTestArabicText()
         {
             // Common Arabic/Persian characters for testing
@@ -135,7 +135,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Use this text to test your font asset");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Generate Test Persian Text")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Generate Test Persian Text")]
         public static void GenerateTestPersianText()
         {
             // Test text with Persian-specific characters and connected forms
@@ -146,7 +146,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Should include: پ، ی، چ، گ and connected forms");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Troubleshoot Large Character Sets")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Troubleshoot Large Character Sets")]
         public static void TroubleshootLargeCharacterSets()
         {
             Debug.Log("==== Troubleshooting Large Character Sets ====");
@@ -170,7 +170,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Use fallback fonts in TextMeshPro");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Settings for Small Font")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Settings for Small Font")]
         public static void SettingsForSmallFont()
         {
             Debug.Log("==== Settings to Keep Font Under 2MB ====");
@@ -188,7 +188,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("If still too big, use multiple smaller fonts!");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Smart Persian Solution")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Smart Persian Solution")]
         public static void CopySmartPersianSolution()
         {
             // Smart approach: Essential letters + minimal contextual forms
@@ -208,7 +208,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Should be much smaller than 2MB");
             Debug.Log("Use 'Custom Characters' in Font Asset Creator");
         }
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Contextual Forms Characters")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Contextual Forms Characters")]
         public static void CopyContextualFormsCharacters()
         {
             // Essential contextual forms as actual characters (not Unicode ranges)
@@ -252,7 +252,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("- This ensures proper text connection!");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy COMPLETE Contextual Forms")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy COMPLETE Contextual Forms")]
         public static void CopyCompleteContextualForms()
         {
             // COMPREHENSIVE contextual forms - this should fix connection issues
@@ -291,7 +291,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("- This SHOULD fix connection issues definitively!");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Copy Contextual Forms Range")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Copy Contextual Forms Range")]
         public static void CopyContextualFormsRange()
         {
             // Unicode ranges that include contextual forms for proper Arabic/Persian connection
@@ -303,7 +303,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Paste this in TMP Font Asset Creator > Character Set > Unicode Range");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Alternative: Use System Font")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Alternative: Use System Font")]
         public static void AlternativeSystemFont()
         {
             Debug.Log("==== Alternative Solution: System Font Approach ====");
@@ -317,7 +317,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("Cons: Less control over appearance");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Fix Text Connection Issues")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Fix Text Connection Issues")]
         public static void FixTextConnectionIssues()
         {
             Debug.Log("==== FIXING PERSIAN/ARABIC TEXT CONNECTION ISSUES ====");
@@ -346,7 +346,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("- Use 'Test Text Connection' below to verify your font supports connection");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Test Text Connection")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Test Text Connection")]
         public static void TestTextConnection()
         {
             string testText = "بسم الله الرحمن الرحیم";
@@ -365,7 +365,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("If letters appear isolated, your font asset needs contextual forms!");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Verify Font Asset Quality")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Verify Font Asset Quality")]
         public static void VerifyFontAssetQuality()
         {
             Debug.Log("==== VERIFYING TMP FONT ASSET QUALITY ====");
@@ -399,7 +399,7 @@ namespace FlyingAcorn.Soil.Advertisement.Editor
             Debug.Log("   - This font file includes all necessary contextual forms");
         }
 
-        [MenuItem("Soil/Advertisement/Font Tools/Debug Font Asset Connection")]
+        [MenuItem("FlyingAcorn/Soil/Advertisement/Font Tools/Debug Font Asset Connection")]
         public static void DebugFontAssetConnection()
         {
             Debug.Log("==== DEBUGGING FONT ASSET CONNECTION SUPPORT ====");
