@@ -4,14 +4,15 @@ using UnityEngine;
 
 namespace FlyingAcorn.Analytics.BuildData
 {
-    [CreateAssetMenu(fileName = Constants.BuildSettingsName + ".asset", menuName = "FlyingAcorn/Build Settings")]
     public class BuildData : ScriptableObject
     {
         public Constants.Store StoreName;
         public bool EnforceStoreOnBuild = false;
+        public bool PreserveStoreAfterBuild = false;
         [HideInInspector] public string BuildNumber;
         [HideInInspector] public string LastBuildTime;
         [HideInInspector] public string ScriptingBackend;
+
 
 #if UNITY_EDITOR
 

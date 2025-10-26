@@ -8,6 +8,7 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
     {
         private SerializedProperty _storeNameProp;
         private SerializedProperty _enforceStoreOnBuildProp;
+        private SerializedProperty _preserveStoreAfterBuildProp;
         private SerializedProperty _buildNumberProp;
         private SerializedProperty _lastBuildTimeProp;
         private SerializedProperty _scriptingBackendProp;
@@ -16,6 +17,7 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
         {
             _storeNameProp = serializedObject.FindProperty("StoreName");
             _enforceStoreOnBuildProp = serializedObject.FindProperty("EnforceStoreOnBuild");
+            _preserveStoreAfterBuildProp = serializedObject.FindProperty("PreserveStoreAfterBuild");
             _buildNumberProp = serializedObject.FindProperty("BuildNumber");
             _lastBuildTimeProp = serializedObject.FindProperty("LastBuildTime");
             _scriptingBackendProp = serializedObject.FindProperty("ScriptingBackend");
@@ -36,7 +38,7 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
             EditorGUILayout.LabelField("Store Configuration", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(_storeNameProp, new GUIContent("Store Name", 
                 "Target store for this build (GooglePlay, AppStore, etc.)"));
-            EditorGUILayout.PropertyField(_enforceStoreOnBuildProp, new GUIContent("Enforce Store On Build (Recommended)", 
+            EditorGUILayout.PropertyField(_enforceStoreOnBuildProp, new GUIContent("Enforce Store On Build", 
                 "When enabled, build process will prompt for store selection if not set."));
             
             if (_enforceStoreOnBuildProp.boolValue)
@@ -50,6 +52,21 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
                 EditorGUILayout.HelpBox(
                     "Enforcement is disabled. Manually call AnalyticsManager.SetStore() in your code to set the store at runtime.", 
                     MessageType.Warning);
+            }
+            EditorGUILayout.PropertyField(_preserveStoreAfterBuildProp, new GUIContent("Preserve Store After Build", 
+                "When enabled, the store setting will be preserved during the build process."));
+            
+            if (_preserveStoreAfterBuildProp.boolValue)
+            {
+                EditorGUILayout.HelpBox(
+                    "Store setting will be preserved after build. Use this for projects where the target store is NOT going to change.", 
+                    MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox(
+                    "Store setting will be reset to Unknown after successful build.", 
+                    MessageType.Info);
             }
             
             EditorGUILayout.Space(10);

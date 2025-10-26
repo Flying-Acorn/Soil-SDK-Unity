@@ -31,6 +31,18 @@ namespace FlyingAcorn.Analytics
             set => PlayerPrefs.SetString($"{Prefix}InstallationBuild", value);
         }
 
+        public static string RecordedBuildNumber
+        {
+            get => PlayerPrefs.GetString($"{Prefix}RecordedBuildNumber");
+            set => PlayerPrefs.SetString($"{Prefix}RecordedBuildNumber", value);
+        }
+
+        public static bool GDPRConsent
+        {
+            get => PlayerPrefs.GetInt($"{Prefix}GDPRConsent", 0) == 1;
+            set => PlayerPrefs.SetInt($"{Prefix}GDPRConsent", value ? 1 : 0);
+        }
+
         public static bool UserDebugMode
         {
             get => PlayerPrefs.GetInt($"{Prefix}UserDebugMode", 0) == 1;

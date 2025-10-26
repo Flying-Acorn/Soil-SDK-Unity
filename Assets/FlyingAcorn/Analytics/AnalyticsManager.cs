@@ -56,15 +56,31 @@ namespace FlyingAcorn.Analytics
             AnalyticServiceProvider.SetConsents();
         }
 
-        // Try setting once, or (recommended) use the `Build Settings` to enforce store on build
+        // Call this before Initialization
+        public static void SaveUserIdentifier(string playerId)
+        {
+
+            AnalyticsPlayerPrefs.CustomUserId = playerId;
+        }
+
+        // Call this before Initialization
+        public static void SetGDPRConsent(bool consent)
+        {
+            AnalyticsPlayerPrefs.GDPRConsent = consent;
+        }
+
+        /// <summary>
+        /// Sets the store for analytics tracking.
+        /// </summary>
+        /// <param name="store">The store enum value (e.g., GooglePlay, AppStore).</param>
+        /// <remarks>
+        /// Call this method before AnalyticsManager.Initialize() if build enforcement is disabled.
+        /// It is recommended to set the store via Build Settings instead for automatic enforcement.
+        /// Do not call multiple times; set once at startup.
+        /// </remarks>
         public static void SetStore(Analytics.BuildData.Constants.Store store)
         {
             AnalyticsPlayerPrefs.Store = store;
-        }
-
-        public static void SaveUserIdentifier(string playerId)
-        {
-            AnalyticsPlayerPrefs.CustomUserId = playerId;
         }
 
         protected static void SetAnalyticsConsents()
