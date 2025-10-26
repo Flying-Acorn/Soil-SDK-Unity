@@ -199,7 +199,16 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
                 var cohort = _pendingCohortIdForAnalytics;
                 _pendingCohortIdForAnalytics = null; // clear before sending to avoid reentrancy issues
                 MyDebug.Info($"Flushing deferred analytics cohort segmentation: {cohort}");
-                AnalyticsManager.UserSegmentation("ABTestingCohortID", cohort, 3);
+                try
+                {
+                    AnalyticsManager.UserSegmentation("ABTestingCohortID", cohort, 3);
+                }
+                catch (Exception ex)
+                {
+                    // Restore pending value so we can retry later if sending fails unexpectedly
+                    _pendingCohortIdForAnalytics = cohort;
+                    MyDebug.LogWarning($"Failed to flush deferred analytics cohort segmentation: {ex.Message}");
+                }
             }
         }
     }
