@@ -31,7 +31,7 @@ The Soil SDK officially supports **Android** and **iOS** platforms. While the SD
 Ensure the following are present in your project:
 - <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a>: Within Package Manager, import `com.unity.nuget.newtonsoft-json` package by name
 - <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a> - Embedded within Unity
-- Internal Analytics
+- <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>(Embedded within downloaded packages)
 - <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>(Embedded within downloaded packages)
 
 **Note for Demo Scenes**: If you plan to use the demo scenes included with the SDK, you must import the TextMeshPro Essential Resources. Go to `Window > TextMeshPro > Import TMP Essential Resources` in the Unity Editor.
@@ -59,7 +59,7 @@ Inside your `Assets/Resources/` create a `FA_Build_Settings.asset` using the fol
 ### Build Settings Configuration
 
 - **StoreName**: Select the target store for your build (e.g., GooglePlay, AppStore, CafeBazaar). This ensures analytics and other services are configured correctly for the platform.
-- **EnforceStoreOnBuild**: When enabled, the build process will prompt you to select a store if none is set. The build will fail if you cancel the selection dialog without choosing a store. This ensures proper store attribution for analytics tracking.
+- **EnforceStoreOnBuild**: When enabled, the build process will prompt you to select a store if unknown is set. This ensures proper store attribution for analytics tracking.
 
 ## Installation Complete
 
