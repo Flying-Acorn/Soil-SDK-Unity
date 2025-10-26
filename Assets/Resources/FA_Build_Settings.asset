@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   StoreName: 0
   EnforceStoreOnBuild: 1
-  BuildNumber: 25
-  LastBuildTime: 2025/10/25-19:45:01
+  PreserveStoreAfterBuild: 0
+  BuildNumber: 26
+  LastBuildTime: 2025/10/26-15:19:05
   ScriptingBackend: IL2CPP
