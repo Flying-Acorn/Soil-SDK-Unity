@@ -39,7 +39,7 @@ namespace FlyingAcorn.Analytics.BuildData
             return buildDate;
         }
 
-        internal static Constants.Store GetStore()
+        internal static Constants.Store GetBuildStore()
         {
             if (!_buildSettings)
                 _buildSettings = Resources.Load<BuildData>(Constants.BuildSettingsName);

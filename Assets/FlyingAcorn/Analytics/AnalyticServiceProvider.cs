@@ -8,6 +8,9 @@ using static FlyingAcorn.Analytics.Constants.ResourceFlowType;
 
 namespace FlyingAcorn.Analytics
 {
+    /// <summary>
+    /// Provides analytics services by delegating to multiple IAnalytics implementations.
+    /// </summary>
     public class AnalyticServiceProvider : IAnalytics
     {
         #region public fields
@@ -18,6 +21,10 @@ namespace FlyingAcorn.Analytics
 
         #region methods
 
+        /// <summary>
+        /// Initializes a new instance of the AnalyticServiceProvider class with the provided services.
+        /// </summary>
+        /// <param name="services">The list of analytics services to use.</param>
         public AnalyticServiceProvider(List<IAnalytics> services)
         {
             if (services is null || services.Count <= 0)
@@ -35,6 +42,9 @@ namespace FlyingAcorn.Analytics
         public string EventSeparator => "_";
         internal static Action<string> OnEventSent { get; set; }
 
+        /// <summary>
+        /// Initializes all analytics services.
+        /// </summary>
         public void Initialize()
         {
             if (IsInitialized)
@@ -55,12 +65,20 @@ namespace FlyingAcorn.Analytics
             IsInitialized = true;
         }
 
+        /// <summary>
+        /// Gets the list of analytics services.
+        /// </summary>
+        /// <returns>The list of IAnalytics services.</returns>
         public List<IAnalytics> GetServices()
         {
             return _services;
         }
 
-        // ATTENTION: DO NOT USE MYDEBUG HERE
+        /// <summary>
+        /// Sends an error event to all analytics services.
+        /// </summary>
+        /// <param name="severity">The severity level of the error.</param>
+        /// <param name="message">The error message.</param>
         public void ErrorEvent(FlyingAcornErrorSeverity severity, string message)
         {
             if (MyDebug.GetLogLevel() <= FlyingAcornErrorSeverity.DebugSeverity)
@@ -70,6 +88,12 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("ErrorEvent", s => s.ErrorEvent(severity, message));
         }
 
+        /// <summary>
+        /// Sends user segmentation data to analytics services.
+        /// </summary>
+        /// <param name="name">The segmentation name.</param>
+        /// <param name="property">The segmentation property.</param>
+        /// <param name="dimension">The dimension (used by GameAnalytics).</param>
         public void UserSegmentation(string name, string property, int dimension)
         {
             MyDebug.Verbose(
@@ -77,6 +101,14 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("UserSegmentation", s => s.UserSegmentation(name, property));
         }
 
+        /// <summary>
+        /// Sends a resource event to analytics services.
+        /// </summary>
+        /// <param name="flowType">The type of resource flow.</param>
+        /// <param name="currency">The currency involved.</param>
+        /// <param name="amount">The amount of the resource.</param>
+        /// <param name="itemType">The type of the item.</param>
+        /// <param name="itemID">The ID of the item.</param>
         public void ResourceEvent(FlyingAcornResourceFlowType flowType, string currency, float amount, string itemType,
             string itemID)
         {
@@ -86,17 +118,33 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("ResourceEvent", s => s.ResourceEvent(flowType, currency, amount, itemType, itemID));
         }
 
+        /// <summary>
+        /// Sets the user identifier for analytics services.
+        /// </summary>
         public void SetUserIdentifier()
         {
             // Call on each adapter manually
         }
 
+        /// <summary>
+        /// Sets consents for analytics services.
+        /// </summary>
         public void SetConsents()
         {
             MyDebug.Verbose("Sending consents to analytics for these services: {GetServiceNames()}");
             ForEachServiceSafely("SetConsents", s => s.SetConsents());
         }
 
+        /// <summary>
+        /// Sends a business event to analytics services.
+        /// </summary>
+        /// <param name="currency">The currency of the transaction.</param>
+        /// <param name="amount">The amount of the transaction.</param>
+        /// <param name="itemType">The type of the item purchased.</param>
+        /// <param name="itemId">The ID of the item.</param>
+        /// <param name="cartType">The type of cart.</param>
+        /// <param name="Store">The store where the purchase was made.</param>
+        /// <param name="receipt">The receipt of the transaction.</param>
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
             Store Store, string receipt = null)
         {
@@ -106,6 +154,17 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("BusinessEvent", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, Store, receipt));
         }
 
+        /// <summary>
+        /// Sends a business event to analytics services with custom data.
+        /// </summary>
+        /// <param name="currency">The currency of the transaction.</param>
+        /// <param name="amount">The amount of the transaction.</param>
+        /// <param name="itemType">The type of the item purchased.</param>
+        /// <param name="itemId">The ID of the item.</param>
+        /// <param name="cartType">The type of cart.</param>
+        /// <param name="Store">The store where the purchase was made.</param>
+        /// <param name="receipt">The receipt of the transaction.</param>
+        /// <param name="customData">Additional custom data.</param>
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
             Store Store, string receipt, Dictionary<string, object> customData)
         {
@@ -115,7 +174,11 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, Store, receipt, customData));
         }
 
-
+        /// <summary>
+        /// Sends a sign up event to analytics services.
+        /// </summary>
+        /// <param name="method">The sign up method.</param>
+        /// <param name="extraFields">Additional fields for the event.</param>
         public void SignUpEvent(string method, Dictionary<string, object> extraFields = null)
         {
             MyDebug.Verbose($" Sending sign up event to analytics with extraFields: {GetNames(extraFields)} for these services: {GetServiceNames()}");
@@ -165,8 +228,9 @@ namespace FlyingAcorn.Analytics
         /// <summary>
         /// Track any type of design event that you want to measure i.e. GUI elements or tutorial steps.
         /// </summary>
+        /// <param name="value">The value to be tracked with the event.</param>
         /// <param name="eventSteps">The array can consist of 1 to 5 steps.
-        /// For example, "level", "start", "1" will be translated to "level:start:1" or "level_start_1" for some services.</param> 
+        /// For example, "level", "start", "1" will be translated to "level:start:1" or "level_start_1" for some services.</param>
         public void DesignEvent(float value, params string[] eventSteps)
         {
             if (eventSteps.Length == 0)
@@ -183,6 +247,8 @@ namespace FlyingAcorn.Analytics
         /// <summary>
         /// Track any type of design event that you want to measure i.e. GUI elements or tutorial steps.
         /// </summary>
+        /// <param name="value">The value to be tracked with the event.</param>
+        /// <param name="customFields">Extra data to be sent with the event.</param>
         /// <param name="eventSteps">The array can consist of 1 to 5 steps.
         /// For example, "level", "start", "1" will be translated to "level:start:1" or "level_start_1" for some services.</param> 
         public void DesignEvent(float value, Dictionary<string, object> customFields, params string[] eventSteps)
@@ -198,6 +264,12 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("DesignEvent(value,customFields)", s => s.DesignEvent(value, customFields, eventSteps));
         }
 
+        /// <summary>
+        /// Sends a progression event to analytics services.
+        /// </summary>
+        /// <param name="progressionStatus">The status of the progression.</param>
+        /// <param name="levelType">The type of the level.</param>
+        /// <param name="levelNumber">The number of the level.</param>
         public void ProgressionEvent(FlyingAcornProgressionStatus progressionStatus, string levelType,
             string levelNumber)
         {
@@ -207,6 +279,11 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("ProgressionEvent", s => s.ProgressionEvent(progressionStatus, levelType, levelNumber));
         }
 
+        /// <summary>
+        /// Sends a non-level progression event to analytics services.
+        /// </summary>
+        /// <param name="progressionStatus">The status of the progression.</param>
+        /// <param name="progressionType">The type of progression.</param>
         public void NonLevelProgressionEvent(FlyingAcornNonLevelStatus progressionStatus, string progressionType)
         {
             MyDebug.Verbose("Sending progression event to analytics:" +
@@ -214,6 +291,13 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("NonLevelProgressionEvent", s => s.NonLevelProgressionEvent(progressionStatus, progressionType));
         }
 
+        /// <summary>
+        /// Sends a progression event with score to analytics services.
+        /// </summary>
+        /// <param name="progressionStatus">The status of the progression.</param>
+        /// <param name="levelType">The type of the level.</param>
+        /// <param name="levelNumber">The number of the level.</param>
+        /// <param name="score">The score achieved.</param>
         public void ProgressionEvent(FlyingAcornProgressionStatus progressionStatus, string levelType,
             string levelNumber, int score)
         {
@@ -223,6 +307,14 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("ProgressionEvent(score)", s => s.ProgressionEvent(progressionStatus, levelType, levelNumber, score));
         }
 
+        /// <summary>
+        /// Sends a progression event with score and custom fields to analytics services.
+        /// </summary>
+        /// <param name="progressionStatus">The status of the progression.</param>
+        /// <param name="levelType">The type of the level.</param>
+        /// <param name="levelNumber">The number of the level.</param>
+        /// <param name="score">The score achieved.</param>
+        /// <param name="customFields">Additional custom fields.</param>
         public void ProgressionEvent(FlyingAcornProgressionStatus progressionStatus, string levelType,
             string levelNumber, int score, Dictionary<string, object> customFields)
         {
@@ -232,6 +324,11 @@ namespace FlyingAcorn.Analytics
             ForEachServiceSafely("ProgressionEvent(score,customFields)", s => s.ProgressionEvent(progressionStatus, levelType, levelNumber, score, customFields));
         }
 
+        /// <summary>
+        /// Gets a string representation of the custom fields dictionary.
+        /// </summary>
+        /// <param name="customFields">The dictionary of custom fields.</param>
+        /// <returns>A string representation of the custom fields.</returns>
         private static string GetNames(Dictionary<string, object> customFields)
         {
             if (customFields == null || customFields.Count == 0)
@@ -240,6 +337,10 @@ namespace FlyingAcorn.Analytics
         }
 
 
+        /// <summary>
+        /// Gets a string representation of the service names.
+        /// </summary>
+        /// <returns>A comma-separated string of service names.</returns>
         private object GetServiceNames()
         {
             return string.Join(", ", _services.Select(x => x.GetType().Name));

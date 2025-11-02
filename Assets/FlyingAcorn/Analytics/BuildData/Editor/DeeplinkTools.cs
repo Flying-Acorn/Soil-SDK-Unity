@@ -91,6 +91,14 @@ namespace FlyingAcorn.Analytics.BuildData.Editor
             }
 
             var intentFilterNode = doc.CreateElement("intent-filter");
+            
+            // Add android:autoVerify="true" for https/http schemes (App Links)
+            if (scheme.Equals("https", StringComparison.OrdinalIgnoreCase) || 
+                scheme.Equals("http", StringComparison.OrdinalIgnoreCase))
+            {
+                intentFilterNode.SetAttribute("autoVerify", namespaceOfPrefix, "true");
+            }
+            
             var actionNode = doc.CreateElement("action");
             actionNode.SetAttribute("name", namespaceOfPrefix, "android.intent.action.VIEW");
             intentFilterNode.AppendChild(actionNode);

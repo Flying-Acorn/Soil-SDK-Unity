@@ -1,5 +1,3 @@
-using System;
-
 namespace FlyingAcorn.Analytics.BuildData
 {
     public static class Constants

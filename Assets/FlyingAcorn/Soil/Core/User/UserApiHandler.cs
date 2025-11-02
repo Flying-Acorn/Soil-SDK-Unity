@@ -363,7 +363,7 @@ namespace FlyingAcorn.Soil.Core.User
                     return;
                 }
 
-                var currentStore = DataUtils.GetStore().ToString();
+                var currentStore = Analytics.Utils.GetStore().ToString();
                 var storedStore = userInfo.properties.flyingacorn_store_name;
 
                 if (string.IsNullOrEmpty(storedStore))

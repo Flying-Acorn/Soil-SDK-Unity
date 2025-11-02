@@ -25,14 +25,6 @@ namespace FlyingAcorn.Soil.Core.Data
             return Analytics.BuildData.BuildDataUtils.GetBuildDate();
         }
 
-        public static Analytics.BuildData.Constants.Store GetStore()
-        {
-            var store = AnalyticsPlayerPrefs.Store;
-            if (store != Analytics.BuildData.Constants.Store.Unknown)
-                return store;
-            return Analytics.BuildData.BuildDataUtils.GetStore();
-        }
-
         public static IEnumerable<FieldInfo> GetAllFields(this Type t)
         {
             if (t == null)
@@ -71,7 +63,7 @@ namespace FlyingAcorn.Soil.Core.Data
 
         internal static string FindApiUrl()
         {
-            var store = GetStore();
+            var store = Analytics.Utils.GetStore();
             
             switch (store)
             {

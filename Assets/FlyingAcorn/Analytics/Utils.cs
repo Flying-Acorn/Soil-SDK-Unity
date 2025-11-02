@@ -6,6 +6,14 @@ namespace FlyingAcorn.Analytics
 {
     public static class Utils
     {
+        public static Analytics.BuildData.Constants.Store GetStore()
+        {
+            var store = AnalyticsPlayerPrefs.Store;
+            if (store != Analytics.BuildData.Constants.Store.Unknown)
+                return store;
+            return Analytics.BuildData.BuildDataUtils.GetBuildStore();
+        }
+
         [UsedImplicitly]
         public static void StartAndroidActivity(string uri, Constants.Intent action, string package)
         {

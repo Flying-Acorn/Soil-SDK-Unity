@@ -28,7 +28,7 @@ namespace FlyingAcorn.Analytics.Demo
                 // new Services.FirebaseEvents(), // Uncomment this line if you want to use Firebase
                 // new Services.AppMetricaEvents(appMetricaKey) // Uncomment this line if you want to use AppMetrica
             });
-            AnalyticsManager.ErrorEvent(Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, $"This is a test error message, our current store is {FlyingAcorn.Analytics.BuildData.BuildDataUtils.GetStore()}");
+            AnalyticsManager.ErrorEvent(Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, $"This is a test error message, our current store is {Analytics.Utils.GetStore()}");
         }
         
         private void LogCallback(string condition, string stackTrace, LogType type)
