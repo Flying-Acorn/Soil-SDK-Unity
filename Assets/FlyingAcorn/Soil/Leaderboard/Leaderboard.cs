@@ -14,6 +14,9 @@ using Newtonsoft.Json;
 
 namespace FlyingAcorn.Soil.Leaderboard
 {
+    /// <summary>
+    /// Static class for leaderboard operations including score submission and fetching.
+    /// </summary>
     public static class Leaderboard
     {
         private static string LeaderboardBaseUrl => $"{Core.Data.Constants.ApiUrl}/leaderboard/v2";
@@ -21,9 +24,19 @@ namespace FlyingAcorn.Soil.Leaderboard
         private static string ReportScoreUrl => $"{LeaderboardBaseUrl}/reportscore/";
         private static string FetchLeaderboardUrl => $"{LeaderboardBaseUrl}/getleaderboard/";
 
+        /// <summary>
+        /// Gets whether the Leaderboard service is ready for use.
+        /// </summary>
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
 
 
+        /// <summary>
+        /// Submits a score to a leaderboard.
+        /// </summary>
+        /// <param name="score">The score to submit.</param>
+        /// <param name="leaderboardId">The ID of the leaderboard.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
+        /// <returns>The user's score entry with rank information.</returns>
         [UsedImplicitly]
         public static async UniTask<UserScore> ReportScore(double score, string leaderboardId, CancellationToken cancellationToken = default)
         {
@@ -38,7 +51,13 @@ namespace FlyingAcorn.Soil.Leaderboard
 
         ///<summary>
         ///Report a score to the leaderboard, when your scores are too big to be parsed as a double.
-        ///</summary>
+        /// <summary>
+        /// Submits a string score to a leaderboard. You can also submit string scores for large numbers.
+        /// </summary>
+        /// <param name="score">The score to submit as a string.</param>
+        /// <param name="leaderboardId">The ID of the leaderboard.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
+        /// <returns>The user's score entry with rank information.</returns>
         [UsedImplicitly]
         public static async UniTask<UserScore> ReportScore(string score, string leaderboardId, CancellationToken cancellationToken = default)
         {
@@ -104,6 +123,11 @@ namespace FlyingAcorn.Soil.Leaderboard
             throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
         }
 
+        /// <summary>
+        /// Removes your score from a leaderboard.
+        /// </summary>
+        /// <param name="leaderboardId">The ID of the leaderboard.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
         public static async UniTask DeleteScore(string leaderboardId, CancellationToken cancellationToken = default)
         {
             if (!SoilServices.Ready)
@@ -142,6 +166,14 @@ namespace FlyingAcorn.Soil.Leaderboard
             throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
         }
 
+        /// <summary>
+        /// Gets top players from a leaderboard. Get leaderboard relative to the current player by setting relative to true.
+        /// </summary>
+        /// <param name="leaderboardId">The ID of the leaderboard.</param>
+        /// <param name="count">Number of players to fetch.</param>
+        /// <param name="relative">If true, shows players around your rank.</param>
+        /// <param name="cancellationToken">Optional cancellation token.</param>
+        /// <returns>List of user scores.</returns>
         public static async UniTask<List<UserScore>> FetchLeaderboardAsync(string leaderboardId, int count = 10,
             bool relative = false, CancellationToken cancellationToken = default)
         {

@@ -5,6 +5,9 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 {
+    /// <summary>
+    /// Static class for managing A/B testing data in local player preferences.
+    /// </summary>
     public static class ABTestingPlayerPrefs
     {
         private static string KeysPrefix => $"{UserPlayerPrefs.GetKeysPrefix()}ab_testing_";
@@ -12,7 +15,11 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         private static string SeenChallengersKey => $"{KeysPrefix}seen_challengers";
 
 
-        internal static string GetLastExperimentId()
+        /// <summary>
+        /// Gets the ID of the last experiment cohort the user was assigned to.
+        /// </summary>
+        /// <returns>The experiment ID, or default if none.</returns>
+        public static string GetLastExperimentId()
         {
             return PlayerPrefs.GetString(LastExperimentKey, Constants.NoCohortName);
         }

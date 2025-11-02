@@ -67,10 +67,24 @@ namespace FlyingAcorn.Soil.Core
             TimeSpan.FromSeconds(20),   // Maximum delay for severe issues
         };
 
+        /// <summary>
+        /// Gets the current user's information.
+        /// </summary>
         [UsedImplicitly] public static UserInfo UserInfo => UserPlayerPrefs.UserInfoInstance;
+
+        /// <summary>
+        /// Event fired when the SDK services are ready for use.
+        /// </summary>
         [UsedImplicitly] public static Action OnServicesReady;
+
+        /// <summary>
+        /// Event fired when SDK initialization fails.
+        /// </summary>
         [UsedImplicitly] public static Action<SoilException> OnInitializationFailed;
 
+        /// <summary>
+        /// Gets whether the SDK is ready for use.
+        /// </summary>
         [UsedImplicitly]
         public static bool Ready
         {
@@ -157,6 +171,9 @@ namespace FlyingAcorn.Soil.Core
             CompleteAndClearQueuedRequests(new SoilException("SoilServices was destroyed", SoilExceptionErrorCode.Canceled));
         }
 
+        /// <summary>
+        /// Initializes the Soil SDK Core. Call this at the start of your application.
+        /// </summary>
         public static void InitializeAsync()
         {
             InitializeOnMainThreadAsync().Forget();

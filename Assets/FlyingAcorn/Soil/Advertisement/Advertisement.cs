@@ -20,6 +20,9 @@ namespace FlyingAcorn.Soil.Advertisement
 {
     public class Advertisement
     {
+        /// <summary>
+        /// Gets whether the Advertisement service is ready for use.
+        /// </summary>
         [UsedImplicitly]
         public static bool Ready => _campaignSelectionSucceeded;
         private static string AdvertisementBaseUrl => $"{Core.Data.Constants.ApiUrl}/advertisement/";
@@ -48,6 +51,10 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
+        /// <summary>
+        /// Initializes the Advertisement service with the desired ad formats. Consider conditional initialization based on user preferences or purchases.
+        /// </summary>
+        /// <param name="adFormats">List of ad formats to initialize (banner, interstitial, rewarded).</param>
         public static void InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)
@@ -606,6 +613,10 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
+        /// <summary>
+        /// Shows an ad of the specified format if it is ready.
+        /// </summary>
+        /// <param name="adFormat">The ad format to show (banner, interstitial, rewarded).</param>
         public static void ShowAd(AdFormat adFormat)
         {
             // Check if assets are available for this ad format
@@ -670,6 +681,10 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
+        /// <summary>
+        /// Hides an ad of the specified format. Useful for banner ads during gameplay.
+        /// </summary>
+        /// <param name="adFormat">The ad format to hide (typically banner).</param>
         public static void HideAd(AdFormat adFormat)
         {
             if (_activePlacements.TryGetValue(adFormat, out var instance) && instance != null)
@@ -700,6 +715,10 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
+        /// <summary>
+        /// Loads an ad for the specified format. For optimal user experience, load ads immediately after initialization.
+        /// </summary>
+        /// <param name="adFormat">The ad format to load (banner, interstitial, rewarded).</param>
         public static void LoadAd(AdFormat adFormat)
         {
             // Check rewarded ad cooldown only (don't block loading for other formats)
@@ -936,13 +955,10 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Checks if assets for a specific ad format are cached and ready
-        /// For rewarded ads, also checks cooldown period
-        /// IMPORTANT: Every ad format must have at least one cached image before being considered ready,
-        /// even for video ads. This ensures a fallback image is available while video loads/renders.
+        /// Checks if an ad format is ready to be shown. Always check this before calling ShowAd.
         /// </summary>
         /// <param name="adFormat">The ad format to check</param>
-        /// <returns>True if assets are cached for this format and not in cooldown</returns>
+        /// <returns>True if the ad format is ready to be shown</returns>
         public static bool IsFormatReady(AdFormat adFormat)
         {
             var assets = AssetCache.GetCachedAssets(adFormat);

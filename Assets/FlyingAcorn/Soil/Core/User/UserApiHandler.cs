@@ -212,13 +212,12 @@ namespace FlyingAcorn.Soil.Core.User
             return UserPlayerPrefs.UserInfo;
         }
 
-        /// <summary>
-        /// Creates a fluent builder for updating player info safely.
-        /// This automatically creates a copy of the current UserInfo to avoid reference issues.
-        /// </summary>
-        /// <returns>A UserInfoUpdateBuilder for fluent API usage</returns>
         [ItemNotNull]
         [UsedImplicitly]
+        /// <summary>
+        /// Creates a fluent builder for updating player information. Use the builder methods to set fields and call await to commit.
+        /// </summary>
+        /// <returns>A UserInfoUpdateBuilder for chaining update operations.</returns>
         public static UserInfoUpdateBuilder UpdatePlayerInfo()
         {
             if (!SoilServices.Ready)

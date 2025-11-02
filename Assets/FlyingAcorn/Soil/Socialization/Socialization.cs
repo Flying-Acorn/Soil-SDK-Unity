@@ -14,13 +14,23 @@ using Newtonsoft.Json;
 
 namespace FlyingAcorn.Soil.Socialization
 {
+    /// <summary>
+    /// Static class for socialization features including friends management and social leaderboards.
+    /// </summary>
     public static class Socialization
     {
+        /// <summary>
+        /// Gets whether the Socialization service is ready for use.
+        /// </summary>
         [UsedImplicitly] public static bool Ready => SoilServices.Ready;
         private static readonly string SocializationBaseUrl = $"{Core.Data.Constants.ApiUrl}/socialization/";
         private static readonly string FriendsUrl = $"{SocializationBaseUrl}friends/";
         private static readonly string FriendsLeaderboardUrl = $"{SocializationBaseUrl}v2/getfriendleaderboard/";
 
+        /// <summary>
+        /// Fetches the current user's friends list.
+        /// </summary>
+        /// <returns>The friends response containing the list of friends.</returns>
         public static async UniTask<FriendsResponse> GetFriends()
         {
             if (!Ready)
@@ -65,6 +75,11 @@ namespace FlyingAcorn.Soil.Socialization
             return firendshipResponse;
         }
 
+        /// <summary>
+        /// Adds a friend using their UUID.
+        /// </summary>
+        /// <param name="uuid">The UUID of the user to add as a friend.</param>
+        /// <returns>The friends response after adding the friend.</returns>
         public static async UniTask<FriendsResponse> AddFriendWithUUID(string uuid)
         {
             if (string.IsNullOrEmpty(uuid))
@@ -115,6 +130,11 @@ namespace FlyingAcorn.Soil.Socialization
             return friendshipResponse;
         }
 
+        /// <summary>
+        /// Removes a friend using their UUID.
+        /// </summary>
+        /// <param name="uuid">The UUID of the friend to remove.</param>
+        /// <returns>The friends response after removing the friend.</returns>
         public static async UniTask<FriendsResponse> RemoveFriendWithUUID(string uuid)
         {
             if (string.IsNullOrEmpty(uuid))
@@ -166,6 +186,13 @@ namespace FlyingAcorn.Soil.Socialization
             return firendshipResponse;
         }
 
+        /// <summary>
+        /// Fetches leaderboard scores for friends.
+        /// </summary>
+        /// <param name="leaderboardId">The ID of the leaderboard.</param>
+        /// <param name="count">Number of scores to fetch.</param>
+        /// <param name="relative">If true, ranks are relative to the current user.</param>
+        /// <returns>List of user scores for friends.</returns>
         public static async UniTask<List<UserScore>> GetFriendsLeaderboard(string leaderboardId, int count = 10,
             bool relative = false)
         {

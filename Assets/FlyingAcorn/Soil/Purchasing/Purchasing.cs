@@ -18,10 +18,17 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Purchasing
 {
+    /// <summary>
+    /// Static class for in-app purchase operations including item loading, purchasing, and verification.
+    /// </summary>
     public static class Purchasing
     {
         private static bool _isInitializing;
         private static bool _initialized;
+
+        /// <summary>
+        /// Gets whether the Purchasing service is ready for use.
+        /// </summary>
         public static bool Ready => _initialized && SoilServices.Ready;
         private static string PurchasingAPIUrl => PurchasingPlayerPrefs.SavedSettings?.api ?? Constants.ApiUrl;
         private static string PurchaseBaseUrl => $"{PurchasingAPIUrl}/purchase";
@@ -35,11 +42,34 @@ namespace FlyingAcorn.Soil.Purchasing
         private static string _lastItemsQueryApi;              // Last API actually used inside QueryItems()
         private static bool _itemsQueried;                     // Whether we have successfully performed at least one QueryItems()
 
+        /// <summary>
+        /// Event fired when a purchase process starts.
+        /// </summary>
         [UsedImplicitly] public static Action<Item> OnPurchaseStart;
+
+        /// <summary>
+        /// Event fired when a purchase is successfully completed and verified.
+        /// </summary>
         [UsedImplicitly] public static Action<Purchase> OnPurchaseSuccessful;
+
+        /// <summary>
+        /// Event fired when loading items fails.
+        /// </summary>
         [UsedImplicitly] public static Action<SoilException> OnItemsFailed;
+
+        /// <summary>
+        /// Event fired when purchasable items are received.
+        /// </summary>
         [UsedImplicitly] public static Action<List<Item>> OnItemsReceived;
+
+        /// <summary>
+        /// Event fired when the purchasing system is initialized.
+        /// </summary>
         [UsedImplicitly] public static Action OnPurchasingInitialized;
+
+        /// <summary>
+        /// Event fired when purchasing initialization fails.
+        /// </summary>
         [UsedImplicitly] public static Action<SoilException> OnInitializationFailed;
         [UsedImplicitly] public static Action<Dictionary<string, string>> OnDeeplinkActivated;
         private static UniTask? _verifyTask;
@@ -48,8 +78,15 @@ namespace FlyingAcorn.Soil.Purchasing
         private static UniTaskCompletionSource<bool> _remoteConfigCompletionSource;
 
         [UsedImplicitly]
+        /// <summary>
+        /// Gets the list of available purchasable items.
+        /// </summary>
         public static List<Item> AvailableItems => PurchasingPlayerPrefs.CachedItems.FindAll(item => item.enabled);
 
+        /// <summary>
+        /// Initializes the purchasing system. Setting verifyOnInitialize to true enables automatic verification of any previously unverified purchases.
+        /// </summary>
+        /// <param name="verifyOnInitialize">Whether to verify unverified purchases on initialization.</param>
         public static void Initialize(bool verifyOnInitialize = true)
         {
             if (_initialized && !SoilServices.Ready)
@@ -254,6 +291,9 @@ namespace FlyingAcorn.Soil.Purchasing
             EnsureRemoteConfigAndProceed().Forget();
         }
 
+        /// <summary>
+        /// Cleans up the purchasing system when no longer needed.
+        /// </summary>
         public static void DeInitialize()
         {
             UnsubscribeFromCore();
@@ -368,6 +408,10 @@ namespace FlyingAcorn.Soil.Purchasing
             }
         }
 
+        /// <summary>
+        /// Initiates a purchase for the specified SKU. When user selects an item, call this to start the purchase flow.
+        /// </summary>
+        /// <param name="sku">The SKU of the item to purchase.</param>
         [UsedImplicitly]
         public static async UniTask BuyItem(string sku)
         {
@@ -419,6 +463,10 @@ namespace FlyingAcorn.Soil.Purchasing
         }
 
         [UsedImplicitly]
+        /// <summary>
+        /// Verifies a specific purchase manually.
+        /// </summary>
+        /// <param name="purchaseId">The ID of the purchase to verify.</param>
         public static async UniTask VerifyPurchase(string purchaseId)
         {
             if (!Ready)
@@ -466,6 +514,10 @@ namespace FlyingAcorn.Soil.Purchasing
         }
 
         [UsedImplicitly]
+        /// <summary>
+        /// Verifies multiple purchases manually.
+        /// </summary>
+        /// <param name="purchaseIds">List of purchase IDs to verify.</param>
         public static async UniTask BatchVerifyPurchases(List<string> purchaseIds)
         {
             if (!Ready)
@@ -521,6 +573,10 @@ namespace FlyingAcorn.Soil.Purchasing
         }
 
         [UsedImplicitly]
+        /// <summary>
+        /// Opens the invoice for a specific purchase in the browser.
+        /// </summary>
+        /// <param name="purchaseId">The ID of the purchase.</param>
         public static void OpenInvoice(string purchaseId)
         {
             Application.OpenURL(PurchaseInvoiceUrl.Replace("{purchase_id}", purchaseId));
@@ -548,6 +604,9 @@ namespace FlyingAcorn.Soil.Purchasing
                 OnPurchaseSuccessful?.Invoke(purchase);
         }
 
+        /// <summary>
+        /// Removes unpaid purchases from local storage to prevent accumulation of failed transactions.
+        /// </summary>
         public static void RollbackUnpaidPurchases()
         {
             MyDebug.Info("FlyingAcorn ====> Rolling back unpaid purchases");
@@ -557,6 +616,9 @@ namespace FlyingAcorn.Soil.Purchasing
         }
 
         [UsedImplicitly]
+        /// <summary>
+        /// Verifies any pending purchases. Call this when the app regains focus to ensure purchases are validated.
+        /// </summary>
         public static async void SafeVerifyAllPurchases()
         {
             try

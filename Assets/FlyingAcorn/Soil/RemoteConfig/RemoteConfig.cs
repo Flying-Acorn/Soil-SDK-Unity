@@ -14,16 +14,32 @@ using Newtonsoft.Json.Linq;
 
 namespace FlyingAcorn.Soil.RemoteConfig
 {
+    /// <summary>
+    /// Static class for remote configuration management including A/B testing and dynamic settings.
+    /// </summary>
     public static class RemoteConfig
     {
+        /// <summary>
+        /// Event fired when remote config is successfully fetched.
+        /// </summary>
         [UsedImplicitly] public static Action OnSuccessfulFetch;
+
+        /// <summary>
+        /// Event fired when a fetch operation completes, with success status.
+        /// </summary>
         [UsedImplicitly] public static Action<bool> OnServerAnswer;
 
 
+        /// <summary>
+        /// Gets user-defined configuration values.
+        /// </summary>
         [UsedImplicitly]
         public static JObject UserDefinedConfigs =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.UserDefinedParentKey] as JObject;
 
+        /// <summary>
+        /// Gets exchange rates for currency conversions.
+        /// </summary>
         [UsedImplicitly]
         public static JObject ExchangeRates =>
             RemoteConfigPlayerPrefs.CachedRemoteConfigData?[Constants.ExchangeRateParentKey] as JObject;
@@ -46,11 +62,21 @@ namespace FlyingAcorn.Soil.RemoteConfig
         private static string FetchUrl => $"{Core.Data.Constants.ApiUrl}/remoteconfig/";
 
         [UsedImplicitly]
+        /// <summary>
+        /// Gets whether remote config has been fetched and is ready for use.
+        /// </summary>
         public static bool IsFetchedAndReady => _fetchSuccessState && RemoteConfigPlayerPrefs.CachedRemoteConfigData != null;
 
+        /// <summary>
+        /// Gets whether a fetch operation is currently in progress.
+        /// </summary>
         [UsedImplicitly]
         public static bool IsFetching => _fetching;
 
+        /// <summary>
+        /// Fetches configuration data from the server. Results are delivered through events.
+        /// </summary>
+        /// <param name="extraProperties">Optional extra properties for server-side logic.</param>
         public static async void FetchConfig(Dictionary<string, object> extraProperties = null)
         {
             if (_fetching) return;

@@ -8,9 +8,16 @@ using UnityEngine;
 
 namespace FlyingAcorn.Soil.Purchasing
 {
+    /// <summary>
+    /// Static class for handling payment deeplinks when users return from external payment flows.
+    /// </summary>
     public static class DeeplinkHandler
     {
         private static Uri PaymentDeeplink;
+
+        /// <summary>
+        /// Event fired when a payment deeplink is activated with parameters.
+        /// </summary>
         [UsedImplicitly] public static Action<Dictionary<string, string>> OnPaymentDeeplinkActivated;
 
         static DeeplinkHandler()

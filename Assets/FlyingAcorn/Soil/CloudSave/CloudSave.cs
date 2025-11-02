@@ -15,11 +15,24 @@ using Constants = FlyingAcorn.Soil.Core.Data.Constants;
 
 namespace FlyingAcorn.Soil.CloudSave
 {
+    /// <summary>
+    /// Static class for cloud save operations, allowing data persistence across devices.
+    /// </summary>
     public static class CloudSave
     {
         private static string CloudSaveUrl => $"{Constants.ApiUrl}/cloudsave/";
+
+        /// <summary>
+        /// Gets whether the CloudSave service is ready for use.
+        /// </summary>
         public static bool Ready => SoilServices.Ready;
 
+        /// <summary>
+        /// Saves data to the cloud with a key-value pair. Handle exceptions for success/failure.
+        /// </summary>
+        /// <param name="key">The key to save the data under.</param>
+        /// <param name="value">The data to save.</param>
+        /// <param name="isPublic">Whether other users can access this saved data.</param>
         public static async UniTask SaveAsync(string key, object value, bool isPublic = false)
         {
             if (string.IsNullOrEmpty(key))
@@ -86,6 +99,13 @@ namespace FlyingAcorn.Soil.CloudSave
             MyDebug.Info($"{key} saved in cloud");
         }
 
+        /// <summary>
+        /// Loads data by key. Handle cases where data doesn't exist or loading fails.
+        /// </summary>
+        /// <param name="key">The key to load data for.</param>
+        /// <param name="otherUserID">Optional user ID to load data from another user (only public data).</param>
+        /// <param name="extraScopes">Optional additional data scopes.</param>
+        /// <returns>The loaded save model containing the data.</returns>
         public static async UniTask<SaveModel> LoadAsync(string key, string otherUserID = null,
             List<Constants.DataScopes> extraScopes = null)
         {

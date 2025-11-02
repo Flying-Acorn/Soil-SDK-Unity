@@ -2,31 +2,104 @@ using FlyingAcorn.Soil.Advertisement.Data;
 
 namespace FlyingAcorn.Soil.Advertisement
 {
+    /// <summary>
+    /// Static class containing all advertisement-related events for subscribing to ad lifecycle events.
+    /// </summary>
     public static class Events
     {
+        /// <summary>
+        /// Fired when the Advertisement service is successfully initialized.
+        /// </summary>
         public static event System.Action OnInitialized;
+
+        /// <summary>
+        /// Fired when Advertisement service initialization fails.
+        /// </summary>
         public static event System.Action<string> OnInitializeFailed;
 
+        /// <summary>
+        /// Fired when a banner ad is loaded and ready to be shown.
+        /// </summary>
         public static event System.Action<AdEventData> OnBannerAdLoaded;
+
+        /// <summary>
+        /// Fired when a banner ad fails to load or show.
+        /// </summary>
         public static event System.Action<AdEventData> OnBannerAdError;
+
+        /// <summary>
+        /// Fired when a banner ad is shown to the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnBannerAdShown;
+
+        /// <summary>
+        /// Fired when a banner ad is closed by the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnBannerAdClosed;
+
+        /// <summary>
+        /// Fired when a banner ad is clicked by the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnBannerAdClicked;
 
+        /// <summary>
+        /// Fired when an interstitial ad is loaded and ready to be shown.
+        /// </summary>
         public static event System.Action<AdEventData> OnInterstitialAdLoaded;
+
+        /// <summary>
+        /// Fired when an interstitial ad fails to load or show.
+        /// </summary>
         public static event System.Action<AdEventData> OnInterstitialAdError;
+
+        /// <summary>
+        /// Fired when an interstitial ad is shown to the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnInterstitialAdShown;
+
+        /// <summary>
+        /// Fired when an interstitial ad is closed by the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnInterstitialAdClosed;
+
+        /// <summary>
+        /// Fired when an interstitial ad is clicked by the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnInterstitialAdClicked;
 
+        /// <summary>
+        /// Fired when a rewarded ad is loaded and ready to be shown.
+        /// </summary>
         public static event System.Action<AdEventData> OnRewardedAdLoaded;
+
+        /// <summary>
+        /// Fired when a rewarded ad fails to load or show.
+        /// </summary>
         public static event System.Action<AdEventData> OnRewardedAdError;
+
+        /// <summary>
+        /// Fired when a rewarded ad is shown to the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnRewardedAdShown;
+
+        /// <summary>
+        /// Fired when a rewarded ad is closed by the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnRewardedAdClosed;
+
+        /// <summary>
+        /// Fired when a rewarded ad is clicked by the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnRewardedAdClicked;
+
+        /// <summary>
+        /// Fired when a rewarded ad is completed and rewards should be granted to the user.
+        /// </summary>
         public static event System.Action<AdEventData> OnRewardedAdRewarded;
 
-        // Asset caching events
+        /// <summary>
+        /// Fired when assets for an ad format have been loaded and cached. For advanced implementations.
+        /// </summary>
         public static event System.Action<Constants.AdFormat> OnAdFormatAssetsLoaded;
 
         // Internal methods to safely invoke events
