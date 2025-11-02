@@ -9,6 +9,7 @@ using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 using FlyingAcorn.Analytics;
 using TMPro;
 using System.Collections;
+using UnityEngine.Experimental.Rendering;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
@@ -49,6 +50,20 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         public int maxRenderTextureSize = 1024;
         [Tooltip("Quality setting for render texture format")]
         public RenderTextureFormat renderTextureFormat = RenderTextureFormat.RGB565;
+        [Tooltip("Create a render texture sized to the video for better performance")]
+        public bool useDynamicRenderTexture = true;
+        [Tooltip("Prefer routing video audio through an AudioSource for better A/V sync")]
+        public bool preferAudioSourceOutput = true;
+        [Tooltip("Optional AudioSource to output video audio when preferAudioSourceOutput is enabled")]
+        public AudioSource videoAudioSource;
+        [Tooltip("Drop frames to keep up with audio and reduce lag/stutter")]
+        public bool dropFramesToMaintainSync = true;
+        [Tooltip("Enable extra debug checks like first-frame white test (GPU readback) - disable in production")]
+        public bool enableVideoDebugChecks = false;
+    [Tooltip("Force ARGB32 render texture on mobile platforms for maximum compatibility")] 
+    public bool forceARGB32OnMobile = false;
+    [Tooltip("Silence format fallback warnings (will log Verbose instead)")]
+    public bool silentFormatFallbacks = true;
 
         [Header("Ad Configuration")]
         public AdFormat adFormat;
@@ -130,19 +145,33 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Configure video player defaults
             mainAssetVideoPlayer.playOnAwake = false;
             mainAssetVideoPlayer.waitForFirstFrame = true;
-            mainAssetVideoPlayer.skipOnDrop = false; // Changed to false for better sync
+            mainAssetVideoPlayer.skipOnDrop = dropFramesToMaintainSync; // drop frames to keep A/V in sync on mobile
 
             // Platform-specific time update mode configuration for better sync
-#if UNITY_IOS
-            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime; // Better for iOS AVFoundation
-#elif UNITY_ANDROID
-            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.GameTime; // Better for Android MediaPlayer
-#else
-            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime; // Default for other platforms
-#endif
+            // Prefer DSPTime so audio acts as the clock source; helps avoid drift
+            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime;
 
             // Audio configuration for better sync and silent mode handling
-            mainAssetVideoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
+            if (preferAudioSourceOutput && videoAudioSource != null)
+            {
+                try
+                {
+                    mainAssetVideoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
+                    // Route first audio track to provided AudioSource; remaining tracks can be added if needed
+                    mainAssetVideoPlayer.EnableAudioTrack(0, true);
+                    mainAssetVideoPlayer.SetTargetAudioSource(0, videoAudioSource);
+                }
+                catch (System.Exception ex)
+                {
+                    // Some platforms don't support AudioSource output mode, fall back to Direct
+                    MyDebug.LogWarning($"[AdDisplayComponent] AudioSource output mode not supported on this platform, falling back to Direct mode: {ex.Message}");
+                    mainAssetVideoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
+                }
+            }
+            else
+            {
+                mainAssetVideoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
+            }
 
             // Add frame drop event for monitoring performance
             mainAssetVideoPlayer.frameDropped += OnVideoFrameDropped;
@@ -159,8 +188,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         /// </summary>
         private void SetupVideoRawImage()
         {
-            rawAssetImage.gameObject.SetActive(true);
+            // Keep hidden until we have content to display to avoid white flashes
             rawAssetImage.texture = null;
+            rawAssetImage.gameObject.SetActive(false);
         }
 
         /// <summary>
@@ -171,8 +201,27 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             var preAssignedTexture = videoRenderTexture;
 
             mainAssetVideoPlayer.renderMode = VideoRenderMode.RenderTexture;
-            mainAssetVideoPlayer.targetTexture = preAssignedTexture;
-            MyDebug.Verbose($"[AdDisplayComponent] Using pre-assigned render texture: {preAssignedTexture.width}x{preAssignedTexture.height}");
+            // If we want optimal perf, create a texture matching the video; otherwise, use pre-assigned
+            if (useDynamicRenderTexture && mainAssetVideoPlayer.isPrepared)
+            {
+                // Create or resize a dynamic RT based on video dimensions
+                int vw = Mathf.Max(2, (int)mainAssetVideoPlayer.width);
+                int vh = Mathf.Max(2, (int)mainAssetVideoPlayer.height);
+                if (videoRenderTexture == null || videoRenderTexture.width != vw || videoRenderTexture.height != vh)
+                {
+                    // Cleanup old
+                    CleanupDynamicRenderTexture();
+                    videoRenderTexture = CreateOptimizedRenderTexture(vw, vh);
+                }
+                mainAssetVideoPlayer.targetTexture = videoRenderTexture;
+                MyDebug.Verbose($"[AdDisplayComponent] Using dynamic render texture: {videoRenderTexture.width}x{videoRenderTexture.height} (video: {vw}x{vh})");
+            }
+            else
+            {
+                mainAssetVideoPlayer.targetTexture = preAssignedTexture;
+                if (preAssignedTexture != null)
+                    MyDebug.Verbose($"[AdDisplayComponent] Using pre-assigned render texture: {preAssignedTexture.width}x{preAssignedTexture.height}");
+            }
         }
 
         /// <summary>
@@ -204,18 +253,55 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
             }
 
-            // Ensure dimensions are power of 2 for better GPU performance
-            targetWidth = Mathf.NextPowerOfTwo(targetWidth);
-            targetHeight = Mathf.NextPowerOfTwo(targetHeight);
+            // Keep exact aspect; NPOT textures are fine on modern mobile GPUs
+            // Ensure even dimensions to avoid some hardware decoder quirks
+            if ((targetWidth & 1) == 1) targetWidth++;
+            if ((targetHeight & 1) == 1) targetHeight++;
 
-            MyDebug.Verbose($"[AdDisplayComponent] Creating render texture: {targetWidth}x{targetHeight} (original: {videoWidth}x{videoHeight})");
+            // Choose a supported GraphicsFormat for the color buffer (avoids runtime fallback warnings)
+            GraphicsFormat preferredGfxFormat;
+            // If requested, standardize to ARGB32 on mobile for broad compatibility
+            bool forceArgb = forceARGB32OnMobile && Application.isMobilePlatform;
+            switch (forceArgb ? RenderTextureFormat.ARGB32 : renderTextureFormat)
+            {
+                case RenderTextureFormat.RGB565:
+                    preferredGfxFormat = GraphicsFormat.B5G6R5_UNormPack16;
+                    break;
+                case RenderTextureFormat.ARGB32:
+                    preferredGfxFormat = GraphicsFormat.R8G8B8A8_UNorm;
+                    break;
+                default:
+                    preferredGfxFormat = GraphicsFormat.R8G8B8A8_UNorm; // Safe default, will be checked below
+                    break;
+            }
+
+            if (!SystemInfo.IsFormatSupported(preferredGfxFormat, FormatUsage.Render))
+            {
+                var compatible = SystemInfo.GetCompatibleFormat(GraphicsFormat.R8G8B8A8_UNorm, FormatUsage.Render);
+                if (silentFormatFallbacks)
+                    MyDebug.Verbose($"[AdDisplayComponent] GraphicsFormat {preferredGfxFormat} not supported; using {compatible}");
+                else
+                    MyDebug.LogWarning($"[AdDisplayComponent] GraphicsFormat {preferredGfxFormat} not supported; using {compatible}");
+                preferredGfxFormat = compatible;
+            }
+
+            var desc = new RenderTextureDescriptor(targetWidth, targetHeight)
+            {
+                depthBufferBits = 0,
+                graphicsFormat = preferredGfxFormat,
+                msaaSamples = 1,
+                sRGB = (QualitySettings.activeColorSpace == ColorSpace.Linear),
+                mipCount = 1,
+                useMipMap = false,
+                autoGenerateMips = false
+            };
+
+            MyDebug.Verbose($"[AdDisplayComponent] Creating render texture: {targetWidth}x{targetHeight} (original: {videoWidth}x{videoHeight}), gfxFormat: {preferredGfxFormat}");
 
             // Create the render texture
-            var renderTexture = new RenderTexture(targetWidth, targetHeight, 0, renderTextureFormat)
+            var renderTexture = new RenderTexture(desc)
             {
                 name = $"VideoAd_RenderTexture_{adFormat}",
-                useMipMap = false,
-                autoGenerateMips = false,
                 wrapMode = TextureWrapMode.Clamp,
                 filterMode = FilterMode.Bilinear
             };
@@ -335,6 +421,8 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     rectTransform.anchoredPosition = Vector2.zero;
                     rectTransform.sizeDelta = Vector2.zero;
                 }
+                // Hide until a valid texture is assigned
+                rawAssetImage.gameObject.SetActive(false);
             }
 
             // Reset VideoPlayer
@@ -366,6 +454,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (rawAssetImage != null)
             {
                 rawAssetImage.texture = null;
+                rawAssetImage.gameObject.SetActive(false);
                 MyDebug.Verbose("[AdDisplayComponent] RawImage texture cleared");
             }
         }
@@ -675,7 +764,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     if (mainAssetVideoPlayer != null)
                     {
                         mainAssetVideoPlayer.source = VideoSource.Url;
-                        mainAssetVideoPlayer.url = localVideoPath;
+                        // Ensure local files use file:// prefix for reliability across platforms
+                        var localUrl = localVideoPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                            ? localVideoPath
+                            : (localVideoPath.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ? localVideoPath : "file://" + localVideoPath);
+                        mainAssetVideoPlayer.url = localUrl;
                         mainAssetVideoPlayer.enabled = true;
                         mainAssetVideoPlayer.gameObject.SetActive(true);
                         // Start preparation coroutine
@@ -855,8 +948,18 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     // Don't give up immediately - try to continue showing the ad without image
                     rawAssetImage.texture = null;
 
-                    // Keep rawAssetImage active but with no texture - this prevents complete ad failure
-                    rawAssetImage.gameObject.SetActive(true);
+                    // For banners, avoid showing a white rectangle; hide the ad if no image is available
+                    if (adFormat == AdFormat.banner)
+                    {
+                        MyDebug.LogWarning("[AdDisplayComponent] Banner image failed to load; hiding banner to avoid white texture");
+                        HideEntireAd();
+                        return;
+                    }
+                    else
+                    {
+                        // For other formats, keep the flow but do not show an empty white RawImage
+                        rawAssetImage.gameObject.SetActive(false);
+                    }
 
                     // Disable video components
                     if (mainAssetVideoPlayer != null)
@@ -875,7 +978,17 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 if (rawAssetImage != null)
                 {
                     rawAssetImage.texture = null;
-                    rawAssetImage.gameObject.SetActive(true); // Keep active even without texture to prevent ad failure
+                    if (adFormat == AdFormat.banner)
+                    {
+                        MyDebug.LogWarning("[AdDisplayComponent] No main image asset; hiding banner to avoid white texture");
+                        HideEntireAd();
+                        return;
+                    }
+                    else
+                    {
+                        // For other formats, do not show an empty RawImage
+                        rawAssetImage.gameObject.SetActive(false);
+                    }
                 }
 
                 // Disable video components
@@ -1142,7 +1255,26 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (mainAssetVideoPlayer.renderMode == VideoRenderMode.RenderTexture && rawAssetImage != null)
                 SetupVideoForDisplay();
 
-            // Audio mute settings are already applied during preparation for better sync
+            // Ensure audio tracks are enabled and mute state applied post-prepare
+            try
+            {
+                if (mainAssetVideoPlayer.audioOutputMode == VideoAudioOutputMode.AudioSource && videoAudioSource != null)
+                {
+                    // Route and enable first track explicitly after prepare
+                    mainAssetVideoPlayer.EnableAudioTrack(0, true);
+                    mainAssetVideoPlayer.SetTargetAudioSource(0, videoAudioSource);
+                }
+                else if (mainAssetVideoPlayer.audioOutputMode == VideoAudioOutputMode.Direct)
+                {
+                    // Ensure first track is enabled for Direct output as well
+                    mainAssetVideoPlayer.EnableAudioTrack(0, true);
+                }
+            }
+            catch (Exception)
+            {
+                // Some platforms throw if tracks not available yet; ignore and proceed
+            }
+            UpdateAudioMuteState();
 
             // Auto-play video once it's prepared (for interstitial and rewarded)
             if (adFormat == AdFormat.interstitial || adFormat == AdFormat.rewarded)
@@ -1159,12 +1291,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Get the active render texture (either dynamic or pre-assigned)
             var activeRenderTexture = videoRenderTexture;
 
-            rawAssetImage.SetNativeSize();
-            var rectTransform = rawAssetImage.GetComponent<RectTransform>();
-            rectTransform.anchorMin = Vector2.zero;
-            rectTransform.anchorMax = Vector2.one;
-            rectTransform.offsetMin = Vector2.zero;
-            rectTransform.offsetMax = Vector2.zero;
+            // Preserve aspect ratio of the video when fitting into parent rect
+            if (activeRenderTexture != null)
+            {
+                FitRawImageToParentPreserveAspect(activeRenderTexture.width, activeRenderTexture.height);
+            }
 
             MyDebug.Verbose($"[AdDisplayComponent] Configured RawImage for video display with : dynamic render texture ({activeRenderTexture.width}x{activeRenderTexture.height}), will switch to video when it starts");
             DebugComponentStates();
@@ -1188,6 +1319,44 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     MyDebug.Verbose("[AdDisplayComponent] Set VideoPlayer CanvasRenderer alpha to 0");
                 }
             }
+        }
+
+        /// <summary>
+        /// Fits the RawImage into its parent while preserving the given texture aspect ratio.
+        /// Centers the image and chooses the largest size that fits inside parent rect.
+        /// </summary>
+        private void FitRawImageToParentPreserveAspect(int texWidth, int texHeight)
+        {
+            if (rawAssetImage == null) return;
+            var rectTransform = rawAssetImage.GetComponent<RectTransform>();
+            if (rectTransform == null) return;
+            var parent = rectTransform.parent as RectTransform;
+            if (parent == null) return;
+
+            float pw = Mathf.Max(1f, parent.rect.width);
+            float ph = Mathf.Max(1f, parent.rect.height);
+            float pr = pw / ph;
+            float tr = Mathf.Max(1, texWidth) / (float)Mathf.Max(1, texHeight);
+
+            float targetW, targetH;
+            if (tr > pr)
+            {
+                // Video is wider than parent: fit width
+                targetW = pw;
+                targetH = pw / tr;
+            }
+            else
+            {
+                // Video is taller: fit height
+                targetH = ph;
+                targetW = ph * tr;
+            }
+
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            rectTransform.anchoredPosition = Vector2.zero;
+            rectTransform.sizeDelta = new Vector2(targetW, targetH);
         }
         private void StretchRawImageAndSetNative()
         {
@@ -1234,33 +1403,36 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 rawAssetImage.gameObject.SetActive(true);
                 MyDebug.Verbose($"[AdDisplayComponent] rawAssetImage now displaying video content from render texture");
 
-                // Check if the first frame is blank/white (common on failed/partial loads)
-                Texture2D frameCheck = new Texture2D(mainAssetVideoPlayer.targetTexture.width, mainAssetVideoPlayer.targetTexture.height, TextureFormat.RGB24, false);
-                try
+                if (enableVideoDebugChecks)
                 {
-                    RenderTexture.active = mainAssetVideoPlayer.targetTexture;
-                    frameCheck.ReadPixels(new Rect(0, 0, frameCheck.width, frameCheck.height), 0, 0);
-                    frameCheck.Apply();
-                    RenderTexture.active = null;
-                    Color32[] pixels = frameCheck.GetPixels32();
-                    int whiteCount = pixels.Where(p => p.r > 240 && p.g > 240 && p.b > 240).Count();
-                    float whiteRatio = (float)whiteCount / pixels.Length;
-                    MyDebug.Verbose($"[AdDisplayComponent] Video frame check: {whiteCount} white pixels, ratio={whiteRatio:F2}"); // Conversation log
-                    if (whiteRatio > 0.95f)
+                    // Check if the first frame is blank/white (common on failed/partial loads)
+                    Texture2D frameCheck = new Texture2D(mainAssetVideoPlayer.targetTexture.width, mainAssetVideoPlayer.targetTexture.height, TextureFormat.RGB24, false);
+                    try
                     {
-                        MyDebug.LogWarning("[AdDisplayComponent] Blank video frame; falling back to image");
-                        _isVideoAd = false;
-                        var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
-                        MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after blank video: {fallbackImageAsset?.Id}"); // Conversation log
-                        ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
-                        return;
+                        RenderTexture.active = mainAssetVideoPlayer.targetTexture;
+                        frameCheck.ReadPixels(new Rect(0, 0, frameCheck.width, frameCheck.height), 0, 0);
+                        frameCheck.Apply();
+                        RenderTexture.active = null;
+                        Color32[] pixels = frameCheck.GetPixels32();
+                        int whiteCount = pixels.Where(p => p.r > 240 && p.g > 240 && p.b > 240).Count();
+                        float whiteRatio = (float)whiteCount / pixels.Length;
+                        MyDebug.Verbose($"[AdDisplayComponent] Video frame check: {whiteCount} white pixels, ratio={whiteRatio:F2}"); // Conversation log
+                        if (whiteRatio > 0.95f)
+                        {
+                            MyDebug.LogWarning("[AdDisplayComponent] Blank video frame; falling back to image");
+                            _isVideoAd = false;
+                            var fallbackImageAsset = Advertisement.GetCachedAsset(adFormat, AssetType.image);
+                            MyDebug.Verbose($"[AdDisplayComponent] Fallback image asset after blank video: {fallbackImageAsset?.Id}"); // Conversation log
+                            ShowFallbackImageDuringVideoLoad(fallbackImageAsset);
+                            return;
+                        }
                     }
-                }
-                finally
-                {
-                    // Always dispose the temporary texture to prevent memory leaks
-                    if (frameCheck != null)
-                        DestroyImmediate(frameCheck);
+                    finally
+                    {
+                        // Always dispose the temporary texture to prevent memory leaks
+                        if (frameCheck != null)
+                            DestroyImmediate(frameCheck);
+                    }
                 }
             }
 
@@ -1374,6 +1546,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 {
                     mainAssetVideoPlayer.SetDirectAudioMute(trackIndex, _shouldMuteAudio);
                 }
+            }
+            else if (mainAssetVideoPlayer.audioOutputMode == VideoAudioOutputMode.AudioSource && videoAudioSource != null)
+            {
+                videoAudioSource.mute = _shouldMuteAudio;
             }
 
             MyDebug.Verbose($"[AdDisplayComponent] Audio mute state updated: {_shouldMuteAudio} (System: {systemMuted}, Sync: {_forceMutedDueToSync})");
@@ -1518,6 +1694,93 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 return (float)mainAssetVideoPlayer.length;
             }
             return 0f;
+        }
+
+        // Inspector utility: apply sensible defaults and wire recommended components
+        [UnityEngine.ContextMenu("Soil Ads/Apply Best Options")]
+        private void ContextApplyBestOptions()
+        {
+            ApplyBestOptions(true);
+        }
+
+        /// <summary>
+        /// Applies recommended defaults for robust mobile playback and sync.
+        /// Also ensures an AudioSource exists and is assigned when requested.
+        /// </summary>
+        /// <param name="createAudioSourceIfMissing">Create and assign an AudioSource if none is set.</param>
+        public void ApplyBestOptions(bool createAudioSourceIfMissing = true)
+        {
+            // Video/display settings
+            useDynamicRenderTexture = true;            // Match RT to video for perf
+            preferAudioSourceOutput = true;           // Route audio via AudioSource for better A/V sync
+            dropFramesToMaintainSync = true;          // Allow frame drop to stay in sync on mobile
+            enableVideoDebugChecks = false;           // Avoid GPU readbacks in production
+            forceARGB32OnMobile = true;               // Standardize to ARGB32 on mobile for compatibility
+            silentFormatFallbacks = true;             // Silence format fallback warnings by default
+
+            // Conservative, mobile-friendly render texture settings
+            renderTextureFormat = RenderTextureFormat.RGB565;
+            if (!SystemInfo.SupportsRenderTextureFormat(renderTextureFormat))
+            {
+                // Fall back to ARGB32 if RGB565 is not supported
+                renderTextureFormat = SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGB32)
+                    ? RenderTextureFormat.ARGB32
+                    : RenderTextureFormat.Default;
+                if (silentFormatFallbacks)
+                    MyDebug.Verbose($"[AdDisplayComponent] Best Options: Preferred RGB565 not supported; using {renderTextureFormat}");
+                else
+                    MyDebug.LogWarning($"[AdDisplayComponent] Best Options: Preferred RGB565 not supported; using {renderTextureFormat}");
+            }
+            if (maxRenderTextureSize <= 0 || maxRenderTextureSize > 4096)
+                maxRenderTextureSize = 1024;          // Cap to 1024 by default (safe baseline)
+
+            // Ensure an AudioSource is available and assigned
+            if (createAudioSourceIfMissing)
+            {
+                if (videoAudioSource == null)
+                {
+                    var existing = GetComponent<AudioSource>();
+                    if (existing == null)
+                    {
+                        existing = GetComponentInChildren<AudioSource>(true);
+                    }
+
+                    if (existing == null)
+                    {
+#if UNITY_EDITOR
+                        var go = new GameObject("Ad Video AudioSource");
+                        go.transform.SetParent(this.transform, false);
+                        existing = go.AddComponent<AudioSource>();
+                        // Record creation in undo history for editor convenience
+                        UnityEditor.Undo.RegisterCreatedObjectUndo(go, "Create Ad Video AudioSource");
+#else
+                        var go = new GameObject("Ad Video AudioSource");
+                        go.transform.SetParent(this.transform, false);
+                        existing = go.AddComponent<AudioSource>();
+#endif
+                    }
+
+                    videoAudioSource = existing;
+                }
+
+                // Enforce recommended AudioSource settings
+                if (videoAudioSource != null)
+                {
+                    videoAudioSource.playOnAwake = false;
+                    videoAudioSource.loop = false;
+                    videoAudioSource.spatialBlend = 0f; // 2D audio for UI
+                }
+            }
+
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+            if (videoAudioSource != null)
+            {
+                UnityEditor.EditorUtility.SetDirty(videoAudioSource);
+            }
+#endif
+
+            MyDebug.Verbose("[AdDisplayComponent] Applied best options to component");
         }
 
         private void OnDisable()

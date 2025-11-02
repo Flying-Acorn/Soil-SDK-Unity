@@ -285,8 +285,58 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void PreloadAndPrepareAdInstance(AdFormat adFormat)
         {
+            // If an instance already exists, ensure it reloads to pick up freshly cached assets
             if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat])
-                return; // Already preloaded
+            {
+                var existing = _activePlacements[adFormat];
+                if (existing)
+                {
+                    // Reparent to persistent canvas in case it was recreated
+                    var targetCanvasExisting = GetOrCreatePersistentAdCanvas();
+                    if (targetCanvasExisting && existing.transform.parent != targetCanvasExisting.transform)
+                    {
+                        existing.transform.SetParent(targetCanvasExisting.transform, false);
+                        existing.transform.SetAsLastSibling();
+                        if (existing.TryGetComponent(out RectTransform rectTransform))
+                        {
+                            rectTransform.anchorMin = Vector2.zero;
+                            rectTransform.anchorMax = Vector2.one;
+                            rectTransform.offsetMin = Vector2.zero;
+                            rectTransform.offsetMax = Vector2.zero;
+                        }
+                        var layerExisting = targetCanvasExisting.gameObject.layer;
+                        foreach (var child in existing.GetComponentsInChildren<Transform>(true))
+                            child.gameObject.layer = layerExisting;
+                    }
+
+                    // Force a reload so placement picks up the newest cached assets (e.g., when ad group changes)
+                    if (existing.TryGetComponent(out BannerAdPlacement existingBanner) && adFormat == AdFormat.banner)
+                    {
+                        _bannerPlacement = existingBanner;
+                        if (_bannerPlacement != null)
+                        {
+                            _bannerPlacement.Load();
+                        }
+                    }
+                    else if (existing.TryGetComponent(out InterstitialAdPlacement existingInterstitial) && adFormat == AdFormat.interstitial)
+                    {
+                        _interstitialPlacement = existingInterstitial;
+                        if (_interstitialPlacement != null)
+                        {
+                            _interstitialPlacement.Load();
+                        }
+                    }
+                    else if (existing.TryGetComponent(out RewardedAdPlacement existingRewarded) && adFormat == AdFormat.rewarded)
+                    {
+                        _rewardedPlacement = existingRewarded;
+                        if (_rewardedPlacement != null)
+                        {
+                            _rewardedPlacement.Load();
+                        }
+                    }
+                }
+                return; // Instance already present and refreshed
+            }
 
             var instance = adFormat switch
             {
