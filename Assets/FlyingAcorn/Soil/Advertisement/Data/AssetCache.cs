@@ -7,7 +7,6 @@ using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Advertisement.Models;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.Data; // DataUtils
-using FlyingAcorn.Soil.Core; // SoilException
 using UnityEngine;
 using UnityEngine.Networking;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
@@ -587,7 +586,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
             catch
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToCacheAsset_{cacheKey}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_FailedToCacheAsset_{cacheKey}");
             }
             finally
             {
@@ -741,7 +740,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
             catch
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToRemoveAsset_{uuid}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_FailedToRemoveAsset_{uuid}");
 
                 // Re-add to cache if file deletion failed
                 lock (_lockObject)
@@ -817,7 +816,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             // Log results back on the main thread
             if (clearException != null)
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToClearCache");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AssetCache_FailedToClearCache");
             }
             else
             {
@@ -902,14 +901,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 if (!File.Exists(asset.LocalPath))
                 {
-                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_AssetFileNotFound_{uuid}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_AssetFileNotFound_{uuid}");
                     return null;
                 }
 
                 var data = File.ReadAllBytes(asset.LocalPath);
                 if (data == null || data.Length == 0)
                 {
-                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_AssetFileEmpty_{uuid}");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_AssetFileEmpty_{uuid}");
                     return null;
                 }
 
@@ -921,13 +920,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     return texture;
                 }
 
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToDecodeImage_{uuid}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_FailedToDecodeImage_{uuid}");
                 UnityEngine.Object.DestroyImmediate(texture);
                 return null;
             }
             catch
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, $"AssetCache_FailedToLoadTexture_{uuid}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_FailedToLoadTexture_{uuid}");
                 return null;
             }
         }
@@ -962,7 +961,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
             catch
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToPersistAssets");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AssetCache_FailedToPersistAssets");
             }
         }
 
@@ -982,7 +981,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
             catch
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToLoadAssetsFromPlayerPrefs");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AssetCache_FailedToLoadAssetsFromPlayerPrefs");
                 return;
             }
 
@@ -1018,7 +1017,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             // Finally, log the results back on the main thread
             if (loadException != null)
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AssetCache_FailedToProcessAssets");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AssetCache_FailedToProcessAssets");
             }
             else if (loadedCount > 0)
             {

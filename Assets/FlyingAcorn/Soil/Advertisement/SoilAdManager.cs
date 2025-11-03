@@ -52,7 +52,7 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             else
             {
-                MyDebug.LogWarning("Canvas reference is not set. Please assign a Canvas to the SoilAdManager.");
+                MyDebug.Info("Canvas reference is not set. Please assign a Canvas to the SoilAdManager.");
             }
         }
     }
