@@ -65,7 +65,6 @@ namespace FlyingAcorn.Analytics
         // Call this before Initialization
         public static void SaveUserIdentifier(string playerId)
         {
-
             AnalyticsPlayerPrefs.CustomUserId = playerId;
         }
 

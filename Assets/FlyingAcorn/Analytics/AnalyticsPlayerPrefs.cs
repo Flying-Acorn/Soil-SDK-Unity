@@ -58,13 +58,7 @@ namespace FlyingAcorn.Analytics
 
         public static string CustomUserId
         {
-            get
-            {
-                var id = PlayerPrefs.GetString($"{Prefix}CustomUserId");
-                if (string.IsNullOrEmpty(id))
-                    id = SystemInfo.deviceUniqueIdentifier;
-                return id;
-            }
+            get => PlayerPrefs.GetString($"{Prefix}CustomUserId");
             set => PlayerPrefs.SetString($"{Prefix}CustomUserId", value);
         }
     }
