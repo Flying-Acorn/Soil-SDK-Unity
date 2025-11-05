@@ -604,13 +604,19 @@ namespace FlyingAcorn.Soil.Core
                 {
                     RunOnUnityContext(() =>
                     {
-                        try
+                        // Invoke each handler individually to identify which one fails
+                        foreach (var handler in failedEvent.GetInvocationList())
                         {
-                            failedEvent.Invoke(soilEx);
-                        }
-                        catch (Exception invocationEx)
-                        {
-                            MyDebug.LogError($"Soil-Core: Exception in OnInitializationFailed handler: {invocationEx.Message}");
+                            try
+                            {
+                                ((Action<SoilException>)handler).Invoke(soilEx);
+                            }
+                            catch (Exception invocationEx)
+                            {
+                                var handlerName = handler.Method?.DeclaringType?.FullName ?? "Unknown";
+                                var methodName = handler.Method?.Name ?? "Unknown";
+                                MyDebug.LogError($"Soil-Core: Exception in OnInitializationFailed handler ({handlerName}.{methodName}): {invocationEx.GetType().Name}: {invocationEx.Message}\nStack trace: {invocationEx.StackTrace}");
+                            }
                         }
                     });
                 }
@@ -773,7 +779,24 @@ namespace FlyingAcorn.Soil.Core
 
             MyDebug.Info($"Soil-Core: Services are ready - {UserInfo?.uuid}");
             _readyBroadcasted = true;
-            OnServicesReady?.Invoke();
+            
+            // Invoke each handler individually to identify which one fails
+            if (OnServicesReady != null)
+            {
+                foreach (var handler in OnServicesReady.GetInvocationList())
+                {
+                    try
+                    {
+                        ((Action)handler).Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        var handlerName = handler.Method?.DeclaringType?.FullName ?? "Unknown";
+                        var methodName = handler.Method?.Name ?? "Unknown";
+                        MyDebug.LogError($"Soil-Core: Exception in OnServicesReady handler ({handlerName}.{methodName}): {ex.GetType().Name}: {ex.Message}\nStack trace: {ex.StackTrace}");
+                    }
+                }
+            }
         }
 
         private static async UniTask AwaitWithDeadline(UniTask task, DateTime deadline, string stage)
