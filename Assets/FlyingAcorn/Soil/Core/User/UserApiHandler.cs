@@ -293,10 +293,28 @@ namespace FlyingAcorn.Soil.Core.User
 
             /// <summary>
             /// Executes the update with all the accumulated changes in a fire-and-forget manner.
+            /// Handles both synchronous and asynchronous exceptions gracefully.
             /// </summary>
             public void Forget()
             {
-                UpdatePlayerInfoAsync(_userInfo, _allowDuringInitialization).Forget();
+                ForgetAsync().Forget();
+            }
+
+            /// <summary>
+            /// Internal async wrapper to handle synchronous exceptions before calling Forget.
+            /// This ensures exceptions thrown synchronously (e.g., from SoilServices.Ready checks)
+            /// are caught and logged rather than propagating to the caller.
+            /// </summary>
+            private async UniTaskVoid ForgetAsync()
+            {
+                try
+                {
+                    await UpdatePlayerInfoAsync(_userInfo, _allowDuringInitialization);
+                }
+                catch (Exception ex)
+                {
+                    MyDebug.LogWarning($"Failed to update player info (fire-and-forget): {ex.Message}");
+                }
             }
 
             // Note: Await the builder directly instead of calling ExecuteAsync().
