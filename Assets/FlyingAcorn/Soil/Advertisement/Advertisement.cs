@@ -180,7 +180,7 @@ namespace FlyingAcorn.Soil.Advertisement
             if (_adPlacementManager != null)
                 return;
 
-            _adPlacementManager = UnityEngine.Object.FindObjectOfType<SoilAdManager>();
+            _adPlacementManager = UnityEngine.Object.FindFirstObjectByType(typeof(SoilAdManager)) as SoilAdManager;
             if (_adPlacementManager == null)
                 throw new SoilException("SoilAdManager not found in the scene. Please add it to your scene before initializing Advertisement.",
                     SoilExceptionErrorCode.NotFound);

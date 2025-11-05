@@ -288,7 +288,7 @@ namespace FlyingAcorn.Soil.Core
 
             if (!_instance)
             {
-                _instance = FindObjectOfType<SoilServices>();
+                _instance = FindFirstObjectByType(typeof(SoilServices)) as SoilServices;
                 if (!_instance)
                     _instance = new GameObject(nameof(SoilServices)).AddComponent<SoilServices>();
                 _instance.StartInstance();

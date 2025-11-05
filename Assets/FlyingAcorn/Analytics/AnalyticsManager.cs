@@ -181,7 +181,7 @@ namespace FlyingAcorn.Analytics
 
             if (!Instance)
             {
-                Instance = FindObjectOfType<AnalyticsManager>();
+                Instance = FindFirstObjectByType(typeof(AnalyticsManager)) as AnalyticsManager;
                 if (!Instance)
                 {
                     var go = new GameObject("AnalyticsManager");
