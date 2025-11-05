@@ -87,7 +87,7 @@ namespace FlyingAcorn.Soil.Purchasing
         /// Initializes the purchasing system. Setting verifyOnInitialize to true enables automatic verification of any previously unverified purchases.
         /// </summary>
         /// <param name="verifyOnInitialize">Whether to verify unverified purchases on initialization.</param>
-        public static void Initialize(bool verifyOnInitialize = true)
+        public static void Initialize(bool verifyOnInitialize = false)
         {
             if (_initialized && !SoilServices.Ready)
             {

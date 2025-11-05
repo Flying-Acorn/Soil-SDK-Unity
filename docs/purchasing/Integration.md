@@ -358,7 +358,7 @@ See the [Purchasing Demo](../README.md#demo-scenes) (`SoilPurchasingExample.unit
 
 ## API Reference
 
-- `Purchasing.Initialize(bool verifyOnInitialize = true)`
+- `Purchasing.Initialize(bool verifyOnInitialize = false)`
 - `Purchasing.Ready` (property)
 - `Purchasing.AvailableItems` (property)
 - `Purchasing.BuyItem(string sku)`
