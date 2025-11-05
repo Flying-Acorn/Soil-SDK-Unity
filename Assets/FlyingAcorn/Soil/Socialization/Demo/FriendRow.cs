@@ -9,7 +9,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
     {
         public TextMeshProUGUI uuid;
         public Button uuidButton;
-        public TextMeshProUGUI name;
+        public TextMeshProUGUI playerName;
 
         private void Start()
         {
@@ -27,7 +27,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         public void SetData(UserInfo friend)
         {
             uuid.text = friend.uuid;
-            name.text = friend.name;
+            playerName.text = friend.name;
         }
     }
 }
