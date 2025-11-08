@@ -1,9 +1,11 @@
 ﻿using System.Linq;
-using FlyingAcorn.Analytics.BuildData.Editor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
+#if UNITY_IOS
+using FlyingAcorn.Analytics.BuildData.Editor;
+#endif
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Editor
 {
