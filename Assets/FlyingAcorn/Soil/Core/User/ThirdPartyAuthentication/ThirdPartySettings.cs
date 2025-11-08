@@ -1,5 +1,7 @@
 using UnityEngine;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using System.IO;
 using static FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data.Constants;
 
@@ -21,6 +23,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         public string ClientSecret => clientSecret;
         public ThirdParty ThirdParty => thirdParty;
 
+#if UNITY_EDITOR
         [MenuItem("FlyingAcorn/Soil/Core/Auth/ThirdPartySetting")]
         private static void CreateThirdPartySettings()
         {
@@ -47,5 +50,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             EditorUtility.FocusProjectWindow();
             Selection.activeObject = asset;
         }
+#endif
     }
 }

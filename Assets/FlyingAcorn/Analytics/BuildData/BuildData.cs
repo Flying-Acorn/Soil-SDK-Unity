@@ -1,7 +1,10 @@
 using System;
+using UnityEngine;
+
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.Build;
-using UnityEngine;
+#endif
 
 namespace FlyingAcorn.Analytics.BuildData
 {
