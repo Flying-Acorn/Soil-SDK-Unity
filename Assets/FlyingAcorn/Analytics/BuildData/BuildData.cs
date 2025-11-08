@@ -1,5 +1,6 @@
 using System;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEngine;
 
 namespace FlyingAcorn.Analytics.BuildData
@@ -24,9 +25,9 @@ namespace FlyingAcorn.Analytics.BuildData
         public void EditorRefreshScriptingBackend(BuildTarget buildTarget)
         {
             var target = EditorUserBuildSettings.activeBuildTarget;
-            var group = BuildPipeline.GetBuildTargetGroup(target);
+            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(BuildPipeline.GetBuildTargetGroup(target));
 
-            ScriptingBackend = PlayerSettings.GetScriptingBackend(group).ToString();
+            ScriptingBackend = PlayerSettings.GetScriptingBackend(namedTarget).ToString();
         }
 
         public void FillCurrentSettings()
