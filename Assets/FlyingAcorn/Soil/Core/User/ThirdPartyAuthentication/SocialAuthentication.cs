@@ -127,6 +127,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         private static void FireInitSuccess()
         {
             _isInitializing = false;
+            if (Ready)
+                return;
             _initialized = true;
             OnInitializationSuccess?.Invoke();
         }
