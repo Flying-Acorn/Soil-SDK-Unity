@@ -32,18 +32,23 @@ The Social Authentication module consists of several key components:
 
 Before using Social Authentication, ensure:
 
-1. Soil SDK is properly [installed](../Installation.md) (initialization is automatic)
+1. Soil SDK is properly [installed](../Installation.md)
 2. Third-party provider credentials are configured (API keys, client IDs, etc.)
 3. `ThirdPartySettings` assets are created for each supported platform
 4. Required third-party SDKs are integrated (Google Play Services, Sign In with Apple, etc.)
+
+> Important: Google authentication on Android requires Android API level 34 (Android 14) or higher. Some dependency libraries in the ecosystem specify a minimum API level of 28 — make sure your Android project's minSdkVersion and targetSdkVersion are configured accordingly and plan for device compatibility.
+
+## Example Project
+
+Demo and example code for Social Authentication can be found at:
+
+`Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/Demo/ThirdPartyAuthExample.cs`
 
 ## Quick Start
 
 ```csharp
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication;
-
-// Social Authentication automatically initializes the Soil SDK if needed
-SocialAuthentication.Initialize();
 
 // Handle authentication events
 SocialAuthentication.OnInitializationSuccess += () =>
@@ -55,6 +60,9 @@ SocialAuthentication.OnLinkSuccessCallback += (response) =>
 {
     Debug.Log($"Successfully linked {response.detail.app_party.party}");
 };
+
+// Social Authentication automatically initializes the Soil SDK if needed
+SocialAuthentication.Initialize();
 ```
 
 ## Basic Usage Flow

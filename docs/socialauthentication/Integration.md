@@ -2,6 +2,8 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md) and understand the [Introduction](Introduction.md).
 
+> Important: Google authentication on Android requires Android API level 34 (Android 14) or higher. Some dependency libraries used by the SDK indicate a minimum API level of 28 — verify your Android project's minSdkVersion/targetSdkVersion and plan for device compatibility.
+
 **Service Enablement**: Ensure the Social Authentication service is enabled for your account. Reach out to your Soil contact to enable the service for you.
 
 ## Complete Account Linking Sequence
