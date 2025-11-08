@@ -19,7 +19,7 @@ namespace FlyingAcorn.Soil.Core.Editor
             var settings = Resources.Load<SDKSettings>(nameof(SDKSettings));
             if (settings == null)
             {
-                Debug.LogWarning("[Soil] SDKSettings asset not found in Resources/. Some features (deeplink, etc.) may be skipped. Create it via Assets > Create > FlyingAcorn > Soil > Core > SDKSettings and place it under a Resources folder.");
+                Debug.LogWarning("[Soil] SDKSettings asset not found in Resources/. Some features (deeplink, etc.) may be skipped. Create it via FlyingAcorn > Soil > SDK Settings > Open or Create.");
                 return;
             }
 
