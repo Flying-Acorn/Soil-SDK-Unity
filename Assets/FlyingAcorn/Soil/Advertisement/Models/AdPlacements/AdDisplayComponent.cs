@@ -275,9 +275,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     break;
             }
 
+#pragma warning disable 618
             if (!SystemInfo.IsFormatSupported(preferredGfxFormat, FormatUsage.Render))
             {
                 var compatible = SystemInfo.GetCompatibleFormat(GraphicsFormat.R8G8B8A8_UNorm, FormatUsage.Render);
+#pragma warning restore 618
                 if (silentFormatFallbacks)
                     MyDebug.Verbose($"[AdDisplayComponent] GraphicsFormat {preferredGfxFormat} not supported; using {compatible}");
                 else
