@@ -146,6 +146,7 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 
         private static void RecordCohortInSoil(string cohortName)
         {
+            if (!FlyingAcorn.Soil.Core.SoilServices.Ready) return;
             FlyingAcorn.Soil.Core.User.UserApiHandler.UpdatePlayerInfo()
                 .WithInternalProperty(Constants.CohortIdPropertyKey, cohortName)
                 .Forget();

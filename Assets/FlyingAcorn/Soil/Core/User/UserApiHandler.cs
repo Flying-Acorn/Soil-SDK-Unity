@@ -129,6 +129,18 @@ namespace FlyingAcorn.Soil.Core.User
                     SoilExceptionErrorCode.NotReady);
             }
 
+            if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
+            {
+                throw new SoilException("Access token is missing. Cannot update player info.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
+            {
+                MyDebug.LogWarning("Access token invalid, refreshing");
+                await Authenticate.RefreshTokenIfNeeded(true);
+            }
+
             // SAFETY CHECK: Ensure we're not modifying the original stored UserInfo
             // If the passed userInfo is the same reference as the stored one, create a copy
             if (ReferenceEquals(userInfo, UserPlayerPrefs.UserInfo))
