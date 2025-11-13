@@ -20,6 +20,9 @@ using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 Advertisement.Events.OnInitialized += OnAdsInitialized;
 Advertisement.Events.OnInitializeFailed += OnAdsInitFailed;
 
+// Configure pause behavior (optional - call before InitializeAsync)
+Advertisement.SetPauseGameplayDuringAds(true); // Default: true - pauses Time.timeScale during ads
+
 // Determine formats based on ad purchase status
 bool adsPurchased = CheckIfAdsPurchased(); // Your purchase logic
 List<AdFormat> formats = adsPurchased 
@@ -43,6 +46,22 @@ private void OnAdsInitFailed(string error)
 {
     Debug.LogError($"Advertisement initialization failed: {error}");
 }
+```
+
+### 1.5 Pause and Input Blocking Configuration
+
+The SDK automatically pauses gameplay during full-screen ads (interstitial and rewarded) to prevent input conflicts and ensure ad visibility. This behavior can be customized:
+
+#### Automatic Pause Behavior (Default)
+
+By default, the SDK:
+- Sets `Time.timeScale = 0` during ad display to pause all time-dependent systems (physics, animations, particles, etc.)
+- Blocks all input (UI and gameplay) using overlays and physics shields
+- Restores normal time and input when the ad closes
+
+```csharp
+// Default behavior - SDK handles pausing automatically
+Advertisement.SetPauseGameplayDuringAds(true); // This is the default
 ```
 
 ### 2. Loading Ads

@@ -219,6 +219,12 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
         private void InitializeAdvertisement()
         {
             statusText.text = "Initializing Advertisement...";
+            
+            // OPTIONAL: Configure pause behavior before initialization
+            // By default (true), the SDK will pause gameplay (Time.timeScale=0) during ads
+            // Set to false if you want to handle pausing yourself via ad events
+            // Advertisement.SetPauseGameplayDuringAds(false);
+            
             Advertisement.InitializeAsync(new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded });
         }
 

@@ -52,9 +52,38 @@ namespace FlyingAcorn.Soil.Advertisement
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
         /// <summary>
+        /// Configures whether the SDK should pause gameplay (Time.timeScale = 0) while ads are displayed.
+        /// MUST be called before calling InitializeAsync() or ShowAd().
+        /// </summary>
+        /// <param name="pauseGameplay">
+        /// When true (default), the SDK will set Time.timeScale to 0 and block all input during ads.
+        /// When false, the SDK will only block input, allowing you to implement custom pause logic
+        /// via ad event callbacks (OnInterstitialAdShown, OnRewardedAdShown, etc.).
+        /// </param>
+        /// <remarks>
+        /// <para><b>Default behavior (pauseGameplay = true):</b></para>
+        /// <para>The SDK will automatically pause ALL game systems that depend on Time.timeScale, including
+        /// physics, animations, particle systems, and Time.deltaTime-based logic.</para>
+        /// <para><b>Custom pause behavior (pauseGameplay = false):</b></para>
+        /// <para>Subscribe to ad events and implement your own pause logic. For example:</para>
+        /// <code>
+        /// Advertisement.SetPauseGameplayDuringAds(false);
+        /// Events.OnInterstitialAdShown += (data) => YourGamePauseManager.Pause();
+        /// Events.OnInterstitialAdClosed += (data) => YourGamePauseManager.Resume();
+        /// </code>
+        /// </remarks>
+        public static void SetPauseGameplayDuringAds(bool pauseGameplay)
+        {
+            SoilAdInputBlocker.PauseGameplayDuringAds = pauseGameplay;
+        }
+
+        /// <summary>
         /// Initializes the Advertisement service with the desired ad formats. Consider conditional initialization based on user preferences or purchases.
         /// </summary>
         /// <param name="adFormats">List of ad formats to initialize (banner, interstitial, rewarded).</param>
+        /// <remarks>
+        /// Call <see cref="SetPauseGameplayDuringAds"/> before this method if you want to customize the pause behavior.
+        /// </remarks>
         public static void InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)

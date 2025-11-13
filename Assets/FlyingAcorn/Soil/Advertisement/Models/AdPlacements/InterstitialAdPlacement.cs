@@ -4,6 +4,7 @@ using UnityEngine;
 using FlyingAcorn.Soil.Advertisement.Data;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 using FlyingAcorn.Analytics;
+using FlyingAcorn.Soil.Advertisement;
 
 namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 {
@@ -47,6 +48,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
         }
 
+        private void OnDestroy()
+        {
+            // Ensure we deregister from static events per analyzer guidance
+            Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
+        }
+
         private void OnAdFormatAssetsLoaded(AdFormat loadedFormat)
         {
             if (loadedFormat == AdFormat.interstitial)
@@ -61,6 +68,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (adDisplayComponent != null)
             {
                 adDisplayComponent.HideAd();
+                // Restore time/input before notifying listeners
+                SoilAdInputBlocker.Unblock();
+
                 OnHidden?.Invoke();
                 OnAdClosed?.Invoke();
 
@@ -128,6 +138,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     _currentAd,
                     onClose: () =>
                     {
+                        // Restore time/input first so listeners run with normal gameplay
+                        SoilAdInputBlocker.Unblock();
+
                         OnAdClosed?.Invoke();
                         OnHidden?.Invoke();
                         var eventData = new AdEventData(AdFormat.interstitial);
@@ -135,6 +148,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         Events.InvokeOnInterstitialAdClosed(eventData);
                         // Ensure ad is hidden and destroyed
                         Advertisement.HideAd(AdFormat.interstitial);
+
+                        // Ensure no stray blockers remain in case of nested flows
+                        SoilAdInputBlocker.Unblock();
                     },
                     onClick: () =>
                     {
@@ -150,6 +166,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         var eventData = new AdEventData(AdFormat.interstitial);
                         eventData.ad = _currentAd;
                         Events.InvokeOnInterstitialAdShown(eventData);
+
+                        // Disable gameplay input while ad is visible
+                        var canvas = adDisplayComponent ? adDisplayComponent.GetComponentInParent<Canvas>() : null;
+                        SoilAdInputBlocker.Block(canvas);
                     }
                 );
             }

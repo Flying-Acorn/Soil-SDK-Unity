@@ -44,6 +44,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         // Track the video preparation coroutine so it can be stopped if ad is closed
         private Coroutine _videoPrepareCoroutine;
+        private Coroutine _countdownCoroutine;
 
         [Header("Video Configuration")]
         [Tooltip("Maximum resolution for dynamically created render textures (0 = use source resolution)")]
@@ -60,10 +61,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         public bool dropFramesToMaintainSync = true;
         [Tooltip("Enable extra debug checks like first-frame white test (GPU readback) - disable in production")]
         public bool enableVideoDebugChecks = false;
-    [Tooltip("Force ARGB32 render texture on mobile platforms for maximum compatibility")] 
-    public bool forceARGB32OnMobile = false;
-    [Tooltip("Silence format fallback warnings (will log Verbose instead)")]
-    public bool silentFormatFallbacks = true;
+        [Tooltip("Force ARGB32 render texture on mobile platforms for maximum compatibility")]
+        public bool forceARGB32OnMobile = false;
+        [Tooltip("Silence format fallback warnings (will log Verbose instead)")]
+        public bool silentFormatFallbacks = true;
 
         [Header("Ad Configuration")]
         public AdFormat adFormat;
@@ -160,6 +161,13 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                     // Route first audio track to provided AudioSource; remaining tracks can be added if needed
                     mainAssetVideoPlayer.EnableAudioTrack(0, true);
                     mainAssetVideoPlayer.SetTargetAudioSource(0, videoAudioSource);
+
+                    // Configure audio source to play independently of global pause state:
+                    // - ignoreListenerPause ensures audio continues when AudioListener.pause=true
+                    // - This allows ad audio to play even when gameplay audio is globally paused
+                    // - Critical for ads to remain audible during gameplay pause (Time.timeScale=0)
+                    videoAudioSource.ignoreListenerPause = true;
+                    videoAudioSource.mute = false;
                 }
                 catch (System.Exception ex)
                 {
@@ -389,7 +397,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (_isCountingDown)
             {
                 _isCountingDown = false;
-                CancelInvoke(nameof(UpdateCountdown));
+                if (_countdownCoroutine != null)
+                {
+                    StopCoroutine(_countdownCoroutine);
+                    _countdownCoroutine = null;
+                }
             }
 
             // Stop and clean up video preparation coroutine if running
@@ -467,7 +479,11 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (_isCountingDown)
             {
                 _isCountingDown = false;
-                CancelInvoke(nameof(UpdateCountdown));
+                if (_countdownCoroutine != null)
+                {
+                    StopCoroutine(_countdownCoroutine);
+                    _countdownCoroutine = null;
+                }
             }
 
             // Stop and clean up video preparation coroutine if running
@@ -854,12 +870,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         /// <summary>
         /// Coroutine to prepare video with improved timing to ensure VideoPlayer is properly initialized
-        /// and audio sync is maintained
+        /// and audio sync is maintained.
+        /// Uses unscaled time to work correctly even when Time.timeScale is 0 (paused gameplay).
         /// </summary>
         private IEnumerator PrepareVideoDelayed()
         {
-            // Wait for proper initialization - small delay is better than end of frame for video sync
-            yield return new WaitForSeconds(0.1f);
+            // Wait for proper initialization using real time (unaffected by Time.timeScale)
+            // This ensures video preparation continues even if gameplay is paused
+            yield return new WaitForSecondsRealtime(0.1f);
 
             // Double-check that the VideoPlayer is still valid and enabled
             if (mainAssetVideoPlayer != null && mainAssetVideoPlayer.enabled)
@@ -1120,29 +1138,37 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 closeButtonImage.raycastTarget = false;
                 closeButton.gameObject.SetActive(true);
                 UpdateCountdownDisplay();
-                InvokeRepeating(nameof(UpdateCountdown), 1f, 1f);
+                // Use unscaled time so countdown continues while gameplay is paused (Time.timeScale=0)
+                if (_countdownCoroutine != null)
+                {
+                    StopCoroutine(_countdownCoroutine);
+                    _countdownCoroutine = null;
+                }
+                _countdownCoroutine = StartCoroutine(CloseButtonCountdownRealtime());
             }
         }
 
-        private void UpdateCountdown()
+        /// <summary>
+        /// Countdown coroutine for close button using real time.
+        /// Uses unscaled time so the countdown continues even when Time.timeScale is 0 (paused gameplay).
+        /// </summary>
+        private IEnumerator CloseButtonCountdownRealtime()
         {
-            if (!_isCountingDown)
-                return;
-
-            _countdownTime -= 1f;
-
-            if (_countdownTime <= 0f)
+            while (_isCountingDown && _countdownTime > 0f)
             {
-                // Countdown finished - enable close button
-                _isCountingDown = false;
-                CancelInvoke(nameof(UpdateCountdown));
-                EnableCloseButton();
-            }
-            else
-            {
-                // Update countdown display
+                yield return new WaitForSecondsRealtime(1f);
+                if (!_isCountingDown) { _countdownCoroutine = null; yield break; }
+                _countdownTime -= 1f;
                 UpdateCountdownDisplay();
             }
+
+            if (_isCountingDown)
+            {
+                // Reached zero, enable close
+                _isCountingDown = false;
+                EnableCloseButton();
+            }
+            _countdownCoroutine = null;
         }
 
         private void UpdateCountdownDisplay()
@@ -1498,9 +1524,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         private void OnVideoFrameDropped(VideoPlayer vp)
         {
             _frameDropCount++;
-            if (_frameDropCount > 5) // Alert after multiple drops
+            if (_frameDropCount > 20) // Alert after multiple drops
             {
                 AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoFrameDrops");
+                _frameDropCount = 0; // Reset counter after alert
             }
         }
 
@@ -1614,22 +1641,24 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         /// <summary>
         /// Monitors audio-video sync and logs potential issues.
         /// Automatically mutes audio if major sync issues (1.0s+ drift) persist for 3+ consecutive checks.
+        /// Uses unscaled time to work correctly even when Time.timeScale is 0 (paused gameplay).
         /// </summary>
         private IEnumerator MonitorAudioVideoSync()
         {
             if (!_isVideoAd || mainAssetVideoPlayer == null) yield break;
 
             float lastVideoTime = 0f;
-            float lastCheckTime = Time.time;
+            float lastCheckTime = Time.unscaledTime; // Use unscaled time since ads play during pause
             int syncCheckCount = 0;
             _consecutiveSyncIssues = 0; // Reset counter at start
 
             while (_videoStarted && mainAssetVideoPlayer.isPlaying && syncCheckCount < 10)
             {
-                yield return new WaitForSeconds(1f); // Check every second for first 10 seconds
+                // Check every second using real time (unaffected by Time.timeScale)
+                yield return new WaitForSecondsRealtime(1f);
 
                 float currentVideoTime = (float)mainAssetVideoPlayer.time;
-                float currentRealTime = Time.time;
+                float currentRealTime = Time.unscaledTime;
                 float expectedProgress = currentRealTime - lastCheckTime;
                 float actualProgress = currentVideoTime - lastVideoTime;
 
