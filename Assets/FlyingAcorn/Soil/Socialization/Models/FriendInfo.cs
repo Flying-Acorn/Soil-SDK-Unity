@@ -5,6 +5,6 @@ namespace FlyingAcorn.Soil.Socialization.Models
 {
     public class FriendInfo : UserInfo
     {
-        [JsonProperty] internal string friendship_created_at;
+        [JsonProperty] public string friendship_created_at;
     }
 }
