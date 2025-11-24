@@ -34,14 +34,14 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// When true, sets Time.timeScale to 0 during ad display to pause gameplay.
         /// When false, only blocks input without affecting time scale.
-        /// Default is true for backward compatibility.
+        /// Default is false; host game should control pausing explicitly.
         /// </summary>
         /// <remarks>
         /// Set this to false if your game manages its own pause logic or if you need more control
         /// over what systems pause during ads. You can then subscribe to ad events and implement
         /// custom pause behavior.
         /// </remarks>
-        internal static bool PauseGameplayDuringAds = true;
+        internal static bool PauseGameplayDuringAds = false;
 
         private static int _depth;
         private static GameObject _overlay;
@@ -63,7 +63,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _overlay = null;
             _prevTimeScale = 1f;
             _pausedTime = false;
-            PauseGameplayDuringAds = true; // Reset to default on domain reload
+            PauseGameplayDuringAds = false; // Reset to default on domain reload
 #if ENABLE_INPUT_SYSTEM
             _disabledPlayerInputs.Clear();
 #endif
@@ -141,11 +141,36 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             _physicsShields.Clear();
 
+            // Failsafe: scan all cameras and destroy any orphaned shields that might have been missed
+            CleanupOrphanedShields();
+
             // Restore time scale last so event listeners run with normal time
             if (_pausedTime)
             {
                 Time.timeScale = _prevTimeScale <= 0f ? 1f : _prevTimeScale;
                 _pausedTime = false;
+            }
+        }
+
+        /// <summary>
+        /// Failsafe method to clean up any orphaned input blocker shields across all cameras.
+        /// This ensures shields don't persist and block input permanently if something goes wrong.
+        /// </summary>
+        private static void CleanupOrphanedShields()
+        {
+            var cameras = Camera.allCameras;
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                var cam = cameras[i];
+                if (!cam)
+                    continue;
+
+                var existing = cam.transform.Find("AdInputBlockerShield");
+                if (existing)
+                {
+                    Debug.LogWarning($"[SoilAdInputBlocker] Found orphaned shield on camera '{cam.name}' during cleanup, destroying it.");
+                    Object.Destroy(existing.gameObject);
+                }
             }
         }
 
@@ -194,12 +219,12 @@ namespace FlyingAcorn.Soil.Advertisement
                 if (!cam || !cam.enabled)
                     continue;
 
-                // Avoid duplicating on repeated calls
+                // Check for and destroy any stray shields from previous incomplete cleanup
                 var existing = cam.transform.Find("AdInputBlockerShield");
                 if (existing)
                 {
-                    _physicsShields.Add(existing.gameObject);
-                    continue;
+                    Debug.LogWarning($"[SoilAdInputBlocker] Found orphaned shield on camera '{cam.name}', destroying it before creating new one.");
+                    Object.Destroy(existing.gameObject);
                 }
 
                 var shield = new GameObject("AdInputBlockerShield");
