@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using FlyingAcorn.Analytics.BuildData;
 using JetBrains.Annotations;
 using UnityEngine;
-using static FlyingAcorn.Analytics.BuildData.Constants;
+using static FlyingAcorn.Analytics.Constants;
 
 namespace FlyingAcorn.Analytics
 {
@@ -101,25 +101,31 @@ namespace FlyingAcorn.Analytics
 
         /// <summary>
         /// Sends a business event to analytics services with custom data.
+        /// This method tracks revenue from any payment service. For official stores (Google Play, App Store),
+        /// automatic tracking is recommended and manual tracking will be skipped if automatic tracking is enabled:
+        /// - GameAnalytics: Skips if automatic purchase tracking is expected
+        /// - Firebase: Skips if automatic purchase tracking is configured
+        /// - AppMetrica: Skips if RevenueAutoTrackingEnabled = true
+        /// Custom payment services (Bazaar, Myket, etc.) are always tracked manually.
         /// </summary>
         /// <param name="currency">The currency of the transaction.</param>
         /// <param name="amount">The amount of the transaction.</param>
         /// <param name="itemType">The type of the item purchased.</param>
         /// <param name="itemId">The ID of the item.</param>
         /// <param name="cartType">The type of cart.</param>
-        /// <param name="Store">The store where the purchase was made.</param>
+        /// <param name="paymentSDK">The payment sdk handling the transaction (e.g., Bazaar, Myket, GooglePlay, AppStore).</param>
         /// <param name="receipt">The receipt of the transaction.</param>
         /// <param name="customData">Additional custom data.</param>
         public static void BusinessEvent(string currency, decimal amount, string itemType, string itemId,
             string cartType,
-            Store Store, string receipt, Dictionary<string, object> customData)
+            PaymentSDK paymentSDK, string receipt, Dictionary<string, object> customData)
         {
             if (!IsReady)
             {
                 MyDebug.LogWarning("Analytics not initialized");
                 return;
             }
-            Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, Store,
+            Instance.AnalyticServiceProvider.BusinessEvent(currency, amount, itemType, itemId, cartType, paymentSDK,
                 receipt, customData);
         }
 
@@ -399,7 +405,7 @@ namespace FlyingAcorn.Analytics
         /// </summary>
         /// <param name="method">The sign up method.</param>
         /// <param name="extraFields">Additional fields for the event.</param>
-        internal static void SignUpEvent(string method, Dictionary<string, object> extraFields = null)
+        public static void SignUpEvent(string method, Dictionary<string, object> extraFields = null)
         {
             if (!IsReady)
             {

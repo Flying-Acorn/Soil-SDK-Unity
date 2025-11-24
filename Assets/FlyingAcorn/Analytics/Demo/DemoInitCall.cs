@@ -21,7 +21,6 @@ namespace FlyingAcorn.Analytics.Demo
             AnalyticsManager.SetGDPRConsent(true);
             AnalyticsManager.SetStore(BuildData.Constants.Store.GooglePlay);
 
-            // Example build number, use this: https://discussions.unity.com/t/get-build-number-from-a-script/735000/27 or ignore. An upcoming feature will automate this.
             AnalyticsManager.Initialize(new List<IAnalytics>
             {
                 // new Services.GameAnalyticsEvents(), // Uncomment this line if you want to use GameAnalytics

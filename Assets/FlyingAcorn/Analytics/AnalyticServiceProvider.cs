@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static FlyingAcorn.Analytics.BuildData.Constants;
+using static FlyingAcorn.Analytics.Constants;
 using static FlyingAcorn.Analytics.Constants.ErrorSeverity;
 using static FlyingAcorn.Analytics.Constants.ProgressionStatus;
 using static FlyingAcorn.Analytics.Constants.ResourceFlowType;
@@ -143,35 +143,41 @@ namespace FlyingAcorn.Analytics
         /// <param name="itemType">The type of the item purchased.</param>
         /// <param name="itemId">The ID of the item.</param>
         /// <param name="cartType">The type of cart.</param>
-        /// <param name="Store">The store where the purchase was made.</param>
+        /// <param name="paymentSDK">The payment sdk handling the transaction (e.g., Bazaar, Myket, GooglePlay, AppStore).</param>
         /// <param name="receipt">The receipt of the transaction.</param>
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
-            Store Store, string receipt = null)
+            PaymentSDK paymentSDK, string receipt = null)
         {
             MyDebug.Verbose($" Sending business event to analytics: {currency} with amount: " +
                             $"{amount} with itemType: {itemType} with itemID: {itemId} with cartType: " +
-                            $"{cartType} with receipt: {receipt} for these services: {GetServiceNames()}");
-            ForEachServiceSafely("BusinessEvent", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, Store, receipt));
+                            $"{cartType} with receipt: {receipt} for these services: {GetServiceNames()}. PaymentSDK: {paymentSDK}");
+            ForEachServiceSafely("BusinessEvent", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, paymentSDK, receipt));
         }
 
         /// <summary>
         /// Sends a business event to analytics services with custom data.
+        /// This method tracks revenue from any payment service. For official stores (Google Play, App Store),
+        /// automatic tracking is recommended and manual tracking will be skipped if automatic tracking is enabled:
+        /// - GameAnalytics: Skips if automatic purchase tracking is expected
+        /// - Firebase: Skips if automatic purchase tracking is configured
+        /// - AppMetrica: Skips if RevenueAutoTrackingEnabled = true
+        /// Custom payment services (Bazaar, Myket, etc.) are always tracked manually.
         /// </summary>
         /// <param name="currency">The currency of the transaction.</param>
         /// <param name="amount">The amount of the transaction.</param>
         /// <param name="itemType">The type of the item purchased.</param>
         /// <param name="itemId">The ID of the item.</param>
         /// <param name="cartType">The type of cart.</param>
-        /// <param name="Store">The store where the purchase was made.</param>
+        /// <param name="paymentSDK">The payment sdk handling the transaction (e.g., Bazaar, Myket, GooglePlay, AppStore).</param>
         /// <param name="receipt">The receipt of the transaction.</param>
         /// <param name="customData">Additional custom data.</param>
         public void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
-            Store Store, string receipt, Dictionary<string, object> customData)
+            PaymentSDK paymentSDK, string receipt, Dictionary<string, object> customData)
         {
             MyDebug.Info($"Tracking business event to analytics: {currency} with amount: " +
                          $"{amount} with itemType: {itemType} with itemID: {itemId} with cartType: " +
-                         $"{cartType} with receipt: {receipt} with customData: {GetNames(customData)}");
-            ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, Store, receipt, customData));
+                         $"{cartType} with receipt: {receipt} with customData: {GetNames(customData)}. PaymentSDK: {paymentSDK}");
+            ForEachServiceSafely("BusinessEvent(customData)", s => s.BusinessEvent(currency, amount, itemType, itemId, cartType, paymentSDK, receipt, customData));
         }
 
         /// <summary>

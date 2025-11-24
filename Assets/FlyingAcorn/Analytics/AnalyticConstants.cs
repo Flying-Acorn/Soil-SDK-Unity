@@ -63,11 +63,22 @@ namespace FlyingAcorn.Analytics
             { Intent.ActionEdit, "ACTION_EDIT" }
         };
 
-        
+
         public enum Intent
         {
             ActionView,
             ActionEdit,
+        }
+
+
+        public enum PaymentSDK
+        {
+            Other,
+            AppStore,
+            GooglePlay,
+            Soil,
+            Myket,
+            CafeBazaar
         }
 
         public const string FlyingAcorn = "FlyingAcorn";

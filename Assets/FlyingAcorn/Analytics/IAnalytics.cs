@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using static FlyingAcorn.Analytics.BuildData.Constants;
+using static FlyingAcorn.Analytics.Constants;
 using static FlyingAcorn.Analytics.Constants.ErrorSeverity;
 using static FlyingAcorn.Analytics.Constants.ProgressionStatus;
 using static FlyingAcorn.Analytics.Constants.ResourceFlowType;
@@ -23,10 +23,10 @@ namespace FlyingAcorn.Analytics
         void SetConsents();
 
         void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
-            Store Store, string receipt = null);
+            PaymentSDK paymentSDK, string receipt = null);
 
         void BusinessEvent(string currency, decimal amount, string itemType, string itemId, string cartType,
-            Store Store, string receipt, Dictionary<string, object> customData);
+            PaymentSDK paymentSDK, string receipt, Dictionary<string, object> customData);
 
         void DesignEvent(params string[] eventSteps);
         void DesignEvent(Dictionary<string, object> customFields, params string[] eventSteps);
