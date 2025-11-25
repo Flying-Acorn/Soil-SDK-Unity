@@ -121,8 +121,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
 
         private static async UniTask RegisterPlayer()
         {
-            MyDebug.Verbose("Registering player...");
-            MyDebug.Info($"[RegisterPlayer] Starting user registration process");
+            MyDebug.Verbose($"[RegisterPlayer] Starting user registration process");
             
             var appID = UserPlayerPrefs.AppID;
             var sdkToken = UserPlayerPrefs.SDKToken;

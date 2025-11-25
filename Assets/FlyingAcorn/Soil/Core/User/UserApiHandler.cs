@@ -53,7 +53,7 @@ namespace FlyingAcorn.Soil.Core.User
 
         private static async UniTask<UserInfo> FetchPlayerInfoInternal()
         {
-            MyDebug.Info("Fetching player info");
+            MyDebug.Verbose("Fetching player info");
 
             if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
             {
@@ -107,7 +107,7 @@ namespace FlyingAcorn.Soil.Core.User
             }
 
             ReplaceUser(fetchedUser, UserPlayerPrefs.TokenData);
-            MyDebug.Info($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
+            MyDebug.Verbose($"Player info fetched successfully. Response: {UserPlayerPrefs.UserInfo.uuid}");
             return UserPlayerPrefs.UserInfo;
         }
 
