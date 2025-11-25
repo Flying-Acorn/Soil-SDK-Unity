@@ -4,13 +4,16 @@
 
 Monetize your game with integrated advertisement solutions. Supports video ads and more.
 
+**⚠️ Experimental Feature**: The Advertisement SDK is experimental. Test thoroughly on all target platforms before shipping.
+
 ## Features
 
-- **Automatic Pause Management**: SDK automatically pauses gameplay (`Time.timeScale = 0`) during full-screen ads to prevent conflicts
-- **Configurable Pause Behavior**: Customize or disable automatic pausing via `Advertisement.SetPauseGameplayDuringAds()`
-- **Input Blocking**: Comprehensive input blocking during ads using UI overlays and physics shields
+- **Manual Pause Control**: Game developers control pause behavior using ad lifecycle events
+- **Input Blocking**: SDK disables `PlayerInput` components (New Input System) during ads
 - **Event-Driven Architecture**: Rich event system for ad lifecycle management
 - **Multi-Format Support**: Banner, interstitial, and rewarded ad formats
+- **Automatic Ad Reload**: Ads can be reloaded after closing for seamless user experience
+- **Rewarded Ad Cooldown**: 10-second cooldown between rewarded ads with automatic wait handling
 
 ## Integration
 

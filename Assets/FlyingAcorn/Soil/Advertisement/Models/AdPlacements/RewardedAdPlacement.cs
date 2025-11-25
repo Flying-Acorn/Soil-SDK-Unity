@@ -11,7 +11,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
     public class RewardedAdPlacement : MonoBehaviour, IAdPlacement
     {
-
         [Header("Rewarded Configuration")]
         [SerializeField] private string placementId = "rewarded_placement";
         [SerializeField] private string placementName = "Rewarded Ad";
@@ -19,6 +18,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         private Ad _currentAd;
         private bool _isFormatReady = false;
+        private Coroutine _loadCoroutine;
         public Action OnRewardEarned { get; set; }
 
         public string Id => placementId;
@@ -46,12 +46,18 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         private void OnDisable()
         {
             Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
+            // Don't stop the load coroutine here since it's running on SoilAdManager and should persist even when this object is disabled
         }
 
         private void OnDestroy()
         {
             // Ensure we deregister from static events per analyzer guidance
             Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
+            if (_loadCoroutine != null)
+            {
+                SoilAdManager.Instance.StopCoroutine(_loadCoroutine);
+                _loadCoroutine = null;
+            }
         }
 
         private void OnAdFormatAssetsLoaded(AdFormat loadedFormat)
@@ -59,7 +65,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (loadedFormat == AdFormat.rewarded)
             {
                 _isFormatReady = true;
-                MyDebug.Verbose("Rewarded ad format assets loaded - placement is now ready");
+                MyDebug.Info("Rewarded ad format assets loaded - placement is now ready");
             }
         }
 
@@ -71,6 +77,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 // Restore time/input before notifying listeners
                 SoilAdInputBlocker.Unblock();
                 OnHidden?.Invoke();
+                
+                // Clear current ad so it can be reloaded
+                _currentAd = null;
             }
         }
 
@@ -83,31 +92,29 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             var assets = Advertisement.GetCachedAssets(AdFormat.rewarded);
             var cacheReady = assets != null && assets.Any(asset => asset.AssetType == AssetType.image);
 
-            // Check if assets are ready
-            var assetsReady = eventReady || cacheReady;
-
-            // For rewarded ads, also check cooldown
-            if (assetsReady)
-            {
-                return !Advertisement.IsRewardedAdInCooldown();
-            }
-
-            return false;
+            // For rewarded ads, readiness means: assets are prepared.
+            // Cooldown is handled separately in Load()/LoadCoroutine().
+            return eventReady || cacheReady;
         }
 
-        public void Load()
+        private void PerformLoad()
         {
-            if (IsReady())
+            // Get cached assets once
+            var cachedAssets = Advertisement.GetCachedAssets(AdFormat.rewarded);
+            
+            // Check readiness: event ready or has cached image asset
+            bool isReady = _isFormatReady || (cachedAssets != null && cachedAssets.Any(asset => asset.AssetType == AssetType.image));
+            
+            if (isReady)
             {
-                // Get the first ad from cached assets
-                var cachedAssets = Advertisement.GetCachedAssets(AdFormat.rewarded);
-                if (cachedAssets.Count > 0)
+                if (cachedAssets != null && cachedAssets.Count > 0)
                 {
                     // Create ad object from cached assets
                     _currentAd = CreateAdFromCachedAssets(cachedAssets);
 
                     OnLoaded?.Invoke();
 
+                    // Fire loaded event when ad is created from cache
                     var eventData = new AdEventData(AdFormat.rewarded);
                     eventData.ad = _currentAd;
                     Events.InvokeOnRewardedAdLoaded(eventData);
@@ -127,15 +134,41 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             }
         }
 
-        public void Show()
+        public void Load()
         {
-            if (_currentAd == null)
+            // Don't reload if already loaded
+            if (_currentAd != null)
+                return;
+
+            if (_loadCoroutine != null)
             {
-                Load();
+                SoilAdManager.Instance.StopCoroutine(_loadCoroutine);
+                _loadCoroutine = null;
             }
 
+            // Always start the coroutine on SoilAdManager to ensure it persists even if this object is disabled
+            _loadCoroutine = SoilAdManager.Instance.StartCoroutine(LoadCoroutine());
+        }
+
+        private System.Collections.IEnumerator LoadCoroutine()
+        {
+            // Wait until cooldown expires
+            yield return new WaitUntil(() => !Advertisement.IsRewardedAdInCooldown());
+            
+            _loadCoroutine = null;
+            
+            // Now perform the load
+            PerformLoad();
+        }
+
+        public void Show()
+        {
             if (_currentAd != null && adDisplayComponent != null)
             {
+                // Block input BEFORE showing ad to prevent failsafe timeout on long ads
+                var canvas = adDisplayComponent ? adDisplayComponent.GetComponentInParent<Canvas>() : null;
+                SoilAdInputBlocker.Block(canvas);
+
                 adDisplayComponent.ShowAd(
                     _currentAd,
                     onClose: () =>
@@ -143,12 +176,21 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         // Restore time/input first so listeners run with normal gameplay
                         SoilAdInputBlocker.Unblock();
 
+                        // Set cooldown timer when ad is actually closed
+                        Advertisement.SetRewardedAdCooldown();
+
                         OnAdClosed?.Invoke();
                         OnHidden?.Invoke();
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
+                        
+                        // Clear current ad BEFORE firing event so LoadAd can succeed in event handlers
+                        _currentAd = null;
+                        
                         Events.InvokeOnRewardedAdClosed(eventData);
-                        Advertisement.HideAd(AdFormat.rewarded);
+                        
+                        // Deactivate GameObject so it can be shown again
+                        gameObject.SetActive(false);
 
                         // Ensure no stray blockers remain in case of nested flows
                         SoilAdInputBlocker.Unblock();
@@ -173,10 +215,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         var eventData = new AdEventData(AdFormat.rewarded);
                         eventData.ad = _currentAd;
                         Events.InvokeOnRewardedAdShown(eventData);
-
-                        // Disable gameplay input while ad is visible
-                        var canvas = adDisplayComponent ? adDisplayComponent.GetComponentInParent<Canvas>() : null;
-                        SoilAdInputBlocker.Block(canvas);
                     }
                 );
             }

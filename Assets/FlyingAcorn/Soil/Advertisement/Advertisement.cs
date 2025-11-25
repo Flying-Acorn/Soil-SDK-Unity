@@ -51,39 +51,11 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
-        /// <summary>
-        /// Configures whether the SDK should pause gameplay (Time.timeScale = 0) while ads are displayed.
-        /// MUST be called before calling InitializeAsync() or ShowAd().
-        /// </summary>
-        /// <param name="pauseGameplay">
-        /// When true (default), the SDK will set Time.timeScale to 0 and block all input during ads.
-        /// When false, the SDK will only block input, allowing you to implement custom pause logic
-        /// via ad event callbacks (OnInterstitialAdShown, OnRewardedAdShown, etc.).
-        /// </param>
-        /// <remarks>
-        /// <para><b>Default behavior (pauseGameplay = true):</b></para>
-        /// <para>The SDK will automatically pause ALL game systems that depend on Time.timeScale, including
-        /// physics, animations, particle systems, and Time.deltaTime-based logic.</para>
-        /// <para><b>Custom pause behavior (pauseGameplay = false):</b></para>
-        /// <para>Subscribe to ad events and implement your own pause logic. For example:</para>
-        /// <code>
-        /// Advertisement.SetPauseGameplayDuringAds(false);
-        /// Events.OnInterstitialAdShown += (data) => YourGamePauseManager.Pause();
-        /// Events.OnInterstitialAdClosed += (data) => YourGamePauseManager.Resume();
-        /// </code>
-        /// </remarks>
-        public static void SetPauseGameplayDuringAds(bool pauseGameplay)
-        {
-            SoilAdInputBlocker.PauseGameplayDuringAds = pauseGameplay;
-        }
 
         /// <summary>
         /// Initializes the Advertisement service with the desired ad formats. Consider conditional initialization based on user preferences or purchases.
         /// </summary>
         /// <param name="adFormats">List of ad formats to initialize (banner, interstitial, rewarded).</param>
-        /// <remarks>
-        /// Call <see cref="SetPauseGameplayDuringAds"/> before this method if you want to customize the pause behavior.
-        /// </remarks>
         public static void InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)
@@ -290,7 +262,7 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Caches assets for a specific ad format and invokes the loaded event when ready
+        /// Caches assets for a specific ad format and marks them ready when done
         /// </summary>
         private static async UniTask CacheFormatAssetsAsync(Campaign campaign, AdFormat adFormat)
         {
@@ -298,20 +270,19 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Called when assets for a specific format are ready
+        /// Called when assets for a specific format are cached and ready for use.
+        /// Does not fire any public *Loaded events; those are only fired from explicit LoadAd calls.
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            // For rewarded ads, only invoke loaded if not in cooldown
-            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
-            {
-                MyDebug.Verbose($"[OnFormatAssetsReady] Rewarded ad is in cooldown, not firing loaded event.");
-                return;
-            }
             if (IsFormatReady(adFormat))
             {
                 // Instantiate and preload the ad prefab for this format (hidden, prepared)
                 PreloadAndPrepareAdInstance(adFormat);
+
+                // Notify internal listeners that assets are ready. This should
+                // NOT be used to fire OnXAdLoaded events; those only come from
+                // explicit LoadAd/placement.Load calls.
                 Events.InvokeOnAdFormatAssetsLoaded(adFormat);
             }
         }
@@ -589,6 +560,14 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
+        /// Sets the rewarded ad cooldown timer (called when a rewarded ad is closed)
+        /// </summary>
+        public static void SetRewardedAdCooldown()
+        {
+            _lastRewardedAdShownTime = DateTime.Now;
+        }
+
+        /// <summary>
         /// Resets the rewarded ad cooldown timer (useful for testing or administrative purposes)
         /// </summary>
         public static void ResetRewardedAdCooldown()
@@ -705,8 +684,7 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 _rewardedPlacement = rewarded;
                 _rewardedPlacement.Show(); // Will play video if ready, or show image
-                // Track when rewarded ad was shown for cooldown
-                _lastRewardedAdShownTime = DateTime.Now;
+                // Cooldown timer is set in the placement's onClose callback
             }
         }
 
@@ -718,26 +696,21 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             if (_activePlacements.TryGetValue(adFormat, out var instance) && instance != null)
             {
-                // Call Hide and clear placement reference
+                // Call Hide but keep placement GameObject active so it can reload
                 if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
                 {
                     banner.Hide();
-                    _bannerPlacement = null;
-                    instance.SetActive(false);
+                    // Don't deactivate - placement needs to stay active for reloading
                 }
                 else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
                 {
                     interstitial.Hide();
-                    _interstitialPlacement = null;
-                    instance.SetActive(false);
+                    // Don't deactivate - placement needs to stay active for reloading
                 }
                 else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
                 {
                     rewarded.Hide();
-                    _rewardedPlacement = null;
-                    instance.SetActive(false);
-
-                    _lastRewardedAdShownTime = DateTime.Now;
+                    // Don't deactivate - placement needs to stay active for reloading
                 }
 
                 UpdatePersistentCanvasVisibility();
@@ -746,18 +719,12 @@ namespace FlyingAcorn.Soil.Advertisement
 
         /// <summary>
         /// Loads an ad for the specified format. For optimal user experience, load ads immediately after initialization.
+        /// For rewarded ads, if in cooldown, the load will wait until cooldown expires before firing the loaded event.
         /// </summary>
         /// <param name="adFormat">The ad format to load (banner, interstitial, rewarded).</param>
         public static void LoadAd(AdFormat adFormat)
         {
-            // Check rewarded ad cooldown only (don't block loading for other formats)
-            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
-            {
-                var errorData = new AdEventData(adFormat, AdError.AdNotReady);
-                InvokeAdErrorEvent(adFormat, errorData);
-                return;
-            }
-
+            // Let placements handle their own readiness checks (including rewarded cooldown)
             if (adFormat == AdFormat.banner)
             {
                 if (_bannerPlacement != null)

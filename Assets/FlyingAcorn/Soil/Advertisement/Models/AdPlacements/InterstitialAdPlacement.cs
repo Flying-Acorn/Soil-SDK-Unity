@@ -78,6 +78,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 var eventData = new AdEventData(AdFormat.interstitial);
                 eventData.ad = _currentAd;
                 Events.InvokeOnInterstitialAdClosed(eventData);
+                
+                // Clear current ad so it can be reloaded
+                _currentAd = null;
             }
         }
 
@@ -95,17 +98,26 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         public void Load()
         {
-            if (IsReady())
+            // Don't reload if already loaded
+            if (_currentAd != null)
+                return;
+
+            // Get cached assets once
+            var cachedAssets = Advertisement.GetCachedAssets(AdFormat.interstitial);
+            
+            // Check readiness: event ready or has cached image asset
+            bool isReady = _isFormatReady || (cachedAssets != null && cachedAssets.Any(asset => asset.AssetType == AssetType.image));
+            
+            if (isReady)
             {
-                // Get the first ad from cached assets
-                var cachedAssets = Advertisement.GetCachedAssets(AdFormat.interstitial);
-                if (cachedAssets.Count > 0)
+                if (cachedAssets != null && cachedAssets.Count > 0)
                 {
                     // Create ad object from cached assets
                     _currentAd = CreateAdFromCachedAssets(cachedAssets);
 
                     OnLoaded?.Invoke();
 
+                    // Fire loaded event when ad is created from cache
                     var eventData = new AdEventData(AdFormat.interstitial);
                     eventData.ad = _currentAd;
                     Events.InvokeOnInterstitialAdLoaded(eventData);
@@ -127,13 +139,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         public void Show()
         {
-            if (_currentAd == null)
-            {
-                Load();
-            }
-
             if (_currentAd != null && adDisplayComponent != null)
             {
+                // Block input BEFORE showing ad to prevent failsafe timeout on long ads
+                var canvas = adDisplayComponent ? adDisplayComponent.GetComponentInParent<Canvas>() : null;
+                SoilAdInputBlocker.Block(canvas);
+
                 adDisplayComponent.ShowAd(
                     _currentAd,
                     onClose: () =>
@@ -145,9 +156,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         OnHidden?.Invoke();
                         var eventData = new AdEventData(AdFormat.interstitial);
                         eventData.ad = _currentAd;
+                        
+                        // Clear current ad BEFORE firing event so LoadAd can succeed in event handlers
+                        _currentAd = null;
+                        
                         Events.InvokeOnInterstitialAdClosed(eventData);
-                        // Ensure ad is hidden and destroyed
-                        Advertisement.HideAd(AdFormat.interstitial);
+                        
+                        // Deactivate GameObject so it can be shown again
+                        gameObject.SetActive(false);
 
                         // Ensure no stray blockers remain in case of nested flows
                         SoilAdInputBlocker.Unblock();
@@ -166,10 +182,6 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         var eventData = new AdEventData(AdFormat.interstitial);
                         eventData.ad = _currentAd;
                         Events.InvokeOnInterstitialAdShown(eventData);
-
-                        // Disable gameplay input while ad is visible
-                        var canvas = adDisplayComponent ? adDisplayComponent.GetComponentInParent<Canvas>() : null;
-                        SoilAdInputBlocker.Block(canvas);
                     }
                 );
             }

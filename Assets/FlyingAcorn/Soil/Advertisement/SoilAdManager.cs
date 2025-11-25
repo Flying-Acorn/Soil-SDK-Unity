@@ -26,6 +26,13 @@ namespace FlyingAcorn.Soil.Advertisement
 
         }
 
+        private void Update()
+        {
+            // Drive the input blocker failsafe so the game cannot
+            // remain permanently frozen if an ad fails to close.
+            SoilAdInputBlocker.FailsafeTick();
+        }
+
         private void Awake()
         {
             if (Instance && Instance != this)
@@ -54,6 +61,11 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 MyDebug.Info("Canvas reference is not set. Please assign a Canvas to the SoilAdManager.");
             }
+        }
+
+        private void OnDisable()
+        {
+            StopAllCoroutines();
         }
     }
 }

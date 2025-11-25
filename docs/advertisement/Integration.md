@@ -20,9 +20,6 @@ using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 Advertisement.Events.OnInitialized += OnAdsInitialized;
 Advertisement.Events.OnInitializeFailed += OnAdsInitFailed;
 
-// Configure pause behavior (optional - call before InitializeAsync)
-Advertisement.SetPauseGameplayDuringAds(true); // Default: true - pauses Time.timeScale during ads
-
 // Determine formats based on ad purchase status
 bool adsPurchased = CheckIfAdsPurchased(); // Your purchase logic
 List<AdFormat> formats = adsPurchased 
@@ -48,21 +45,78 @@ private void OnAdsInitFailed(string error)
 }
 ```
 
-### 1.5 Pause and Input Blocking Configuration
+### 1.5 Implementing Game Pause During Ads
 
-The SDK automatically pauses gameplay during full-screen ads (interstitial and rewarded) to prevent input conflicts and ensure ad visibility. This behavior can be customized:
+**Important**: The SDK does **not** automatically pause your game. You must implement pause behavior in your game code using ad lifecycle events.
 
-#### Automatic Pause Behavior (Default)
+#### Why Manual Pause Control?
 
-By default, the SDK:
-- Sets `Time.timeScale = 0` during ad display to pause all time-dependent systems (physics, animations, particles, etc.)
-- Blocks all input (UI and gameplay) using overlays and physics shields
-- Restores normal time and input when the ad closes
+Setting `Time.timeScale = 0` was found to break UI input and ad clickability in some Unity configurations. To ensure ads work reliably across platforms, the SDK leaves pause control to your game code.
+
+#### Input Blocking Behavior
+
+The SDK helps prevent gameplay input during ads by:
+- Disabling `PlayerInput` components (New Input System only)
+- Exposing `SoilAdInputBlocker.IsBlocked` for checking blocked state
+- Including a 40-second failsafe timeout to prevent permanent blocking
+
+**Note**: If you use the old Input API, custom input handlers, or direct raycasts, you must implement your own input blocking.
+
+#### Recommended Pause Implementation
+
+Subscribe to ad events and disable gameplay systems explicitly:
 
 ```csharp
-// Default behavior - SDK handles pausing automatically
-Advertisement.SetPauseGameplayDuringAds(true); // This is the default
+void Start()
+{
+    // Subscribe to ad lifecycle events
+    Advertisement.Events.OnInterstitialAdShown += HandleAdShown;
+    Advertisement.Events.OnRewardedAdShown += HandleAdShown;
+    Advertisement.Events.OnInterstitialAdClosed += HandleAdClosed;
+    Advertisement.Events.OnRewardedAdClosed += HandleAdClosed;
+}
+
+private void HandleAdShown(AdEventData data)
+{
+    // Disable gameplay systems explicitly
+    PlayerController.Instance.enabled = false;
+    EnemySpawner.Instance.SetEnabled(false);
+    // Disable physics-based controls, AI, timers, etc.
+}
+
+private void HandleAdClosed(AdEventData data)
+{
+    // Re-enable gameplay systems
+    PlayerController.Instance.enabled = true;
+    EnemySpawner.Instance.SetEnabled(true);
+}
+
+void OnDestroy()
+{
+    // Always unsubscribe to prevent memory leaks
+    Advertisement.Events.OnInterstitialAdShown -= HandleAdShown;
+    Advertisement.Events.OnRewardedAdShown -= HandleAdShown;
+    Advertisement.Events.OnInterstitialAdClosed -= HandleAdClosed;
+    Advertisement.Events.OnRewardedAdClosed -= HandleAdClosed;
+}
 ```
+
+#### Alternative: Check Input Blocker in Update
+
+```csharp
+void Update()
+{
+    // Skip gameplay logic while ads are shown
+    if (SoilAdInputBlocker.IsBlocked)
+        return;
+    
+    // Normal gameplay code here
+    HandlePlayerInput();
+    UpdateGameLogic();
+}
+```
+
+**Warning**: Do not use `Time.timeScale = 0` to pause during ads, as it can break ad clickability and UI interactions.
 
 ### 2. Loading Ads
 
@@ -83,6 +137,8 @@ private void OnAdsInitialized()
     LoadAllAds(); // Load all formats immediately
 }
 ```
+
+**Note**: After an ad is closed, you should call `LoadAd` again to prepare the next ad. The demo scene shows automatic reload in the `OnAdClosed` event handler.
 
 Subscribe to loading events:
 
@@ -163,13 +219,12 @@ Advertisement.Events.OnRewardedAdRewarded += OnAdRewarded;
 private void OnAdClosed(AdEventData data)
 {
     Debug.Log($"{data.AdFormat} ad closed");
-    // Ad can be shown again after reloading
     
-    // For interstitial and rewarded ads, reload immediately for next use
-    if (data.AdFormat == AdFormat.interstitial || data.AdFormat == AdFormat.rewarded)
-    {
-        Advertisement.LoadAd(data.AdFormat);
-    }
+    // Reload the ad for next use - ads automatically clear on close
+    Advertisement.LoadAd(data.AdFormat);
+    
+    // For rewarded ads during cooldown, LoadAd will wait automatically
+    // until cooldown expires before firing OnRewardedAdLoaded
 }
 
 private void OnAdRewarded(AdEventData data)
@@ -207,6 +262,10 @@ For production applications, implement robust retry logic to handle temporary fa
 - **Timeout**: Retry with backoff - server response delays
 - **InternalError**: Limited retries - may indicate configuration issues
 - **AdNotReady**: Retry immediately - ad failed to load but can be retried
+
+### Failsafe Timeout
+
+The SDK includes a 40-second failsafe timeout that automatically unblocks input if an ad fails to close properly. This is enforced by `SoilAdManager` calling `SoilAdInputBlocker.FailsafeTick()` each frame. Test long ads and failure scenarios to ensure this works as expected in your game.
 
 ## Ad Purchase Integration
 
@@ -249,19 +308,27 @@ if (Advertisement.IsFormatReady(AdFormat.interstitial))
 
 ### Rewarded Ads
 
-Player-initiated ads that grant rewards upon completion:
+Player-initiated ads that grant rewards upon completion. Rewarded ads have a 10-second cooldown after closing.
 
 ```csharp
-// Check cooldown before offering rewarded ad
-if (!Advertisement.IsRewardedAdInCooldown())
+// Check readiness (includes cooldown check)
+if (Advertisement.IsFormatReady(AdFormat.rewarded))
 {
-    // Offer rewarded ad to player
-    ShowRewardedAdOffer();
+    Advertisement.ShowAd(AdFormat.rewarded);
+}
+
+// Check cooldown status
+if (Advertisement.IsRewardedAdInCooldown())
+{
+    float remaining = Advertisement.GetRewardedAdCooldownRemainingSeconds();
+    Debug.Log($"Rewarded ad in cooldown. Remaining: {remaining} seconds");
 }
 
 // Reset cooldown for testing (admin purposes)
 Advertisement.ResetRewardedAdCooldown();
 ```
+
+**Automatic Cooldown Handling**: When you call `LoadAd(AdFormat.rewarded)` during cooldown, the SDK automatically waits for the cooldown to expire before firing the `OnRewardedAdLoaded` event. You don't need to manually wait for cooldown.
 
 ## Additional Event Types
 
@@ -282,14 +349,42 @@ Advertisement.Events.OnAdFormatAssetsLoaded += OnAdFormatAssetsLoaded;
 
 private void OnAdFormatAssetsLoaded(AdFormat format)
 {
-    Debug.Log($"Assets loaded for {format}");
-    // Handle asset-specific logic if needed
+    Debug.Log($"Assets cached for {format}");
+    // This fires when assets are cached during initialization
+    // It does NOT fire OnBannerAdLoaded/OnInterstitialAdLoaded/OnRewardedAdLoaded
+    // Those events only fire from explicit LoadAd() calls
 }
 ```
 
+## Testing Checklist
+
+Before shipping, thoroughly test the following:
+
+- ✅ Verify ad click-throughs work on all target platforms (iOS/Android/editor)
+- ✅ Verify ad close behavior returns control reliably across scenes
+- ✅ Test with both New Input System and legacy Input API if your project uses both
+- ✅ Test long ads and simulate failures to ensure failsafe unblocks input after ~40s
+- ✅ Test multi-scene flows and `DontDestroyOnLoad` objects to ensure events work correctly
+- ✅ Verify rewarded ad cooldown works as expected
+- ✅ Test that your pause implementation works correctly with ad events
+
+## Compatibility Notes
+
+- The SDK uses `Object.FindObjectsByType` on Unity 2023.1+ and falls back to `FindObjectsOfType` on older versions
+- Expect minor runtime differences across Unity versions — test accordingly
+- If using the old Input API (`Input.GetKey`, `Input.GetMouseButton`, etc.), implement your own input blocking
+
+## Common Issues
+
+**Ad clicks don't work**: Check that you are not setting `Time.timeScale = 0` globally while ads are showing. This is the most common cause of broken ad clickability.
+
+**Events fire multiple times**: Ensure you unsubscribe from events when scenes unload if you attach listeners on objects that are destroyed.
+
+**Input remains blocked**: Check the failsafe is working by calling `SoilAdInputBlocker.FailsafeTick()` in an Update loop (this is done automatically by `SoilAdManager`).
+
 ## Demo Scene
 
-See the [Advertisement Demo](../README.md#demo-scenes) (`SoilAdvertisementExample.unity`) for a complete working example of initialization, loading, showing ads, and event handling.
+See the [Advertisement Demo](../README.md#demo-scenes) (`SoilAdvertisementExample.unity`) for a complete working example of initialization, loading, showing ads, event handling, and automatic reload patterns.
 
 For advanced implementation patterns including retry logic, health monitoring, and mediation layers, refer to the `SoilMediation.cs` example file, which demonstrates a production-ready ad management system.
 

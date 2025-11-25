@@ -197,22 +197,6 @@ namespace FlyingAcorn.Soil.Advertisement
         internal static void InvokeOnAdFormatAssetsLoaded(Constants.AdFormat adFormat)
         {
             OnAdFormatAssetsLoaded?.Invoke(adFormat);
-            switch (adFormat)
-            {
-                case Constants.AdFormat.banner:
-                    InvokeOnBannerAdLoaded(new AdEventData(adFormat));
-                    break;
-                case Constants.AdFormat.interstitial:
-                    InvokeOnInterstitialAdLoaded(new AdEventData(adFormat));
-                    break;
-                case Constants.AdFormat.rewarded:
-                    InvokeOnRewardedAdLoaded(new AdEventData(adFormat));
-                    break;
-                default:
-                    throw new System.ArgumentException($"Unknown ad format: {adFormat}");
-
-            }
-
         }
     }
 }

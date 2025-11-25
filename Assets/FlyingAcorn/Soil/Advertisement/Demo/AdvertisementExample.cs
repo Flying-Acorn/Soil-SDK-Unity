@@ -14,8 +14,6 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
         // Track processed ad formats to prevent duplicate messages
         private HashSet<AdFormat> readyFormats = new HashSet<AdFormat>();
         // Track last closed ad format to prevent duplicate closed messages in quick succession
-        private AdFormat? lastClosedFormat = null;
-        private float lastClosedTime = 0f;
         public Button getCampaignButton;
         public TextMeshProUGUI statusText;
         public Button showBannerButton;
@@ -104,7 +102,6 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             Events.OnInterstitialAdClicked -= HandleAdClicked;
             Events.OnRewardedAdClicked -= HandleAdClicked;
             readyFormats.Clear();
-            lastClosedFormat = null;
         }
 
         private void HandleAdShown(AdEventData data)
@@ -126,25 +123,12 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 
         private void HandleAdClosed(AdEventData data)
         {
-            // Prevent duplicate closed messages within a short time window (0.2s)
-            if (lastClosedFormat == data.AdFormat && (Time.unscaledTime - lastClosedTime) < 0.2f)
-                return;
-            lastClosedFormat = data.AdFormat;
-            lastClosedTime = Time.unscaledTime;
             statusText.text += $"\n{data.AdFormat} closed.";
             MyDebug.Info($"[AdDemo] {data.AdFormat} ad closed event fired");
-            switch (data.AdFormat)
-            {
-                case AdFormat.banner:
-                    showBannerButton.interactable = true;
-                    break;
-                case AdFormat.interstitial:
-                    showInterstitialButton.interactable = true;
-                    break;
-                case AdFormat.rewarded:
-                    showRewardedButton.interactable = true;
-                    break;
-            }
+            
+            // Load next ad of the same format
+            statusText.text += $"\nLoading next {data.AdFormat}...";
+            Advertisement.LoadAd(data.AdFormat);
         }
 
         private void HandleAdError(AdEventData data)
