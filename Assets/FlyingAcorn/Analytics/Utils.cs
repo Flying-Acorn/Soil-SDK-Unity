@@ -66,8 +66,10 @@ namespace FlyingAcorn.Analytics
             if (service.EventLengthLimit >= 0)
             {
                 if (eventName.Length <= service.EventLengthLimit) return eventName;
+                var slicedEventName = eventName[..(service.EventLengthLimit - 1)];
                 MyDebug.Info(
-                    $"Event is too long for this provider: {eventName}, slicing it to {eventName = eventName[..(service.EventLengthLimit - 1)]}");
+                    $"Event is too long for this provider: {eventName}, slicing it to {slicedEventName}");
+                return slicedEventName;
             }
 
             MyDebug.Verbose($"Sending event: {eventName} to {service.GetType().Name}");
