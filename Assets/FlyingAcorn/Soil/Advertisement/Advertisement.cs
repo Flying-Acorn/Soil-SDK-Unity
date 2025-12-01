@@ -275,16 +275,13 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            if (IsFormatReady(adFormat))
-            {
-                // Instantiate and preload the ad prefab for this format (hidden, prepared)
-                PreloadAndPrepareAdInstance(adFormat);
+            // Instantiate and preload the ad prefab for this format (hidden, prepared)
+            PreloadAndPrepareAdInstance(adFormat);
 
-                // Notify internal listeners that assets are ready. This should
-                // NOT be used to fire OnXAdLoaded events; those only come from
-                // explicit LoadAd/placement.Load calls.
-                Events.InvokeOnAdFormatAssetsLoaded(adFormat);
-            }
+            // Notify internal listeners that assets are ready. This should
+            // NOT be used to fire OnXAdLoaded events; those only come from
+            // explicit LoadAd/placement.Load calls.
+            Events.InvokeOnAdFormatAssetsLoaded(adFormat);
         }
 
         /// <summary>
@@ -655,8 +652,6 @@ namespace FlyingAcorn.Soil.Advertisement
                 InvokeAdErrorEvent(adFormat, errorData);
                 return;
             }
-            if (instance.activeInHierarchy)
-                return;
 
             // For interstitial and rewarded ads, preload fallback image immediately to prevent blank moments
             if (adFormat == AdFormat.interstitial || adFormat == AdFormat.rewarded)
@@ -951,51 +946,44 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Checks if an ad format is ready to be shown. Always check this before calling ShowAd.
+        /// Checks if an ad format is ready to be shown. This checks BOTH that an ad instance
+        /// is loaded in the placement AND that all conditions are met (assets available, cooldown cleared for rewarded).
+        /// Always check this before calling ShowAd.
         /// </summary>
         /// <param name="adFormat">The ad format to check</param>
-        /// <returns>True if the ad format is ready to be shown</returns>
+        /// <returns>True if the ad can be shown immediately</returns>
         public static bool IsFormatReady(AdFormat adFormat)
         {
-            var assets = AssetCache.GetCachedAssets(adFormat);
-            // Step 1: Must have at least one cached image asset
-            var hasImageAsset = assets != null && assets.Any(asset => asset.AssetType == AssetType.image);
-            if (!hasImageAsset)
+            // Step 1: Check if placement instance has a loaded ad ready to show
+            if (_activePlacements.TryGetValue(adFormat, out GameObject instance) && instance != null)
             {
-                MyDebug.Verbose($"Format {adFormat} not ready: no cached image asset found (required for fallback)");
-                return false;
-            }
-
-            // Step 2: If the current campaign has a video asset for this format, it must be cached (partly or fully)
-            bool campaignHasVideo = false;
-            if (availableCampaign != null && availableCampaign.ad_groups != null)
-            {
-                foreach (var adGroup in availableCampaign.ad_groups)
+                bool instanceReady = adFormat switch
                 {
-                    // Check all ads in image_ads and video_ads for this format
-                    var allAds = adGroup.allAds;
-                    if (allAds != null && allAds.Any(ad => ad.format == adFormat.ToString() && ad.main_video != null))
-                    {
-                        campaignHasVideo = true;
-                        break;
-                    }
-                }
-            }
-            if (campaignHasVideo)
-            {
-                var hasVideoAsset = assets.Any(asset => asset.AssetType == AssetType.video && asset.IsValid);
-                if (!hasVideoAsset)
+                    AdFormat.banner => instance.TryGetComponent(out BannerAdPlacement banner) && banner.IsReady(),
+                    AdFormat.interstitial => instance.TryGetComponent(out InterstitialAdPlacement interstitial) && interstitial.IsReady(),
+                    AdFormat.rewarded => instance.TryGetComponent(out RewardedAdPlacement rewarded) && rewarded.IsReady(),
+                    _ => false
+                };
+                
+                if (!instanceReady)
                 {
-                    MyDebug.Verbose($"Format {adFormat} not ready: campaign has video asset but none cached");
+                    MyDebug.Verbose($"Format {adFormat} not ready: no loaded ad instance in placement");
                     return false;
                 }
             }
-
-            // Step 3: For rewarded ads, also check cooldown
-            if (adFormat == AdFormat.rewarded)
+            else
             {
-                return !IsRewardedAdInCooldown();
+                MyDebug.Verbose($"Format {adFormat} not ready: placement instance not found");
+                return false;
             }
+
+            // Step 2: For rewarded ads, also check cooldown
+            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
+            {
+                MyDebug.Verbose($"Format {adFormat} not ready: in cooldown");
+                return false;
+            }
+
             return true;
         }
 

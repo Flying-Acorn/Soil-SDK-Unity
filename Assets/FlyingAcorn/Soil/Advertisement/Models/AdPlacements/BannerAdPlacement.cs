@@ -74,14 +74,8 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
 
         public bool IsReady()
         {
-            // Use event-driven readiness status as primary check
-            var eventReady = _isFormatReady;
-
-            // Fallback to cache check
-            var cacheReady = Advertisement.IsFormatReady(AdFormat.banner);
-
-            // Return true if either indicates readiness
-            return eventReady || cacheReady;
+            // Ready means: ad instance is loaded and can be shown immediately
+            return _currentAd != null && adDisplayComponent != null;
         }
 
         public void Load()

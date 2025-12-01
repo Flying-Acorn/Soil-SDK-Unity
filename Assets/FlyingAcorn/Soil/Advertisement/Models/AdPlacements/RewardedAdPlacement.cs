@@ -78,23 +78,16 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 SoilAdInputBlocker.Unblock();
                 OnHidden?.Invoke();
                 
-                // Clear current ad so it can be reloaded
+                // Clear current ad so it can be reloaded externally
                 _currentAd = null;
             }
         }
 
         public bool IsReady()
         {
-            // Use event-driven readiness status as primary check
-            var eventReady = _isFormatReady;
-
-            // Fallback to cache check - must have at least one cached image asset
-            var assets = Advertisement.GetCachedAssets(AdFormat.rewarded);
-            var cacheReady = assets != null && assets.Any(asset => asset.AssetType == AssetType.image);
-
-            // For rewarded ads, readiness means: assets are prepared.
-            // Cooldown is handled separately in Load()/LoadCoroutine().
-            return eventReady || cacheReady;
+            // Ready means: ad instance is loaded and can be shown immediately
+            // Cooldown is checked separately at show time
+            return _currentAd != null && adDisplayComponent != null;
         }
 
         private void PerformLoad()

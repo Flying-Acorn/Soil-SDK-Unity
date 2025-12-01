@@ -79,21 +79,15 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 eventData.ad = _currentAd;
                 Events.InvokeOnInterstitialAdClosed(eventData);
                 
-                // Clear current ad so it can be reloaded
+                // Clear current ad so it can be reloaded externally
                 _currentAd = null;
             }
         }
 
         public bool IsReady()
         {
-            // Use event-driven readiness status as primary check
-            var eventReady = _isFormatReady;
-
-            // Fallback to cache check
-            var cacheReady = Advertisement.IsFormatReady(AdFormat.interstitial);
-
-            // Return true if either indicates readiness
-            return eventReady || cacheReady;
+            // Ready means: ad instance is loaded and can be shown immediately
+            return _currentAd != null && adDisplayComponent != null;
         }
 
         public void Load()
