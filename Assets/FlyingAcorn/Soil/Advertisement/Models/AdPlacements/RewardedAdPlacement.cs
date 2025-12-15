@@ -55,7 +55,8 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             Events.OnAdFormatAssetsLoaded -= OnAdFormatAssetsLoaded;
             if (_loadCoroutine != null)
             {
-                SoilAdManager.Instance.StopCoroutine(_loadCoroutine);
+                if (SoilAdManager.Instance != null)
+                    SoilAdManager.Instance.StopCoroutine(_loadCoroutine);
                 _loadCoroutine = null;
             }
         }
@@ -132,6 +133,12 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             // Don't reload if already loaded
             if (_currentAd != null)
                 return;
+            
+            if (SoilAdManager.Instance == null)
+            {
+                MyDebug.Info("SoilAdManager instance is null. Cannot start load coroutine.");
+                return;
+            }
 
             if (_loadCoroutine != null)
             {
