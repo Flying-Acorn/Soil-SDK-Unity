@@ -1526,7 +1526,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             _frameDropCount++;
             if (_frameDropCount > 20) // Alert after multiple drops
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoFrameDrops");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, "AdVideoFrameDrops");
                 _frameDropCount = 0; // Reset counter after alert
             }
         }
