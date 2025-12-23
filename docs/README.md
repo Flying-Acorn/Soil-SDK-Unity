@@ -32,6 +32,7 @@ All demo Unity scenes are located under `Assets/FlyingAcorn/Soil/**/Demo/`.
 | Social Authentication | `Assets/FlyingAcorn/Soil/Core/User/ThirdPartyAuthentication/Demo/SoilThirdAuthExample.unity` |
 | Advertisement  | `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample.unity`|
 | Cloud Save     | `Assets/FlyingAcorn/Soil/CloudSave/Demo/SoilCloudSaveExample.unity`        |
+| Economy        | `Assets/FlyingAcorn/Soil/Economy/Demo/SoilUserEconomyExample.unity`        |
 | Leaderboard    | `Assets/FlyingAcorn/Soil/Leaderboard/Demo/SoilLeaderboardExample.unity`    |
 | Socialization  | `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity`|
 | Scene Switcher | `Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity`                     |
