@@ -225,7 +225,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         {
             try
             {
-                MyDebug.Verbose($"UnlinkAsync called for {party}");
                 if (!Ready)
                 {
                     MyDebug.LogWarning("Social Authentication not initialized");
@@ -240,11 +239,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                     MyDebug.Verbose($"Calling ThirdPartyAPIHandler.Unlink for {party}");
                     var unlinkResponse = await ThirdPartyAPIHandler.Unlink(settings);
                     MyDebug.Verbose($"ThirdPartyAPIHandler.Unlink completed for {party}. Response: {JsonConvert.SerializeObject(unlinkResponse)}");
-                    MyDebug.Verbose($"About to invoke OnUnlinkSuccessCallback for {party}");
                     _myLinks.RemoveAll(link => link.detail.app_party.party == party);
                     LinkingPlayerPrefs.SetUserId(party, "");
                     OnUnlinkSuccessCallback?.Invoke(unlinkResponse);
-                    MyDebug.Verbose($"OnUnlinkSuccessCallback invoked for {party}");
                 }
                 catch (SoilException e)
                 {
