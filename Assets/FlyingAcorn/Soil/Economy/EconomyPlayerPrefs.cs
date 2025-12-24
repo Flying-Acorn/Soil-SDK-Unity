@@ -69,11 +69,41 @@ namespace FlyingAcorn.Soil.Economy
             PlayerPrefs.Save();
         }
 
+        internal static void SetVirtualCurrency(UserVirtualCurrency virtualCurrency)
+        {
+            var currencies = VirtualCurrencies;
+            var index = currencies.FindIndex(vc => vc.Identifier == virtualCurrency.Identifier);
+            if (index >= 0)
+            {
+                currencies[index] = virtualCurrency;
+            }
+            else
+            {
+                currencies.Add(virtualCurrency);
+            }
+            SetVirtualCurrencies(currencies);
+        }
+
         internal static void SetInventoryItems(List<UserInventoryItem> inventoryItems)
         {
             var data = JsonConvert.SerializeObject(inventoryItems);
             PlayerPrefs.SetString(InventoryItemsKey, data);
             PlayerPrefs.Save();
+        }
+
+        internal static void SetInventoryItem(UserInventoryItem inventoryItem)
+        {
+            var items = InventoryItems;
+            var index = items.FindIndex(ii => ii.Identifier == inventoryItem.Identifier);
+            if (index >= 0)
+            {
+                items[index] = inventoryItem;
+            }
+            else
+            {
+                items.Add(inventoryItem);
+            }
+            SetInventoryItems(items);
         }
     }
 }

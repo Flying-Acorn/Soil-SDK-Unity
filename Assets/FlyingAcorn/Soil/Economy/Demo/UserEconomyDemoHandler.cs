@@ -4,6 +4,8 @@ using FlyingAcorn.Soil.Core.Data;
 using System.Collections.Generic;
 using UnityEngine.UI;
 using JetBrains.Annotations;
+using Cysharp.Threading.Tasks;
+using FlyingAcorn.Soil.Economy.Models.Responses;
 
 namespace FlyingAcorn.Soil.Economy.Demo
 {
@@ -13,6 +15,7 @@ namespace FlyingAcorn.Soil.Economy.Demo
         [SerializeField] private DemoEconomyItem DemoEconomyItemPrefab;
         [SerializeField] private Transform DemoInventoryItemContainer;
         [SerializeField] private Transform DemoVirtualCurrencyContainer;
+        [SerializeField] private Button RetryInitButton;
         [SerializeField] private Button SetButton;
         [SerializeField] private Button IncreaseButton;
         [SerializeField] private Button DecreaseButton;
@@ -28,11 +31,23 @@ namespace FlyingAcorn.Soil.Economy.Demo
             Economy.OnEconomyInitialized += OnEconomyInitializationSuccess;
             Economy.OnEconomyInitializationFailed += OnEconomyInitializationFailed;
 
+            RetryInitButton.interactable = false;
+            RetryInitButton.onClick.AddListener(OnRetryInitButtonClick);
+
+            SetButtonsInteractable(false);
+
             Economy.Initialize();
 
             SetButton.onClick.AddListener(OnSetButtonClick);
             IncreaseButton.onClick.AddListener(OnIncreaseButtonClick);
             DecreaseButton.onClick.AddListener(OnDecreaseButtonClick);
+        }
+
+        private void OnRetryInitButtonClick()
+        {
+            statusTitleText.text = "Retrying Economy Initialization...";
+            RetryInitButton.interactable = false;
+            Economy.Initialize();
         }
 
         private void OnDestroy()
@@ -44,6 +59,8 @@ namespace FlyingAcorn.Soil.Economy.Demo
         private void OnEconomyInitializationSuccess()
         {
             statusTitleText.text = "Economy Ready";
+            RetryInitButton.interactable = false;
+            SetButtonsInteractable(true);
             InitializeEconomyItems();
         }
 
@@ -75,22 +92,52 @@ namespace FlyingAcorn.Soil.Economy.Demo
                 demoInventoryItems.Add(demoInventoryItem);
             }
 
-            EconomyItemToChangeDropdown.ClearOptions();
-            List<TMP_Dropdown.OptionData> options = new List<TMP_Dropdown.OptionData>();
+            List<string> newIdentifiers = new List<string>();
             foreach (var demoItem in demoInventoryItems)
             {
-                options.Add(new TMP_Dropdown.OptionData(demoItem.Identifier));
+                newIdentifiers.Add(demoItem.Identifier);
             }
             foreach (var demoCurrency in demoVirtualCurrencies)
             {
-                options.Add(new TMP_Dropdown.OptionData(demoCurrency.Identifier));
+                newIdentifiers.Add(demoCurrency.Identifier);
             }
-            EconomyItemToChangeDropdown.AddOptions(options);
+
+            bool needsUpdate = false;
+            if (EconomyItemToChangeDropdown.options.Count != newIdentifiers.Count)
+            {
+                needsUpdate = true;
+            }
+            else
+            {
+                for (int i = 0; i < newIdentifiers.Count; i++)
+                {
+                    if (EconomyItemToChangeDropdown.options[i].text != newIdentifiers[i])
+                    {
+                        needsUpdate = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsUpdate)
+            {
+                EconomyItemToChangeDropdown.ClearOptions();
+                EconomyItemToChangeDropdown.AddOptions(newIdentifiers);
+            }
         }
 
         private void OnEconomyInitializationFailed(SoilException exception)
         {
-            statusTitleText.text = "Economy Initialization Failed";
+            statusTitleText.text = $"Economy Initialization Failed: {exception.Message}";
+            RetryInitButton.interactable = true;
+            SetButtonsInteractable(false);
+        }
+
+        private void SetButtonsInteractable(bool interactable)
+        {
+            SetButton.interactable = interactable;
+            IncreaseButton.interactable = interactable;
+            DecreaseButton.interactable = interactable;
         }
 
         private bool ValidateAmountInput()
@@ -126,11 +173,11 @@ namespace FlyingAcorn.Soil.Economy.Demo
             return null;
         }
 
-        private void OnSetButtonClick()
+        private async void OnSetButtonClick()
         {
             int selectedIndex = EconomyItemToChangeDropdown.value;
             string selectedIdentifier = EconomyItemToChangeDropdown.options[selectedIndex].text;
-            statusTitleText.text = $"Set {selectedIdentifier} to {amountInput.text}";
+            
             if (!ValidateAmountInput())
             {
                 statusTitleText.text = "Invalid amount input, must be a non-negative integer";
@@ -144,19 +191,39 @@ namespace FlyingAcorn.Soil.Economy.Demo
             }
             try
             {
-                DoButtonAction(itemType, "Set", amountInput.text);
+                SetButtonsInteractable(false);
+                statusTitleText.text = $"Setting {selectedIdentifier} to {amountInput.text}...";
+                await DoButtonAction(selectedIdentifier, itemType, "Set", amountInput.text);
+                statusTitleText.text = $"{selectedIdentifier} updated successfully!";
+            }
+            catch (EconomyException ee)
+            {
+                statusTitleText.text = $"Economy Error: {ee.Message} (Code: {ee.EconomyErrorCode})";
+            }
+            catch (SoilException se)
+            {
+                statusTitleText.text = $"Soil Error: {se.Message} (Code: {se.ErrorCode})";
             }
             catch (System.Exception e)
             {
-                statusTitleText.text = $"Error: {e.Message}";
+                statusTitleText.text = $"Unexpected Error: {e.Message}";
+            }
+            finally
+            {
+                SetButtonsInteractable(true);
             }
         }
 
-        private void OnIncreaseButtonClick()
+        private async void OnIncreaseButtonClick()
         {
             int selectedIndex = EconomyItemToChangeDropdown.value;
             string selectedIdentifier = EconomyItemToChangeDropdown.options[selectedIndex].text;
-            statusTitleText.text = $"Increased {selectedIdentifier} by {amountInput.text}";
+            
+            if (!ValidateAmountInput())
+            {
+                statusTitleText.text = "Invalid amount input, must be a non-negative integer";
+                return;
+            }
             string itemType = GetSelectedItemType(selectedIdentifier);
             if (itemType == null)
             {
@@ -165,19 +232,39 @@ namespace FlyingAcorn.Soil.Economy.Demo
             }
             try
             {
-                DoButtonAction(itemType, "Increase", amountInput.text);
+                SetButtonsInteractable(false);
+                statusTitleText.text = $"Increasing {selectedIdentifier} by {amountInput.text}...";
+                await DoButtonAction(selectedIdentifier, itemType, "Increase", amountInput.text);
+                statusTitleText.text = $"{selectedIdentifier} increased successfully!";
+            }
+            catch (EconomyException ee)
+            {
+                statusTitleText.text = $"Economy Error: {ee.Message} (Code: {ee.EconomyErrorCode})";
+            }
+            catch (SoilException se)
+            {
+                statusTitleText.text = $"Soil Error: {se.Message} (Code: {se.ErrorCode})";
             }
             catch (System.Exception e)
             {
-                statusTitleText.text = $"Error: {e.Message}";
+                statusTitleText.text = $"Unexpected Error: {e.Message}";
+            }
+            finally
+            {
+                SetButtonsInteractable(true);
             }
         }
 
-        private void OnDecreaseButtonClick()
+        private async void OnDecreaseButtonClick()
         {
             int selectedIndex = EconomyItemToChangeDropdown.value;
             string selectedIdentifier = EconomyItemToChangeDropdown.options[selectedIndex].text;
-            statusTitleText.text = $"Decreased {selectedIdentifier} by {amountInput.text}";
+            
+            if (!ValidateAmountInput())
+            {
+                statusTitleText.text = "Invalid amount input, must be a non-negative integer";
+                return;
+            }
             string itemType = GetSelectedItemType(selectedIdentifier);
             if (itemType == null)
             {
@@ -186,34 +273,49 @@ namespace FlyingAcorn.Soil.Economy.Demo
             }
             try
             {
-                DoButtonAction(itemType, "Decrease", amountInput.text);
+                SetButtonsInteractable(false);
+                statusTitleText.text = $"Decreasing {selectedIdentifier} by {amountInput.text}...";
+                await DoButtonAction(selectedIdentifier, itemType, "Decrease", amountInput.text);
+                statusTitleText.text = $"{selectedIdentifier} decreased successfully!";
+            }
+            catch (EconomyException ee)
+            {
+                statusTitleText.text = $"Economy Error: {ee.Message} (Code: {ee.EconomyErrorCode})";
+            }
+            catch (SoilException se)
+            {
+                statusTitleText.text = $"Soil Error: {se.Message} (Code: {se.ErrorCode})";
             }
             catch (System.Exception e)
             {
-                statusTitleText.text = $"Error: {e.Message}";
+                statusTitleText.text = $"Unexpected Error: {e.Message}";
+            }
+            finally
+            {
+                SetButtonsInteractable(true);
             }
         }
 
-        private void DoButtonAction(string itemType, string actionType, string amountText)
+        private async UniTask DoButtonAction(string identifier, string itemType, string actionType, string amountText)
         {
             if (!ValidateAmountInput())
             {
                 throw new System.Exception("Invalid amount input, must be a non-negative integer");
             }
+            int amount = int.Parse(amountText);
             if (itemType == "InventoryItem")
             {
-                int amount = int.Parse(amountText);
                 if (actionType == "Set")
                 {
-                    throw new System.NotImplementedException();
+                    await Economy.SetInventoryItem(identifier, amount);
                 }
                 else if (actionType == "Increase")
                 {
-                    throw new System.NotImplementedException();
+                    await Economy.IncreaseInventoryItem(identifier, amount);
                 }
                 else if (actionType == "Decrease")
                 {
-                    throw new System.NotImplementedException();
+                    await Economy.DecreaseInventoryItem(identifier, amount);
                 }
                 else
                 {
@@ -222,18 +324,17 @@ namespace FlyingAcorn.Soil.Economy.Demo
             }
             else if (itemType == "VirtualCurrency")
             {
-                int amount = int.Parse(amountText);
                 if (actionType == "Set")
                 {
-                    throw new System.NotImplementedException();
+                    await Economy.SetVirtualCurrency(identifier, amount);
                 }
                 else if (actionType == "Increase")
                 {
-                    throw new System.NotImplementedException();
+                    await Economy.IncreaseVirtualCurrency(identifier, amount);
                 }
                 else if (actionType == "Decrease")
                 {
-                    throw new System.NotImplementedException();
+                    await Economy.DecreaseVirtualCurrency(identifier, amount);
                 }
                 else
                 {
@@ -244,6 +345,8 @@ namespace FlyingAcorn.Soil.Economy.Demo
             {
                 throw new System.Exception("Invalid item type");
             }
+
+            InitializeEconomyItems();
         }
     }
 }

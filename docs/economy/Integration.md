@@ -80,6 +80,110 @@ foreach (var item in items)
 }
 ```
 
+### 4. Modifying Virtual Currencies
+
+All currency modification methods automatically update the cached data in `EconomyPlayerPrefs`.
+
+#### Setting Currency Balance
+
+Set a virtual currency to an absolute balance:
+
+```csharp
+try
+{
+    var updatedCurrency = await Economy.SetVirtualCurrency("gold", 500);
+    Debug.Log($"Gold set to: {updatedCurrency.Balance}");
+}
+catch (SoilException e)
+{
+    Debug.LogError($"Failed to set currency: {e.Message}");
+}
+```
+
+#### Increasing Currency Balance
+
+Add to an existing virtual currency balance:
+
+```csharp
+try
+{
+    var updatedCurrency = await Economy.IncreaseVirtualCurrency("gold", 100);
+    Debug.Log($"Gold increased to: {updatedCurrency.Balance}");
+}
+catch (SoilException e)
+{
+    Debug.LogError($"Failed to increase currency: {e.Message}");
+}
+```
+
+#### Decreasing Currency Balance
+
+Subtract from an existing virtual currency balance:
+
+```csharp
+try
+{
+    var updatedCurrency = await Economy.DecreaseVirtualCurrency("gold", 50);
+    Debug.Log($"Gold decreased to: {updatedCurrency.Balance}");
+}
+catch (SoilException e)
+{
+    Debug.LogError($"Failed to decrease currency: {e.Message}");
+}
+```
+
+### 5. Modifying Inventory Items
+
+All inventory modification methods automatically update the cached data in `EconomyPlayerPrefs`.
+
+#### Setting Item Balance
+
+Set an inventory item to an absolute balance:
+
+```csharp
+try
+{
+    var updatedItem = await Economy.SetInventoryItem("sword", 1);
+    Debug.Log($"Sword balance set to: {updatedItem.Balance}");
+}
+catch (SoilException e)
+{
+    Debug.LogError($"Failed to set item: {e.Message}");
+}
+```
+
+#### Increasing Item Balance
+
+Add to an existing inventory item balance:
+
+```csharp
+try
+{
+    var updatedItem = await Economy.IncreaseInventoryItem("potion", 5);
+    Debug.Log($"Potion increased to: {updatedItem.Balance}");
+}
+catch (SoilException e)
+{
+    Debug.LogError($"Failed to increase item: {e.Message}");
+}
+```
+
+#### Decreasing Item Balance
+
+Subtract from an existing inventory item balance:
+
+```csharp
+try
+{
+    var updatedItem = await Economy.DecreaseInventoryItem("potion", 1);
+    Debug.Log($"Potion decreased to: {updatedItem.Balance}");
+}
+catch (SoilException e)
+{
+    Debug.LogError($"Failed to decrease item: {e.Message}");
+}
+```
+
 ## Other Documentations
 
 See the [Services overview](../README.md#services) for information on other available modules.

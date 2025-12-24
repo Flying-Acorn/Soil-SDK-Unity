@@ -6,7 +6,10 @@ using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using FlyingAcorn.Soil.Economy.Models.Responses;
+using FlyingAcorn.Soil.Economy.Models;
 using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.Text;
 
 namespace FlyingAcorn.Soil.Economy
 {
@@ -21,9 +24,19 @@ namespace FlyingAcorn.Soil.Economy
         private static string VirtualCurrencyIncreaseUrl => $"{VirtualCurrencyBaseUrl}increase/"; // Post
         private static string VirtualCurrencyDecreaseUrl => $"{VirtualCurrencyBaseUrl}decrease/"; // Post
 
+        /// <summary>
+        /// Gets whether the Economy service is ready for use.
+        /// </summary>
         public static bool Ready => SoilServices.Ready && _initialized;
 
+        /// <summary>
+        /// Event fired when the Economy service is successfully initialized.
+        /// </summary>
         public static Action OnEconomyInitialized { get; set; }
+
+        /// <summary>
+        /// Event fired when Economy service initialization fails.
+        /// </summary>
         public static Action<SoilException> OnEconomyInitializationFailed { get; set; }
 
         private static bool _isInitializing;
@@ -78,9 +91,7 @@ namespace FlyingAcorn.Soil.Economy
         {
             try
             {
-                var summary = await GetSummary();
-                EconomyPlayerPrefs.SetVirtualCurrencies(summary.virtual_currencies);
-                EconomyPlayerPrefs.SetInventoryItems(summary.inventory_items);
+                await GetSummary();
                 _isInitializing = false;
                 _initialized = true;
                 OnEconomyInitialized?.Invoke();
@@ -101,14 +112,36 @@ namespace FlyingAcorn.Soil.Economy
         {
             if (!SoilServices.Ready)
             {
-                throw new SoilException("Economy service is not initialized. Cannot get economy summary.",
+                throw new SoilException("SoilServices is not initialized. Cannot get economy summary.",
                     SoilExceptionErrorCode.NotReady);
             }
 
-            using var request = UnityWebRequest.Get(SummaryUrl);
+            var summary = await ExecuteRequest<EconomySummarySuccess>(SummaryUrl, UnityWebRequest.kHttpVerbGET);
+
+            // Centralized cache update
+            EconomyPlayerPrefs.SetVirtualCurrencies(summary.virtual_currencies);
+            EconomyPlayerPrefs.SetInventoryItems(summary.inventory_items);
+
+            return summary;
+        }
+
+        private static async UniTask<T> ExecuteRequest<T>(string url, string method, object payload = null)
+        {
+            using var request = new UnityWebRequest(url, method);
+
+            if (payload != null)
+            {
+                var stringBody = JsonConvert.SerializeObject(payload, Formatting.None);
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(stringBody);
+                request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                request.SetRequestHeader("Content-Type", "application/json");
+            }
+
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Accept", "application/json");
             var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
             if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
-            request.SetRequestHeader("Accept", "application/json");
+
             try
             {
                 await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
@@ -116,7 +149,12 @@ namespace FlyingAcorn.Soil.Economy
             catch (SoilException) { throw; }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while getting economy summary: {ex.Message}", SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error during economy request: {ex.Message}", SoilExceptionErrorCode.TransportError);
+            }
+
+            if (request.result == UnityWebRequest.Result.ConnectionError || request.result == UnityWebRequest.Result.DataProcessingError)
+            {
+                throw new SoilException($"Request failed: {request.error}", SoilExceptionErrorCode.TransportError);
             }
 
             if (request.responseCode < 200 || request.responseCode >= 300)
@@ -124,13 +162,20 @@ namespace FlyingAcorn.Soil.Economy
                 EconomyError error = null;
                 try
                 {
-                    error = JsonConvert.DeserializeObject<EconomyError>(request.downloadHandler?.text);
+                    var errorText = request.downloadHandler?.text;
+                    if (!string.IsNullOrEmpty(errorText))
+                    {
+                        error = JsonConvert.DeserializeObject<EconomyError>(errorText);
+                    }
                 }
                 catch { }
 
                 if (error != null)
                 {
-                    throw new SoilException($"Economy error: {error.detail}", SoilExceptionErrorCode.InvalidResponse);
+                    var economyErrorCode = Enum.IsDefined(typeof(EconomyErrorCode), (int)request.responseCode)
+                        ? (EconomyErrorCode)request.responseCode
+                        : EconomyErrorCode.InternalError;
+                    throw new EconomyException(error.GetFullErrorMessage(), SoilExceptionErrorCode.InvalidResponse, error, economyErrorCode);
                 }
                 else
                 {
@@ -138,17 +183,164 @@ namespace FlyingAcorn.Soil.Economy
                 }
             }
 
-            EconomySummarySuccess summary;
             try
             {
-                summary = JsonConvert.DeserializeObject<EconomySummarySuccess>(request.downloadHandler.text);
+                return JsonConvert.DeserializeObject<T>(request.downloadHandler.text);
             }
             catch (Exception)
             {
-                throw new SoilException($"Invalid response format while getting economy summary. Response: {request.downloadHandler?.text}", SoilExceptionErrorCode.InvalidResponse);
+                throw new SoilException($"Invalid response format. Response: {request.downloadHandler?.text}", SoilExceptionErrorCode.InvalidResponse);
+            }
+        }
+
+        /// <summary>
+        /// Sets the balance of a virtual currency to an absolute value.
+        /// </summary>
+        /// <param name="currencyID">The identifier of the virtual currency.</param>
+        /// <param name="newBalance">The new balance to set.</param>
+        /// <returns>The updated virtual currency object.</returns>
+        public static async UniTask<UserVirtualCurrency> SetVirtualCurrency(string currencyID, int newBalance)
+        {
+            if (!Ready)
+            {
+                throw new SoilException("Economy service is not initialized. Initialize before modifying virtual currency balances.",
+                    SoilExceptionErrorCode.NotReady);
             }
 
-            return summary;
+            var payload = new Dictionary<string, object>()
+            {
+                { "identifier", currencyID },
+                { "balance", newBalance }
+            };
+
+            var currencyResponse = await ExecuteRequest<UserVirtualCurrency>(VirtualCurrencyBaseUrl, UnityWebRequest.kHttpVerbPOST, payload);
+            EconomyPlayerPrefs.SetVirtualCurrency(currencyResponse);
+            return currencyResponse;
+        }
+
+        /// <summary>
+        /// Sets the balance of an inventory item to an absolute value.
+        /// </summary>
+        /// <param name="itemID">The identifier of the inventory item.</param>
+        /// <param name="newBalance">The new balance to set.</param>
+        /// <returns>The updated inventory item object.</returns>
+        public static async UniTask<UserInventoryItem> SetInventoryItem(string itemID, int newBalance)
+        {
+            if (!Ready)
+            {
+                throw new SoilException("Economy service is not initialized. Initialize before modifying inventory item balances.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            var payload = new Dictionary<string, object>()
+            {
+                { "identifier", itemID },
+                { "balance", newBalance }
+            };
+
+            var itemResponse = await ExecuteRequest<UserInventoryItem>(InventoryBaseUrl, UnityWebRequest.kHttpVerbPOST, payload);
+            EconomyPlayerPrefs.SetInventoryItem(itemResponse);
+            return itemResponse;
+        }
+
+        /// <summary>
+        /// Increases the balance of a virtual currency by a specified amount.
+        /// </summary>
+        /// <param name="currencyID">The identifier of the virtual currency.</param>
+        /// <param name="amountToAdd">The amount to add to the current balance.</param>
+        /// <returns>The updated virtual currency object.</returns>
+        public static async UniTask<UserVirtualCurrency> IncreaseVirtualCurrency(string currencyID, int amountToAdd)
+        {
+            if (!Ready)
+            {
+                throw new SoilException("Economy service is not initialized. Initialize before modifying virtual currency balances.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            var payload = new Dictionary<string, object>()
+            {
+                { "identifier", currencyID },
+                { "amount", amountToAdd }
+            };
+
+            var currencyResponse = await ExecuteRequest<UserVirtualCurrency>(VirtualCurrencyIncreaseUrl, UnityWebRequest.kHttpVerbPOST, payload);
+            EconomyPlayerPrefs.SetVirtualCurrency(currencyResponse);
+            return currencyResponse;
+        }
+
+        /// <summary>
+        /// Decreases the balance of a virtual currency by a specified amount.
+        /// </summary>
+        /// <param name="currencyID">The identifier of the virtual currency.</param>
+        /// <param name="amountToSubtract">The amount to subtract from the current balance.</param>
+        /// <returns>The updated virtual currency object.</returns>
+        public static async UniTask<UserVirtualCurrency> DecreaseVirtualCurrency(string currencyID, int amountToSubtract)
+        {
+            if (!Ready)
+            {
+                throw new SoilException("Economy service is not initialized. Initialize before modifying virtual currency balances.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            var payload = new Dictionary<string, object>()
+            {
+                { "identifier", currencyID },
+                { "amount", amountToSubtract }
+            };
+
+            var currencyResponse = await ExecuteRequest<UserVirtualCurrency>(VirtualCurrencyDecreaseUrl, UnityWebRequest.kHttpVerbPOST, payload);
+            EconomyPlayerPrefs.SetVirtualCurrency(currencyResponse);
+            return currencyResponse;
+        }
+
+        /// <summary>
+        /// Increases the balance of an inventory item by a specified amount.
+        /// </summary>
+        /// <param name="itemID">The identifier of the inventory item.</param>
+        /// <param name="amountToAdd">The amount to add to the current balance.</param>
+        /// <returns>The updated inventory item object.</returns>
+        public static async UniTask<UserInventoryItem> IncreaseInventoryItem(string itemID, int amountToAdd)
+        {
+            if (!Ready)
+            {
+                throw new SoilException("Economy service is not initialized. Initialize before modifying inventory item balances.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            var payload = new Dictionary<string, object>()
+            {
+                { "identifier", itemID },
+                { "amount", amountToAdd }
+            };
+
+            var itemResponse = await ExecuteRequest<UserInventoryItem>(InventoryIncreaseUrl, UnityWebRequest.kHttpVerbPOST, payload);
+            EconomyPlayerPrefs.SetInventoryItem(itemResponse);
+            return itemResponse;
+        }
+
+        /// <summary>
+        /// Decreases the balance of an inventory item by a specified amount.
+        /// </summary>
+        /// <param name="itemID">The identifier of the inventory item.</param>
+        /// <param name="amountToSubtract">The amount to subtract from the current balance.</param>
+        /// <returns>The updated inventory item object.</returns>
+        public static async UniTask<UserInventoryItem> DecreaseInventoryItem(string itemID, int amountToSubtract)
+        {
+            if (!Ready)
+            {
+                throw new SoilException("Economy service is not initialized. Initialize before modifying inventory item balances.",
+                    SoilExceptionErrorCode.NotReady);
+            }
+
+            var payload = new Dictionary<string, object>()
+            {
+                { "identifier", itemID },
+                { "amount", amountToSubtract }
+            };
+
+            var itemResponse = await ExecuteRequest<UserInventoryItem>(InventoryDecreaseUrl, UnityWebRequest.kHttpVerbPOST, payload);
+            EconomyPlayerPrefs.SetInventoryItem(itemResponse);
+            return itemResponse;
         }
     }
 }
