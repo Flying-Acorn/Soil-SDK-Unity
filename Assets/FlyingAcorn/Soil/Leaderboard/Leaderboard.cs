@@ -140,8 +140,8 @@ namespace FlyingAcorn.Soil.Leaderboard
             var stringBody = JsonConvert.SerializeObject(payload);
 
             var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
-            // Use the proper delete endpoint instead of the report score endpoint
-            using var request = new UnityEngine.Networking.UnityWebRequest(DeleteLeaderboardUrl, UnityEngine.Networking.UnityWebRequest.kHttpVerbDELETE);
+            // Use DELETE on the report score endpoint to delete the score
+            using var request = new UnityEngine.Networking.UnityWebRequest(ReportScoreUrl, UnityEngine.Networking.UnityWebRequest.kHttpVerbDELETE);
             var bodyRaw = Encoding.UTF8.GetBytes(stringBody);
             request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();

@@ -16,11 +16,12 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         [SerializeField] private TextMeshProUGUI yourScore;
         [SerializeField] private TextMeshProUGUI resultText;
         [SerializeField] private VerticalLayoutGroup leaderboardContainer;
-    [SerializeField] private Button getLeaderboardButton;
-    [SerializeField] private long score = 100;
-    [SerializeField] private int resultCount = 100;
-    private List<LeaderboardRow> _rows = new();
-    private bool _relativeMode;
+        [SerializeField] private Button deleteScoreButton;
+        [SerializeField] private Button getLeaderboardButton;
+        [SerializeField] private long score = 100;
+        [SerializeField] private int resultCount = 100;
+        private List<LeaderboardRow> _rows = new();
+        private bool _relativeMode;
 
         private void Start()
         {
@@ -41,6 +42,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
 
             setRelativeButton.onClick.AddListener(SetRelativeMode);
             getLeaderboardButton.onClick.AddListener(ReportScore);
+            deleteScoreButton.onClick.AddListener(DeleteScore);
         }
 
         private void OnDestroy()
@@ -54,6 +56,8 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
                 setRelativeButton.onClick.RemoveListener(SetRelativeMode);
             if (getLeaderboardButton != null)
                 getLeaderboardButton.onClick.RemoveListener(ReportScore);
+            if (deleteScoreButton != null)
+                deleteScoreButton.onClick.RemoveListener(DeleteScore);
         }
 
         private void OnSoilServicesReady()
@@ -75,6 +79,25 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         private void ReportScore()
         {
             _ = ReportScoreAsync();
+        }
+
+        private void DeleteScore()
+        {
+            _ = DeleteScoreAsync();
+        }
+
+        private async System.Threading.Tasks.Task DeleteScoreAsync()
+        {
+            Failed("Deleting score...");
+            try
+            {
+                await Leaderboard.DeleteScore("demo_dec_manual");
+                Failed("Score deleted. Press Get Leaderboard to refresh.");
+            }
+            catch (Exception e)
+            {
+                Failed(e.Message);
+            }
         }
 
         private async System.Threading.Tasks.Task ReportScoreAsync()
