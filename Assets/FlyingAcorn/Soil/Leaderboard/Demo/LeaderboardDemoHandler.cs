@@ -20,6 +20,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
         [SerializeField] private Button getLeaderboardButton;
         [SerializeField] private long score = 100;
         [SerializeField] private int resultCount = 100;
+        private readonly string LeaderboardID = "demo_dec_manual"; // Use "demo_hourly" for hourly resetting leaderboard
         private List<LeaderboardRow> _rows = new();
         private bool _relativeMode;
 
@@ -91,7 +92,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             Failed("Deleting score...");
             try
             {
-                await Leaderboard.DeleteScore("demo_dec_manual");
+                await Leaderboard.DeleteScore(LeaderboardID);
                 Failed("Score deleted. Press Get Leaderboard to refresh.");
             }
             catch (Exception e)
@@ -105,7 +106,7 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             Failed("Reporting score...");
             try
             {
-                var userScore = await Leaderboard.ReportScore(score, "demo_dec_manual");
+                var userScore = await Leaderboard.ReportScore(score, LeaderboardID);
                 GetLeaderboard(userScore);
             }
             catch (Exception e)
@@ -124,10 +125,10 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             Failed("Loading...");
             try
             {
-                var rows = _relativeMode
-                    ? await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount, true)
-                    : await Leaderboard.FetchLeaderboardAsync("demo_dec_manual", resultCount);
-                GetLeaderboardSuccess(rows);
+                var leaderboard = _relativeMode
+                    ? await Leaderboard.FetchLeaderboardAsync(LeaderboardID, resultCount, true)
+                    : await Leaderboard.FetchLeaderboardAsync(LeaderboardID, resultCount);
+                GetLeaderboardSuccess(leaderboard.user_scores, leaderboard.next_reset ?? -1);
             }
             catch (Exception e)
             {
@@ -145,10 +146,14 @@ namespace FlyingAcorn.Soil.Leaderboard.Demo
             Failed($"SDK initialization failed: {exception.Message}");
         }
 
-        private void GetLeaderboardSuccess(List<UserScore> rows)
+        private void GetLeaderboardSuccess(List<UserScore> rows, long nextReset = -1)
         {
             SetYourScore();
             resultText.text = "OK";
+            var nextResetInDeviceTZText = nextReset > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(nextReset).ToLocalTime().ToString("g")
+                : "N/A";
+            resultText.text += $", Next Reset: {nextResetInDeviceTZText}";
             foreach (var row in _rows)
             {
                 Destroy(row.gameObject);

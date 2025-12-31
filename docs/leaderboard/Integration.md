@@ -71,12 +71,21 @@ catch (SoilException e)
 Get top players from a leaderboard:
 
 ```csharp
+using FlyingAcorn.Soil.Leaderboard.Models;
+
 try
 {
-    var topPlayers = await Leaderboard.FetchLeaderboardAsync(leaderboardId: "global_leaderboard", count: 10);
-    foreach (var player in topPlayers)
+    var leaderboardResponse = await Leaderboard.FetchLeaderboardAsync(leaderboardId: "global_leaderboard", count: 10);
+    foreach (var player in leaderboardResponse.user_scores)
     {
         Debug.Log($"{player.name}: {player.score} (Rank {player.rank})");
+    }
+    
+    // Check if leaderboard resets
+    if (leaderboardResponse.next_reset.HasValue)
+    {
+        var resetTime = DateTimeOffset.FromUnixTimeSeconds(leaderboardResponse.next_reset.Value);
+        Debug.Log($"Leaderboard resets at: {resetTime}");
     }
 }
 catch (SoilException e)
@@ -90,8 +99,12 @@ Get leaderboard relative to the current player:
 ```csharp
 try
 {
-    var nearbyPlayers = await Leaderboard.FetchLeaderboardAsync(leaderboardId: "global_leaderboard", count: 10, relative: true);
+    var leaderboardResponse = await Leaderboard.FetchLeaderboardAsync(leaderboardId: "global_leaderboard", count: 10, relative: true);
     // Shows players around your rank
+    foreach (var player in leaderboardResponse.user_scores)
+    {
+        Debug.Log($"{player.name}: {player.score}");
+    }
 }
 catch (SoilException e)
 {
@@ -141,11 +154,18 @@ See the [Leaderboard Demo](../README.md#demo-scenes) (`SoilLeaderboardExample.un
 
 ## API Reference
 
-- `Leaderboard.ReportScore(double score, string leaderboardId, CancellationToken cancellationToken = default)`
-- `Leaderboard.ReportScore(string score, string leaderboardId, CancellationToken cancellationToken = default)`
-- `Leaderboard.FetchLeaderboardAsync(string leaderboardId, int count = 10, bool relative = false, CancellationToken cancellationToken = default)`
-- `Leaderboard.DeleteScore(string leaderboardId, CancellationToken cancellationToken = default)`
+- `Leaderboard.ReportScore(double score, string leaderboardId, CancellationToken cancellationToken = default)` - Returns `UserScore`
+- `Leaderboard.ReportScore(string score, string leaderboardId, CancellationToken cancellationToken = default)` - Returns `UserScore`
+- `Leaderboard.FetchLeaderboardAsync(string leaderboardId, int count = 10, bool relative = false, CancellationToken cancellationToken = default, string iteration = null)` - Returns `LeaderboardResponse`
+- `Leaderboard.DeleteScore(string leaderboardId, CancellationToken cancellationToken = default)` - Returns `UniTask`
 
-## Other Documentations
+### LeaderboardResponse
 
-See the [Services overview](../README.md#services) for information on other available modules.
+```csharp
+public class LeaderboardResponse
+{
+    public List<UserScore> user_scores;  // List of user scores
+    public long iteration;               // Current iteration number
+    public long? next_reset;             // Unix timestamp when leaderboard resets (null if no reset)
+}
+```

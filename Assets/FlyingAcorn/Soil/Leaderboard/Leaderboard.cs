@@ -19,10 +19,10 @@ namespace FlyingAcorn.Soil.Leaderboard
     /// </summary>
     public static class Leaderboard
     {
-        private static string LeaderboardBaseUrl => $"{Core.Data.Constants.ApiUrl}/leaderboard/v2";
-        private static string DeleteLeaderboardUrl => $"{LeaderboardBaseUrl}/delete/";
-        private static string ReportScoreUrl => $"{LeaderboardBaseUrl}/reportscore/";
-        private static string FetchLeaderboardUrl => $"{LeaderboardBaseUrl}/getleaderboard/";
+        private static string LeaderboardV2BaseUrl => $"{Core.Data.Constants.ApiUrl}/leaderboard/v2";
+        private static string ReportScoreUrl => $"{LeaderboardV2BaseUrl}/reportscore/";
+        private static string LeaderboardV3BaseUrl => $"{Core.Data.Constants.ApiUrl}/leaderboard/v3";
+        private static string FetchLeaderboardUrl => $"{LeaderboardV3BaseUrl}/getleaderboard/";
 
         /// <summary>
         /// Gets whether the Leaderboard service is ready for use.
@@ -43,8 +43,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             var payload = new Dictionary<string, object>
             {
                 { "score", score },
-                { "leaderboard_identifier", leaderboardId },
-                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
+                { "leaderboard_identifier", leaderboardId }
             };
             return await ReportScore(payload, cancellationToken);
         }
@@ -70,8 +69,7 @@ namespace FlyingAcorn.Soil.Leaderboard
             var payload = new Dictionary<string, object>
             {
                 { "score", score },
-                { "leaderboard_identifier", leaderboardId },
-                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
+                { "leaderboard_identifier", leaderboardId }
             };
             return await ReportScore(payload, cancellationToken);
         }
@@ -173,9 +171,11 @@ namespace FlyingAcorn.Soil.Leaderboard
         /// <param name="count">Number of players to fetch.</param>
         /// <param name="relative">If true, shows players around your rank.</param>
         /// <param name="cancellationToken">Optional cancellation token.</param>
-        /// <returns>List of user scores.</returns>
-        public static async UniTask<List<UserScore>> FetchLeaderboardAsync(string leaderboardId, int count = 10,
-            bool relative = false, CancellationToken cancellationToken = default)
+        /// <param name="iteration">Optional iteration token for pagination.</param>
+        /// <returns>LeaderboardResponse containing user scores, iteration info, and next reset timestamp.</returns>
+        [UsedImplicitly]
+        public static async UniTask<LeaderboardResponse> FetchLeaderboardAsync(string leaderboardId, int count = 10,
+            bool relative = false, CancellationToken cancellationToken = default, string iteration = null)
         {
             if (!SoilServices.Ready)
                 throw new SoilException("Soil SDK is not ready", SoilExceptionErrorCode.InvalidRequest);
@@ -184,9 +184,12 @@ namespace FlyingAcorn.Soil.Leaderboard
             {
                 { "leaderboard_identifier", leaderboardId },
                 { "count", count },
-                { "relative", relative },
-                { "properties", UserInfo.Properties.GeneratePropertiesDynamicPlayerProperties() }
+                { "relative", relative }
             };
+            if (iteration != null)
+            {
+                payload["iteration"] = iteration;
+            }
             var stringBody = JsonConvert.SerializeObject(payload);
 
             var authHeader = Authenticate.GetAuthorizationHeader()?.ToString();
@@ -217,7 +220,8 @@ namespace FlyingAcorn.Soil.Leaderboard
             {
                 throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
             }
-            var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(text);
+            var leaderboard = JsonConvert.DeserializeObject<LeaderboardResponse>(text);
+            Analytics.MyDebug.Info(JsonConvert.SerializeObject(leaderboard));
             LeaderboardPlayerPrefs.SetCachedLeaderboardData(leaderboardId, text, relative);
             return leaderboard;
         }

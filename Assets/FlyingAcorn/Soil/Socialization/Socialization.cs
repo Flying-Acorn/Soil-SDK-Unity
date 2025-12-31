@@ -192,8 +192,8 @@ namespace FlyingAcorn.Soil.Socialization
         /// <param name="leaderboardId">The ID of the leaderboard.</param>
         /// <param name="count">Number of scores to fetch.</param>
         /// <param name="relative">If true, ranks are relative to the current user.</param>
-        /// <returns>List of user scores for friends.</returns>
-        public static async UniTask<List<UserScore>> GetFriendsLeaderboard(string leaderboardId, int count = 10,
+        /// <returns>LeaderboardResponse containing user scores, iteration info, and next reset timestamp.</returns>
+        public static async UniTask<LeaderboardResponse> GetFriendsLeaderboard(string leaderboardId, int count = 10,
             bool relative = false)
         {
             if (string.IsNullOrEmpty(leaderboardId))
@@ -238,7 +238,7 @@ namespace FlyingAcorn.Soil.Socialization
             }
 
             var responseText = request.downloadHandler.text;
-            var leaderboard = JsonConvert.DeserializeObject<List<UserScore>>(responseText);
+            var leaderboard = JsonConvert.DeserializeObject<LeaderboardResponse>(responseText);
             SocializationPlayerPrefs.SetCachedLeaderboardData(leaderboardId, responseText, relative);
             return leaderboard;
         }

@@ -113,9 +113,9 @@ private async void LoadFriendsLeaderboard(string leaderboardId)
 {
     try
     {
-        var scores = await Socialization.GetFriendsLeaderboard(leaderboardId, count: 20, relative: true);
+        var response = await Socialization.GetFriendsLeaderboard(leaderboardId, count: 20, relative: true);
         
-        foreach (var score in scores)
+        foreach (var score in response.user_scores)
         {
             Debug.Log($"Friend {score.user_name}: {score.score} (Rank: {score.rank})");
             // Add to leaderboard UI
@@ -237,7 +237,7 @@ See the [Socialization Demo](../README.md#demo-scenes) (`SoilSocializationExampl
 - `Socialization.GetFriends()`
 - `Socialization.AddFriendWithUUID(string uuid)`
 - `Socialization.RemoveFriendWithUUID(string uuid)`
-- `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)`
+- `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)` → `Task<LeaderboardResponse>`
 
 ## Other Documentations
 

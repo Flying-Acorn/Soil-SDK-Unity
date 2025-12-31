@@ -16,10 +16,10 @@ When fetching leaderboard data, each `UserScore` contains the player's UUID:
 using FlyingAcorn.Soil.Leaderboard;
 
 // Fetch leaderboard
-var scores = await Leaderboard.FetchLeaderboardAsync("my_leaderboard", count: 50);
+var response = await Leaderboard.FetchLeaderboardAsync("my_leaderboard", count: 50);
 
 // Extract UUIDs from scores
-foreach (var score in scores)
+foreach (var score in response.user_scores)
 {
     string playerUuid = score.uuid;
     string playerName = score.name;

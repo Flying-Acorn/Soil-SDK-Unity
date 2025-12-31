@@ -27,6 +27,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         [SerializeField] private long score = 100;
         [SerializeField] private int resultCount = 100;
         [SerializeField] private TextMeshProUGUI yourScore;
+        private readonly string LeaderboardID = "demo_dec_manual";
         private List<FriendRow> _friendRows = new();
         private List<LeaderboardRow> _leaderboardRows = new();
         private bool _relativeMode;
@@ -97,7 +98,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             statusText.text = "Reporting score...";
             try
             {
-                var userScore = await Leaderboard.Leaderboard.ReportScore(score, "demo_dec_manual");
+                var userScore = await Leaderboard.Leaderboard.ReportScore(score, LeaderboardID);
                 GetLeaderboard(userScore);
             }
             catch (Exception e)
@@ -130,8 +131,8 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             try
             {
                 var leaderboard =
-                    await Socialization.GetFriendsLeaderboard("demo_dec_manual", resultCount, _relativeMode);
-                GetLeaderboardSuccess(leaderboard);
+                    await Socialization.GetFriendsLeaderboard(LeaderboardID, resultCount, _relativeMode);
+                GetLeaderboardSuccess(leaderboard.user_scores);
             }
             catch (Exception e)
             {
