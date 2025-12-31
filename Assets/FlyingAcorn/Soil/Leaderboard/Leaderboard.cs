@@ -221,7 +221,6 @@ namespace FlyingAcorn.Soil.Leaderboard
                 throw new SoilException($"Server returned error {(HttpStatusCode)status}: {text}", SoilExceptionErrorCode.TransportError);
             }
             var leaderboard = JsonConvert.DeserializeObject<LeaderboardResponse>(text);
-            Analytics.MyDebug.Info(JsonConvert.SerializeObject(leaderboard));
             LeaderboardPlayerPrefs.SetCachedLeaderboardData(leaderboardId, text, relative);
             return leaderboard;
         }
