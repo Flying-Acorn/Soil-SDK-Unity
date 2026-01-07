@@ -138,7 +138,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             using UnityWebRequest request = new UnityWebRequest(RegisterPlayerUrl, "POST");
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
-            request.timeout = UserPlayerPrefs.RequestTimeout;
+            request.timeout = UserPlayerPrefs.RequestTimeout * 2;
 
             // Set headers
             request.SetRequestHeader("Authorization", $"Bearer {bearerToken}");

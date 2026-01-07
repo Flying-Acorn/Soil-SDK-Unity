@@ -533,7 +533,7 @@ namespace FlyingAcorn.Soil.Core
             }
             catch (Exception ex)
             {
-                MyDebug.LogWarning($"Soil-Core: Background authentication failed: {ex.Message}");
+                MyDebug.Info($"Soil-Core: Background authentication failed: {ex.Message}");
 
                 // If this is a critical auth failure during periodic checks, we might need to trigger a full re-initialization
                 if (ex is SoilException soilEx &&
@@ -852,8 +852,7 @@ namespace FlyingAcorn.Soil.Core
                 var accessValid = JwtUtils.IsTokenValid(tokenData.Access);
                 if (accessValid)
                 {
-                    _lastAuthValidTime = DateTime.UtcNow; // update last known good
-                    MyDebug.Verbose("Soil-Core: Authentication validation passed - access token valid");
+                    _lastAuthValidTime = DateTime.UtcNow;
                     return true;
                 }
 

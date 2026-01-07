@@ -37,9 +37,9 @@ namespace FlyingAcorn.Soil.Advertisement
 
         // Ad placement instances
         private static SoilAdManager _adPlacementManager;
-        private static BannerAdPlacement _bannerPlacement;
-        private static InterstitialAdPlacement _interstitialPlacement;
-        private static RewardedAdPlacement _rewardedPlacement;
+        private static GameObject _bannerPlacementGO;
+        private static GameObject _interstitialPlacementGO;
+        private static GameObject _rewardedPlacementGO;
 
         // Persistent canvas for all ad placements
         private static Canvas _persistentAdCanvas;
@@ -185,9 +185,9 @@ namespace FlyingAcorn.Soil.Advertisement
             if (_adPlacementManager == null)
                 throw new SoilException("SoilAdManager not found in the scene. Please add it to your scene before initializing Advertisement.",
                     SoilExceptionErrorCode.NotFound);
-            _bannerPlacement = _adPlacementManager.bannerAdPlacement;
-            _interstitialPlacement = _adPlacementManager.interstitialAdPlacement;
-            _rewardedPlacement = _adPlacementManager.rewardedAdPlacement;
+            _bannerPlacementGO = _adPlacementManager.bannerAdPlacement?.gameObject;
+            _interstitialPlacementGO = _adPlacementManager.interstitialAdPlacement?.gameObject;
+            _rewardedPlacementGO = _adPlacementManager.rewardedAdPlacement?.gameObject;
         }
 
         // Downloads and caches ads for the selected campaign.
@@ -316,27 +316,15 @@ namespace FlyingAcorn.Soil.Advertisement
                     // Force a reload so placement picks up the newest cached assets (e.g., when ad group changes)
                     if (existing.TryGetComponent(out BannerAdPlacement existingBanner) && adFormat == AdFormat.banner)
                     {
-                        _bannerPlacement = existingBanner;
-                        if (_bannerPlacement != null)
-                        {
-                            _bannerPlacement.Load();
-                        }
+                        existingBanner.Load();
                     }
                     else if (existing.TryGetComponent(out InterstitialAdPlacement existingInterstitial) && adFormat == AdFormat.interstitial)
                     {
-                        _interstitialPlacement = existingInterstitial;
-                        if (_interstitialPlacement != null)
-                        {
-                            _interstitialPlacement.Load();
-                        }
+                        existingInterstitial.Load();
                     }
                     else if (existing.TryGetComponent(out RewardedAdPlacement existingRewarded) && adFormat == AdFormat.rewarded)
                     {
-                        _rewardedPlacement = existingRewarded;
-                        if (_rewardedPlacement != null)
-                        {
-                            _rewardedPlacement.Load();
-                        }
+                        existingRewarded.Load();
                     }
                 }
                 return; // Instance already present and refreshed
@@ -344,9 +332,9 @@ namespace FlyingAcorn.Soil.Advertisement
 
             var instance = adFormat switch
             {
-                AdFormat.banner => _bannerPlacement?.gameObject,
-                AdFormat.interstitial => _interstitialPlacement?.gameObject,
-                AdFormat.rewarded => _rewardedPlacement?.gameObject,
+                AdFormat.banner => _bannerPlacementGO,
+                AdFormat.interstitial => _interstitialPlacementGO,
+                AdFormat.rewarded => _rewardedPlacementGO,
                 _ => null
             };
             if (!instance)
@@ -374,18 +362,15 @@ namespace FlyingAcorn.Soil.Advertisement
             // Preload and prepare video/image asynchronously
             if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
             {
-                _bannerPlacement = banner;
-                _bannerPlacement.Load();
+                banner.Load();
             }
             else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
             {
-                _interstitialPlacement = interstitial;
-                _interstitialPlacement.Load(); // Prepares ad and video in background
+                interstitial.Load(); // Prepares ad and video in background
             }
             else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
             {
-                _rewardedPlacement = rewarded;
-                _rewardedPlacement.Load(); // Prepares ad and video in background
+                rewarded.Load(); // Prepares ad and video in background
             }
 
             var layer = targetCanvas.gameObject.layer;
@@ -644,7 +629,8 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 // If not preloaded for some reason, preload now
                 PreloadAndPrepareAdInstance(adFormat);
-                instance = _activePlacements[adFormat];
+                // Preload may fail; use TryGetValue to avoid KeyNotFoundException
+                _activePlacements.TryGetValue(adFormat, out instance);
             }
             if (instance == null)
             {
@@ -667,18 +653,15 @@ namespace FlyingAcorn.Soil.Advertisement
             // Show the already-prepared ad (play video or show image)
             if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
             {
-                _bannerPlacement = banner;
-                _bannerPlacement.Show();
+                banner.Show();
             }
             else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
             {
-                _interstitialPlacement = interstitial;
-                _interstitialPlacement.Show(); // Will play video if ready, or show image
+                interstitial.Show(); // Will play video if ready, or show image
             }
             else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
             {
-                _rewardedPlacement = rewarded;
-                _rewardedPlacement.Show(); // Will play video if ready, or show image
+                rewarded.Show(); // Will play video if ready, or show image
                 // Cooldown timer is set in the placement's onClose callback
             }
         }
@@ -722,22 +705,22 @@ namespace FlyingAcorn.Soil.Advertisement
             // Let placements handle their own readiness checks (including rewarded cooldown)
             if (adFormat == AdFormat.banner)
             {
-                if (_bannerPlacement != null)
-                    _bannerPlacement.Load();
+                if (_bannerPlacementGO != null && _bannerPlacementGO.TryGetComponent(out BannerAdPlacement banner))
+                    banner.Load();
             }
             else if (adFormat == AdFormat.interstitial)
             {
-                if (_interstitialPlacement != null)
+                if (_interstitialPlacementGO != null && _interstitialPlacementGO.TryGetComponent(out InterstitialAdPlacement interstitial))
                 {
-                    _interstitialPlacement.Load();
+                    interstitial.Load();
                     // TODO: Start video preparation here if not already prepared (preload video)
                 }
             }
             else if (adFormat == AdFormat.rewarded)
             {
-                if (_rewardedPlacement != null)
+                if (_rewardedPlacementGO != null && _rewardedPlacementGO.TryGetComponent(out RewardedAdPlacement rewarded))
                 {
-                    _rewardedPlacement.Load();
+                    rewarded.Load();
                     // TODO: Start video preparation here if not already prepared (preload video)
                 }
             }

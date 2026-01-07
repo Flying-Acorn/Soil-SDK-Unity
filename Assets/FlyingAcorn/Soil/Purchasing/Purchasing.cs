@@ -358,7 +358,8 @@ namespace FlyingAcorn.Soil.Purchasing
                 var responseString = request.downloadHandler?.text ?? string.Empty;
                 try
                 {
-                    PurchasingPlayerPrefs.CachedItems = JsonConvert.DeserializeObject<ItemsResponse>(responseString).items;
+                    var responseObj = JsonConvert.DeserializeObject<ItemsResponse>(responseString);
+                    PurchasingPlayerPrefs.CachedItems = responseObj?.items ?? new List<Item>();
                 }
                 catch (Exception)
                 {

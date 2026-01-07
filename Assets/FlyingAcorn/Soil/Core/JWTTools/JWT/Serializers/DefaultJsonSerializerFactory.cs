@@ -6,7 +6,7 @@ namespace JWT.Serializers
 
         public DefaultJsonSerializerFactory()
         {
-#if NET462_OR_GREATER || NET6_0_OR_GREATER || NETSTANDARD2_0_OR_GREATER
+#if (NET462_OR_GREATER || NET6_0_OR_GREATER || NETSTANDARD2_0_OR_GREATER) && !UNITY_EDITOR
             _jsonSerializer = new SystemTextSerializer();
 #else
             _jsonSerializer = new JsonNetSerializer();
