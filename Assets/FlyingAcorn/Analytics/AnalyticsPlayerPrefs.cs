@@ -39,7 +39,7 @@ namespace FlyingAcorn.Analytics
 
         public static bool GDPRConsent
         {
-            get => PlayerPrefs.GetInt($"{Prefix}GDPRConsent", 0) == 1;
+            get => PlayerPrefs.GetInt($"{Prefix}GDPRConsent", 1) == 1;
             set => PlayerPrefs.SetInt($"{Prefix}GDPRConsent", value ? 1 : 0);
         }
 
