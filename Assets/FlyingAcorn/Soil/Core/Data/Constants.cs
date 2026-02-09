@@ -17,13 +17,7 @@ namespace FlyingAcorn.Soil.Core.Data
 
         internal const int DefaultTimeout = 6;
         internal const string FallBackApiUrl = "https://wwsoil.flyingacorn.studio/api";
-        internal const string IRApiUrl = "https://soil.flyingacorn.ir/api";
-
-        internal static readonly List<RegionSettings> APIPerRegion = new()
-        {
-            new RegionSettings {Region = Region.WW, ApiUrl = FallBackApiUrl},
-            new RegionSettings {Region = Region.IR, ApiUrl = IRApiUrl}
-        };
+        internal static string IRApiUrl() => $"{DataUtils.GetTheHatedRegionDomain()}/api";
 
         [Serializable]
         public class RegionSettings

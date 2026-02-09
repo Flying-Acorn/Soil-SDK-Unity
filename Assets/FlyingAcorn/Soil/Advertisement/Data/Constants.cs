@@ -1,8 +1,10 @@
+using FlyingAcorn.Soil.Core.Data;
+
 namespace FlyingAcorn.Soil.Advertisement.Data
 {
     public class Constants
     {
-        public string AssetsBaseDomain => $"https://soil.flyingacorn.ir";
+        public string AssetsBaseDomain => DataUtils.GetTheHatedRegionDomain();
         public enum AdFormat
         {
             banner,

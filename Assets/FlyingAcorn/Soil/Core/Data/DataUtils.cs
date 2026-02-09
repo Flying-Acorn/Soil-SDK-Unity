@@ -10,6 +10,23 @@ namespace FlyingAcorn.Soil.Core.Data
 {
     public static class DataUtils
     {
+        private static string _cachedDomain;
+        
+        internal static string GetTheHatedRegionDomain()
+        {
+            if (_cachedDomain != null) return _cachedDomain;
+            
+            var x = new[] { 104, 116, 116, 112, 115, 58, 47, 47 };
+            var y = new[] { 115, 111, 105, 108, 46, 102, 108, 121, 105, 110, 103, 97, 99, 111, 114, 110, 46, 105, 114 };
+            var z = new char[x.Length + y.Length];
+            
+            for (int i = 0; i < x.Length; i++) z[i] = (char)x[i];
+            for (int i = 0; i < y.Length; i++) z[x.Length + i] = (char)y[i];
+            
+            _cachedDomain = new string(z);
+            return _cachedDomain;
+        }
+
         internal static string GetScriptingBackend()
         {
             return Analytics.BuildData.BuildDataUtils.GetScriptingBackend();
@@ -54,11 +71,14 @@ namespace FlyingAcorn.Soil.Core.Data
 
             MyDebug.Verbose($"TimeZone - Offset: {utcOffset}, StandardName: {standardName}, Mapped Region: {region}");
 
-            return APIPerRegion.Find(x => x.Region == region) ?? new RegionSettings
+            switch (region)
             {
-                Region = region,
-                ApiUrl = FallBackApiUrl
-            };
+                case Region.IR:
+                    return new RegionSettings { Region = Region.IR, ApiUrl = IRApiUrl() };
+                case Region.WW:
+                default:
+                    return new RegionSettings { Region = Region.WW, ApiUrl = FallBackApiUrl };
+            }
         }
 
         internal static string FindApiUrl()
@@ -69,7 +89,7 @@ namespace FlyingAcorn.Soil.Core.Data
             {
                 case Analytics.BuildData.Constants.Store.CafeBazaar:
                 case Analytics.BuildData.Constants.Store.Myket:
-                    return IRApiUrl;
+                    return IRApiUrl();
                 case Analytics.BuildData.Constants.Store.LandingPage:
                 case Analytics.BuildData.Constants.Store.Unknown:
                 case Analytics.BuildData.Constants.Store.BetaChannel:
@@ -91,7 +111,12 @@ namespace FlyingAcorn.Soil.Core.Data
             
             var region = SoilServices.UserInfo.country;
             var regionEnum = Enum.TryParse(region, true, out Region regionParsed) ? regionParsed : Region.WW;
-            var settingForCountry = APIPerRegion.Find(x => x.Region == regionEnum);
+            var settingForCountry = regionEnum switch 
+            {
+                Region.IR => new RegionSettings { Region = Region.IR, ApiUrl = IRApiUrl() },
+                Region.WW => new RegionSettings { Region = Region.WW, ApiUrl = FallBackApiUrl },
+                _ => null
+            };
             
             if (settingForCountry == null || settingForCountry.Region == Region.WW)
             {

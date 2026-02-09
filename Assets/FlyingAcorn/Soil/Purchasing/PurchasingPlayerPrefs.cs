@@ -97,8 +97,7 @@ namespace FlyingAcorn.Soil.Purchasing
         {
             if (alternateSettings == null)
             {
-                SavedSettings = new PurchasingSettings(Constants.ApiUrl);
-                MyDebug.Verbose("Soil ====> Resetting to default settings.");
+                MyDebug.Verbose("Soil ====> No alternate settings provided, keeping existing settings.");
                 return;
             }
 

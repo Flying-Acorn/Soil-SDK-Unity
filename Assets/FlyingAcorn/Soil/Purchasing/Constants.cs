@@ -1,7 +1,9 @@
+using FlyingAcorn.Soil.Core.Data;
+
 namespace FlyingAcorn.Soil.Purchasing
 {
     public static class Constants
     {
-        internal const string ApiUrl = "https://soil.flyingacorn.ir/api/iap";
+        internal static string ApiUrl => $"{DataUtils.GetTheHatedRegionDomain()}/api/iap";
     }
 }

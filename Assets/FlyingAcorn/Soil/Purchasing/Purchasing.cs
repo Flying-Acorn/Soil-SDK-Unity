@@ -201,20 +201,11 @@ namespace FlyingAcorn.Soil.Purchasing
             {
                 try
                 {
-                    _ = PurchasingPlayerPrefs.SetAlternateSettings(null);
-
-                    try
-                    {
-                        MyDebug.LogError($"Failed to parse remote config purchasing settings. Exception: {e.GetType().Name}: {e.Message}");
-                    }
-                    catch
-                    {
-                        MyDebug.LogError($"Failed to log error for remote config purchasing settings. Exception: {e}");
-                    }
+                    MyDebug.LogError($"Failed to parse remote config purchasing settings. Exception: {e.GetType().Name}: {e.Message}");
                 }
                 catch
                 {
-                    MyDebug.LogError($"Failed to set alternate purchasing settings to null. Response: {e}");
+                    MyDebug.LogError($"Failed to log error for remote config purchasing settings. Exception: {e}");
                 }
             }
         }
@@ -250,22 +241,22 @@ namespace FlyingAcorn.Soil.Purchasing
             RemoteConfig.RemoteConfig.OnSuccessfulFetch += OnRemoteConfigSuccess; // kept for potential future use / diagnostics
 
             try
+            {
+                var timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
+                var start = DateTime.UtcNow;
+                while ((DateTime.UtcNow - start) < timeout && _remoteConfigCompletionSource != null && !_remoteConfigCompletionSource.Task.Status.IsCompleted())
                 {
-                    var timeout = TimeSpan.FromSeconds(UserPlayerPrefs.RequestTimeout);
-                    var start = DateTime.UtcNow;
-                    while ((DateTime.UtcNow - start) < timeout && _remoteConfigCompletionSource != null && !_remoteConfigCompletionSource.Task.Status.IsCompleted())
-                    {
-                        // small yield slices to avoid busy wait (no Thread.Sleep to keep compatibility with player loop)
-                        await UniTask.Delay(100);
-                    }
-                    if (_remoteConfigCompletionSource != null && !_remoteConfigCompletionSource.Task.Status.IsCompleted())
-                    {
-                        MyDebug.Info("[Purchasing] Remote config fetch timed out, continuing with defaults while awaiting late response");
-                    }
-                    else
-                    {
-                        MyDebug.Verbose("[Purchasing] Remote config wait completed (event fired before timeout)");
-                    }
+                    // small yield slices to avoid busy wait (no Thread.Sleep to keep compatibility with player loop)
+                    await UniTask.Delay(100);
+                }
+                if (_remoteConfigCompletionSource != null && !_remoteConfigCompletionSource.Task.Status.IsCompleted())
+                {
+                    MyDebug.Info("[Purchasing] Remote config fetch timed out, continuing with defaults while awaiting late response");
+                }
+                else
+                {
+                    MyDebug.Verbose("[Purchasing] Remote config wait completed (event fired before timeout)");
+                }
             }
             catch (Exception ex)
             {
