@@ -14,6 +14,7 @@ namespace FlyingAcorn.Soil.Core.User
         private static string UserInfoKey => $"{GetKeysPrefix()}player_info";
         private static string AppIDKey => "FA_soil_app_id";
         private static string SDKTokenKey => "FA_soil_sdk_token";
+        private static string DeviceTimeOffsetKey => "FA_device_offset";
 
         internal static void ResetSetInMemoryCache()
         {
@@ -40,6 +41,17 @@ namespace FlyingAcorn.Soil.Core.User
         {
             get => JsonConvert.DeserializeObject<TokenData>(PlayerPrefs.GetString(TokenDataKey));
             set => PlayerPrefs.SetString(TokenDataKey, JsonConvert.SerializeObject(value));
+        }
+
+        public static long DeviceTimeOffset
+        {
+            get
+            {
+                if (long.TryParse(PlayerPrefs.GetString(DeviceTimeOffsetKey, "0"), out var offset))
+                    return offset;
+                return 0;
+            }
+            set => PlayerPrefs.SetString(DeviceTimeOffsetKey, value.ToString());
         }
 
         public static Dictionary<string, object> InternalProperties

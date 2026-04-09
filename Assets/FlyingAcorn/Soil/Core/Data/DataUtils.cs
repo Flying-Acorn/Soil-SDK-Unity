@@ -172,6 +172,30 @@ namespace FlyingAcorn.Soil.Core.Data
             // Cancel timeout so Delay task stops (avoids needless continuation work)
             timeoutCts.Cancel();
 
+            // If the server explicitly rejects the access token with BAD_TOKEN,
+            // wipe it locally so the next API call triggers a silent refresh.
+            if (request.responseCode == 401)
+            {
+                try
+                {
+                    var body = request.downloadHandler?.text;
+                    if (!string.IsNullOrEmpty(body) && body.Contains("BAD_TOKEN"))
+                    {
+                        var tokenData = User.UserPlayerPrefs.TokenData;
+                        if (tokenData != null)
+                        {
+                            tokenData.Access = "";
+                            User.UserPlayerPrefs.TokenData = tokenData;
+                            MyDebug.LogWarning("Server rejected access token (BAD_TOKEN). Invalidated locally; next call will refresh.");
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // Never let token-cleanup logic break the caller's error flow.
+                }
+            }
+
             // Ensure we're back on main thread if caller will touch Unity objects right after.
             if (!PlayerLoopHelper.IsMainThread)
                 await UniTask.SwitchToMainThread();

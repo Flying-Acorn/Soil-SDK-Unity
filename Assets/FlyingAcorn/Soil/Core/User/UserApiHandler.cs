@@ -55,9 +55,9 @@ namespace FlyingAcorn.Soil.Core.User
         {
             MyDebug.Verbose("Fetching player info");
 
-            if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
+            if (UserPlayerPrefs.TokenData == null)
             {
-                throw new Exception("Access token is missing. Abandoning the process.");
+                throw new Exception("Token data is missing. Abandoning the process.");
             }
 
             if (!JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
@@ -129,9 +129,9 @@ namespace FlyingAcorn.Soil.Core.User
                     SoilExceptionErrorCode.NotReady);
             }
 
-            if (UserPlayerPrefs.TokenData == null || string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access))
+            if (UserPlayerPrefs.TokenData == null)
             {
-                throw new SoilException("Access token is missing. Cannot update player info.",
+                throw new SoilException("Token data is missing. Cannot update player info.",
                     SoilExceptionErrorCode.NotReady);
             }
 

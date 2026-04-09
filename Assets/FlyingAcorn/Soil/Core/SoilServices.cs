@@ -306,7 +306,7 @@ namespace FlyingAcorn.Soil.Core
 
             switch (BasicReady)
             {
-                case true when UserPlayerPrefs.TokenData?.Access != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access):
+                case true when UserPlayerPrefs.TokenData != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access):
                     MyDebug.Info("Soil-Core: BasicReady was true but access token is invalid - forcing re-authentication");
                     _initTask = null;
                     _initTask = PerformAuthentication(forceRefresh: true).AsTask();
@@ -412,7 +412,7 @@ namespace FlyingAcorn.Soil.Core
                                         MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
                                         InitializeAsync();
                                     }
-                                    else if (BasicReady && UserPlayerPrefs.TokenData?.Access != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
+                                    else if (BasicReady && UserPlayerPrefs.TokenData != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
                                     {
                                         MyDebug.Verbose("Soil-Core: Periodic token validation - access token invalid, forcing refresh");
                                         _ = PerformAuthenticationBackground(forceRefresh: true);
@@ -495,7 +495,7 @@ namespace FlyingAcorn.Soil.Core
                     MyDebug.Info($"Soil-Core: Attempting retry #{_retryAttempts + 1} after cooldown");
                     InitializeAsync();
                 }
-                else if (BasicReady && UserPlayerPrefs.TokenData?.Access != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
+                else if (BasicReady && UserPlayerPrefs.TokenData != null && !JwtUtils.IsTokenValid(UserPlayerPrefs.TokenData.Access))
                 {
                     MyDebug.Verbose("Soil-Core: Periodic token validation - access token invalid, forcing refresh");
                     _ = PerformAuthenticationBackground(forceRefresh: true);
@@ -843,7 +843,7 @@ namespace FlyingAcorn.Soil.Core
             try
             {
                 var tokenData = UserPlayerPrefs.TokenData;
-                if (tokenData == null || string.IsNullOrEmpty(tokenData.Access))
+                if (tokenData == null)
                 {
                     MyDebug.Verbose("Soil-Core: No token data available");
                     return false;
@@ -857,7 +857,7 @@ namespace FlyingAcorn.Soil.Core
                 }
 
                 // Access token invalid/expired here.
-                var refreshValid = !string.IsNullOrEmpty(tokenData.Refresh) && JwtUtils.IsTokenValid(tokenData.Refresh);
+                var refreshValid = JwtUtils.IsTokenValid(tokenData.Refresh);
                 var initInProgress = _initTask != null && !_initTask.IsCompleted;
 
                 // Allow a grace window after last validity OR while an init/auth cycle is in progress and refresh token is still good

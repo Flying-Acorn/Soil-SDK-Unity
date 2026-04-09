@@ -35,7 +35,6 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             MyDebug.Verbose($"[AuthenticateUser] Starting authentication - forceRegister: {forceRegister}, forceRefresh: {forceRefresh}");
             
             var userIsMissing = UserPlayerPrefs.TokenData == null ||
-                                string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
                                 string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh);
             
             MyDebug.Verbose($"[AuthenticateUser] User missing check: {userIsMissing}");
@@ -48,7 +47,6 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
                 {
                     // Double-check after acquiring lock - another thread might have registered
                     var userStillMissing = UserPlayerPrefs.TokenData == null ||
-                                         string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Access) ||
                                          string.IsNullOrEmpty(UserPlayerPrefs.TokenData.Refresh);
                     
                     MyDebug.Verbose($"[AuthenticateUser] Double-check after lock: userStillMissing={userStillMissing}, _registrationInProgress={_registrationInProgress}");
@@ -179,6 +177,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             }
 
             UserPlayerPrefs.TokenData = tokenData;
+            JwtUtils.FillTimesOffset(tokenData.Access);
             MyDebug.Info($"Player registered successfully. Response: {responseString}");
             OnUserRegistered?.Invoke(UserPlayerPrefs.TokenData);
         }
@@ -245,6 +244,7 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             }
 
             UserPlayerPrefs.TokenData = tokenData;
+            JwtUtils.FillTimesOffset(tokenData.Access);
             MyDebug.Info("Tokens refreshed successfully.");
             MyDebug.Verbose($"{responseString}");
             OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);
