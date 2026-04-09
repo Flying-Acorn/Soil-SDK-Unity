@@ -245,7 +245,8 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             }
 
             UserPlayerPrefs.TokenData = tokenData;
-            MyDebug.Info($"Tokens refreshed successfully. Response: {responseString}");
+            MyDebug.Info("Tokens refreshed successfully.");
+            MyDebug.Verbose($"{responseString}");
             OnTokenRefreshed?.Invoke(UserPlayerPrefs.TokenData);
         }
 

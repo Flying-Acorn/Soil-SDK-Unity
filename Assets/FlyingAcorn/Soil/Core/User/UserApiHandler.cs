@@ -155,7 +155,7 @@ namespace FlyingAcorn.Soil.Core.User
             var legalFields = UserPlayerPrefs.UserInfo.GetChangedFields(userInfo);
             if (legalFields.Count == 0)
             {
-                MyDebug.Info("No legal fields to update.");
+                MyDebug.Verbose("No legal fields to update.");
                 return userInfo;
             }
 

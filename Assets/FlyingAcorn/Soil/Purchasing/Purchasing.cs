@@ -166,7 +166,7 @@ namespace FlyingAcorn.Soil.Purchasing
             if (RemoteConfig.RemoteConfig.IsFetchedAndReady)
             {
                 SetSettingsFromRemoteConfig();
-                MyDebug.Info("[Purchasing] Remote config already ready, applying settings and proceeding with QueryItems");
+                MyDebug.Verbose("[Purchasing] Remote config already ready, applying settings and proceeding with QueryItems");
                 QueryItems().Forget();
                 return;
             }
