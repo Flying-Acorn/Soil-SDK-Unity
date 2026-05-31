@@ -11,18 +11,18 @@ namespace FlyingAcorn.Soil.Core.Data
     public static class DataUtils
     {
         private static string _cachedDomain;
-        
+
         internal static string GetTheHatedRegionDomain()
         {
             if (_cachedDomain != null) return _cachedDomain;
-            
+
             var x = new[] { 104, 116, 116, 112, 115, 58, 47, 47 };
             var y = new[] { 115, 111, 105, 108, 46, 102, 108, 121, 105, 110, 103, 97, 99, 111, 114, 110, 46, 105, 114 };
             var z = new char[x.Length + y.Length];
-            
+
             for (int i = 0; i < x.Length; i++) z[i] = (char)x[i];
             for (int i = 0; i < y.Length; i++) z[x.Length + i] = (char)y[i];
-            
+
             _cachedDomain = new string(z);
             return _cachedDomain;
         }
@@ -36,7 +36,7 @@ namespace FlyingAcorn.Soil.Core.Data
         {
             return Analytics.BuildData.BuildDataUtils.GetUserBuildNumber();
         }
-        
+
         public static DateTime GetBuildDate()
         {
             return Analytics.BuildData.BuildDataUtils.GetBuildDate();
@@ -84,7 +84,7 @@ namespace FlyingAcorn.Soil.Core.Data
         internal static string FindApiUrl()
         {
             var store = Analytics.Utils.GetStore();
-            
+
             switch (store)
             {
                 case Analytics.BuildData.Constants.Store.CafeBazaar:
@@ -102,32 +102,32 @@ namespace FlyingAcorn.Soil.Core.Data
             }
 
             var timezoneSettings = GetSettingsForTimeZone();
-            
+
             if (SoilServices.UserInfo?.country == null)
             {
                 MyDebug.Verbose($"No user info available, using timezone-based URL: {timezoneSettings.ApiUrl}");
                 return timezoneSettings.ApiUrl ?? FallBackApiUrl;
             }
-            
+
             var region = SoilServices.UserInfo.country;
             var regionEnum = Enum.TryParse(region, true, out Region regionParsed) ? regionParsed : Region.WW;
-            var settingForCountry = regionEnum switch 
+            var settingForCountry = regionEnum switch
             {
                 Region.IR => new RegionSettings { Region = Region.IR, ApiUrl = IRApiUrl() },
                 Region.WW => new RegionSettings { Region = Region.WW, ApiUrl = FallBackApiUrl },
                 _ => null
             };
-            
+
             if (settingForCountry == null || settingForCountry.Region == Region.WW)
             {
                 MyDebug.Verbose($"User region is WW or not found ({regionEnum}), preferring timezone-based URL: {timezoneSettings.ApiUrl}");
                 return timezoneSettings.ApiUrl ?? FallBackApiUrl;
             }
-            
+
             MyDebug.Verbose($"Using country-specific API URL for region {regionEnum}: {settingForCountry.ApiUrl}");
             return settingForCountry.ApiUrl ?? FallBackApiUrl;
         }
-        
+
         public static async UniTask ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
@@ -155,7 +155,10 @@ namespace FlyingAcorn.Soil.Core.Data
             catch (Exception ex)
             {
                 // If something unexpected happened before completion (very rare), abort to free resources.
-                if (!request.isDone)
+                var isDoneSafely = false;
+                try { isDoneSafely = request.isDone; } catch { /* native request may already be disposed */ }
+
+                if (!isDoneSafely)
                 {
                     try { request.Abort(); } catch { /* ignore */ }
                 }
@@ -166,7 +169,11 @@ namespace FlyingAcorn.Soil.Core.Data
             {
                 // Abort the underlying request; some platforms may still invoke completed later, but tcs already resolved or will be ignored.
                 try { request.Abort(); } catch { /* ignore */ }
-                throw new SoilException($"Request timed out (url: {request.url})", SoilExceptionErrorCode.Timeout);
+
+                var safeUrl = "<unavailable>";
+                try { safeUrl = request.url ?? "<null>"; } catch { /* native request may already be disposed */ }
+
+                throw new SoilException($"Request timed out (url: {safeUrl})", SoilExceptionErrorCode.Timeout);
             }
 
             // Cancel timeout so Delay task stops (avoids needless continuation work)
@@ -174,9 +181,12 @@ namespace FlyingAcorn.Soil.Core.Data
 
             // If the server explicitly rejects the access token with BAD_TOKEN,
             // wipe it locally so the next API call triggers a silent refresh.
-            if (request.responseCode == 401)
+            // NOTE: responseCode (and downloadHandler) access the native UnityWebRequest binding,
+            // which can be null if the request was disposed concurrently or aborted by the platform
+            // before this continuation resumed on the next player-loop tick. Guard the entire block.
+            try
             {
-                try
+                if (request.responseCode == 401)
                 {
                     var body = request.downloadHandler?.text;
                     if (!string.IsNullOrEmpty(body) && body.Contains("BAD_TOKEN"))
@@ -190,10 +200,10 @@ namespace FlyingAcorn.Soil.Core.Data
                         }
                     }
                 }
-                catch (Exception)
-                {
-                    // Never let token-cleanup logic break the caller's error flow.
-                }
+            }
+            catch (Exception)
+            {
+                // Never let token-cleanup logic break the caller's error flow.
             }
 
             // Ensure we're back on main thread if caller will touch Unity objects right after.
