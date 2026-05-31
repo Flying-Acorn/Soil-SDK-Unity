@@ -7,6 +7,11 @@ namespace FlyingAcorn.Soil.Leaderboard.Models
     {
         public long mantissa;
         public long exponent;
+        
+        public double ToDouble()
+        {
+            return mantissa * Math.Pow(10, exponent);
+        }
 
         public override string ToString()
         {
