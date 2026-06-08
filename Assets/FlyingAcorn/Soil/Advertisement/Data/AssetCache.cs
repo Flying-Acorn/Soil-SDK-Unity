@@ -586,7 +586,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
             catch
             {
-                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, $"AssetCache_FailedToCacheAsset_{cacheKey}");
+                AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, $"AssetCache_FailedToCacheAsset_{cacheKey}");
             }
             finally
             {

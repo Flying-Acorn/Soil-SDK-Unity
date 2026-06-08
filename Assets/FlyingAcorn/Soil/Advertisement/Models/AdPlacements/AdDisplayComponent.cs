@@ -742,7 +742,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                 }
                 else
                 {
-                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.ErrorSeverity, "AdVideoHeadRequestFailed");
+                    AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, "AdVideoHeadRequestFailed");
                     headFailed = true;
                 }
             }
@@ -1676,7 +1676,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         if (syncDrift > 0.3f)
                         {
                             _consecutiveSyncIssues++;
-                            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoSyncDriftMajor");
+                            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, "AdVideoSyncDriftMajor");
 
                             // If we have 3 or more consecutive major sync issues, mute audio to prevent out-of-sync audio
                             if (_consecutiveSyncIssues >= 3 && !_forceMutedDueToSync)
@@ -1700,7 +1700,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
                         // Log warning for any sync drift over 0.5s (but don't mute yet)
                         if (syncDrift > 0.5f)
                         {
-                            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AdVideoSyncDrift");
+                            AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.InfoSeverity, "AdVideoSyncDrift");
                         }
                     }
                     else

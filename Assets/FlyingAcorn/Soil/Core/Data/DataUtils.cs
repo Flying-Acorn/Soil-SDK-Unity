@@ -196,7 +196,7 @@ namespace FlyingAcorn.Soil.Core.Data
                         {
                             tokenData.Access = "";
                             User.UserPlayerPrefs.TokenData = tokenData;
-                            MyDebug.LogWarning("Server rejected access token (BAD_TOKEN). Invalidated locally; next call will refresh.");
+                            MyDebug.Info("Server rejected access token (BAD_TOKEN). Invalidated locally; next call will refresh.");
                         }
                     }
                 }
