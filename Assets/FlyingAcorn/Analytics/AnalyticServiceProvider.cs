@@ -98,7 +98,7 @@ namespace FlyingAcorn.Analytics
         {
             MyDebug.Verbose(
                 $"Sending user segmentation to analytics: {name} with property: {property} for these services: {GetServiceNames()}");
-            ForEachServiceSafely("UserSegmentation", s => s.UserSegmentation(name, property));
+            ForEachServiceSafely("UserSegmentation", s => s.UserSegmentation(name, property, dimension));
         }
 
         /// <summary>
