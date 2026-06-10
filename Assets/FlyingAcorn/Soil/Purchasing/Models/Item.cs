@@ -16,6 +16,8 @@ namespace FlyingAcorn.Soil.Purchasing.Models
         public string sku;
         public string description;
         public bool enabled;
+        public bool vat_included;
+        public bool vat_free;
         public PriceModel price_model;
         public List<Localization> localizations;
         public NormalItem normal_item;
