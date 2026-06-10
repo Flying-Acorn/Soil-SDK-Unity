@@ -166,7 +166,7 @@ namespace FlyingAcorn.Soil.Core.User
             request.uploadHandler = new UploadHandlerRaw(bodyData);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.timeout = UserPlayerPrefs.RequestTimeout;
-            MyDebug.Info($"Updating player info with data: {stringBody}");
+            MyDebug.Verbose($"Updating player info with data: {stringBody}");
 
             // Set headers
             var authHeader = Authenticate.GetAuthorizationHeaderString();

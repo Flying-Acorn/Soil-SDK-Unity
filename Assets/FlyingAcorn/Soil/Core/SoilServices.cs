@@ -777,7 +777,6 @@ namespace FlyingAcorn.Soil.Core
                 return;
             }
 
-            MyDebug.Info($"Soil-Core: Services are ready - {UserInfo?.uuid}");
             _readyBroadcasted = true;
             
             // Invoke each handler individually to identify which one fails
