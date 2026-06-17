@@ -1550,8 +1550,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         {
             if (mainAssetVideoPlayer == null) return;
 
-            // Check if device is in silent mode or audio is disabled
-            bool systemMuted = AudioListener.pause || AudioListener.volume == 0;
+            // Check if device audio is disabled. AudioListener.pause is intentionally excluded:
+            // videoAudioSource.ignoreListenerPause = true already keeps ad audio alive when the
+            // listener is paused, so reading it here would incorrectly silence the ad itself.
+            bool systemMuted = AudioListener.volume == 0;
 
             // Combine system mute with sync mute
             _shouldMuteAudio = systemMuted || _forceMutedDueToSync;
