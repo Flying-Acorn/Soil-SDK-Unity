@@ -181,7 +181,7 @@ namespace FlyingAcorn.Analytics
         {
             if (InitCalled)
             {
-                MyDebug.LogWarning("Initialize already called");
+                MyDebug.Info("Initialize already called");
                 return;
             }
 
