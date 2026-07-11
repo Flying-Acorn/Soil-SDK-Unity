@@ -118,6 +118,26 @@ void Update()
 
 **Warning**: Do not use `Time.timeScale = 0` to pause during ads, as it can break ad clickability and UI interactions.
 
+#### Muting Your Game Audio
+
+**Important**: The SDK does **not** automatically mute or duck your game's audio. You are responsible for silencing your own music/SFX while an ad is shown, using the same ad lifecycle events.
+
+**Do not set `AudioListener.pause = true`** (or otherwise pause the `AudioListener`) to achieve this. On device, that pauses the native audio session, which can starve hardware-accelerated video decoding and cause ad video to freeze or stall — even if your own audio sources aren't involved. Instead, mute or pause your game's own `AudioSource`s (and any music/SFX manager) directly:
+
+```csharp
+private void HandleAdShown(AdEventData data)
+{
+    MyAudioManager.Instance.SetGameAudioMuted(true);
+}
+
+private void HandleAdClosed(AdEventData data)
+{
+    MyAudioManager.Instance.SetGameAudioMuted(false);
+}
+```
+
+The ad's own audio is unaffected by anything you do here — it plays through a separate `AudioSource` that the SDK manages independently.
+
 ### 2. Loading Ads
 
 Load ads for all initialized formats. For optimal user experience, load ads immediately after initialization:
@@ -367,6 +387,7 @@ Before shipping, thoroughly test the following:
 - ✅ Test multi-scene flows and `DontDestroyOnLoad` objects to ensure events work correctly
 - ✅ Verify rewarded ad cooldown works as expected
 - ✅ Test that your pause implementation works correctly with ad events
+- ✅ Verify your game audio is muted/ducked during ads and restored after close (without using `AudioListener.pause`)
 
 ## Compatibility Notes
 
@@ -381,6 +402,8 @@ Before shipping, thoroughly test the following:
 **Events fire multiple times**: Ensure you unsubscribe from events when scenes unload if you attach listeners on objects that are destroyed.
 
 **Input remains blocked**: Check the failsafe is working by calling `SoilAdInputBlocker.FailsafeTick()` in an Update loop (this is done automatically by `SoilAdManager`).
+
+**Ad video freezes or stalls**: Check that you (or a plugin/mediation SDK) are not setting `AudioListener.pause = true` while an ad is showing. This can starve the native video decoder and freeze the ad, independent of any `ignoreListenerPause` settings on individual audio sources. Mute your own audio sources directly instead — see [Muting Your Game Audio](#muting-your-game-audio).
 
 ## Demo Scene
 

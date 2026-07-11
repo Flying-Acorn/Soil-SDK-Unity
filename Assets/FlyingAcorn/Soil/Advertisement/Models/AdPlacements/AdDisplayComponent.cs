@@ -148,9 +148,14 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             mainAssetVideoPlayer.waitForFirstFrame = true;
             mainAssetVideoPlayer.skipOnDrop = dropFramesToMaintainSync; // drop frames to keep A/V in sync on mobile
 
-            // Platform-specific time update mode configuration for better sync
-            // Prefer DSPTime so audio acts as the clock source; helps avoid drift
-            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.DSPTime;
+            // UnscaledGameTime keeps the video advancing independent of Time.timeScale
+            // (ads must keep playing while gameplay is paused) and, critically, independent
+            // of AudioListener.pause: DSPTime ties the VideoPlayer's clock to the global audio
+            // DSP/native-session clock, so any code that sets AudioListener.pause=true (even
+            // briefly, even elsewhere in the game) can freeze/stall video decode - regardless
+            // of ignoreListenerPause on the ad's own AudioSource, which only exempts that one
+            // source's audio, not the native decode pipeline's timing.
+            mainAssetVideoPlayer.timeUpdateMode = VideoTimeUpdateMode.UnscaledGameTime;
 
             // Audio configuration for better sync and silent mode handling
             if (preferAudioSourceOutput && videoAudioSource != null)
@@ -1551,8 +1556,10 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (mainAssetVideoPlayer == null) return;
 
             // Check if device audio is disabled. AudioListener.pause is intentionally excluded:
-            // videoAudioSource.ignoreListenerPause = true already keeps ad audio alive when the
-            // listener is paused, so reading it here would incorrectly silence the ad itself.
+            // this SDK never sets it (game audio is ducked directly, see SoundManager), and
+            // videoAudioSource.ignoreListenerPause = true keeps ad audio alive even if some
+            // other game code pauses the listener, so reading it here would incorrectly
+            // silence the ad itself.
             bool systemMuted = AudioListener.volume == 0;
 
             // Combine system mute with sync mute

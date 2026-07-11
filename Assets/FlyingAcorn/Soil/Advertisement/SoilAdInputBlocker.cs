@@ -14,10 +14,16 @@ namespace FlyingAcorn.Soil.Advertisement
     /// - Disables PlayerInput components (New Input System) to prevent gameplay input
     /// - Does NOT create overlays/shields that would block ad clicks
     /// - Does NOT modify Time.timeScale - game code should handle pausing
+    /// - Does NOT modify AudioListener state - game code should duck/mute its own audio
+    ///   via the ad events below. AudioListener.pause pauses the native audio session on
+    ///   device, which can starve hardware video decoders (freezing/stalling ad video) even
+    ///   when the ad's own AudioSource has ignoreListenerPause = true, since that only
+    ///   protects the AudioSource, not the native decode pipeline. Ducking the game's own
+    ///   AudioSources directly avoids touching that global/native state.
     /// </summary>
     /// <remarks>
-    /// <para><b>Game Pause Handling:</b></para>
-    /// <para>Game code should handle pausing by subscribing to ad events:</para>
+    /// <para><b>Game Pause &amp; Audio Handling:</b></para>
+    /// <para>Game code should handle pausing and audio ducking by subscribing to ad events:</para>
     /// <code>
     /// Events.OnInterstitialAdShown += (data) => PauseGame();
     /// Events.OnInterstitialAdClosed += (data) => ResumeGame();
