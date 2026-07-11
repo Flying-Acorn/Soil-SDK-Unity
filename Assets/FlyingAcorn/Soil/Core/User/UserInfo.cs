@@ -311,6 +311,7 @@ namespace FlyingAcorn.Soil.Core.User
                     { Constants.AnalyticsDebugModeKey, AnalyticsPlayerPrefs.UserDebugMode },
                     { Constants.InstallationVersionKey, AnalyticsPlayerPrefs.InstallationVersion },
                     { Constants.InstallationBuildKey, AnalyticsPlayerPrefs.InstallationBuild },
+                    { Constants.SessionCountKey, AnalyticsPlayerPrefs.SessionCount },
                     { Constants.TimezoneKey, timezone }
                 };
             }

@@ -27,6 +27,7 @@ namespace FlyingAcorn.Soil.Core.User
         public const string AnalyticsDebugModeKey = PropertyKeyPrefix + "analytics_debug_mode";
         public const string InstallationVersionKey = PropertyKeyPrefix + "installation_version";
         public const string InstallationBuildKey = PropertyKeyPrefix + "installation_build";
+        public const string SessionCountKey = PropertyKeyPrefix + "session_count";
         public const string TimezoneKey = PropertyKeyPrefix + "timezone";
     }
 }
