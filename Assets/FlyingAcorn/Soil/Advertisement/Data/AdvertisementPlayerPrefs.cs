@@ -1,29 +1,38 @@
 using System.Collections.Generic;
+using System.Linq;
 using FlyingAcorn.Soil.Advertisement.Models;
 using FlyingAcorn.Soil.Core.User;
 using Newtonsoft.Json;
 using UnityEngine;
+using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 
 namespace FlyingAcorn.Soil.Advertisement.Data
 {
     public static class AdvertisementPlayerPrefs
     {
-        private static string AdvertisementKey => $"{UserPlayerPrefs.GetKeysPrefix()}advertisement";
-        private static string CachedAssetsKey => $"{UserPlayerPrefs.GetKeysPrefix()}cached_assets";
+        private const int MaxHistorySize = 10;
 
-        internal static Campaign CachedCampaign
+        private static string CachedAdGroupsKey => $"{UserPlayerPrefs.GetKeysPrefix()}advertisement_ad_groups";
+        private static string CachedAssetsKey => $"{UserPlayerPrefs.GetKeysPrefix()}cached_assets";
+        private static string RecentAdGroupIdsKey => $"{UserPlayerPrefs.GetKeysPrefix()}recent_ad_group_ids";
+        private static string RecentCampaignIdsKey => $"{UserPlayerPrefs.GetKeysPrefix()}recent_campaign_ids";
+
+        /// <summary>
+        /// Gets or sets the currently cached ad group selected for each ad format
+        /// </summary>
+        internal static Dictionary<AdFormat, AdGroup> CachedAdGroups
         {
             get
             {
-                var campaignString = PlayerPrefs.GetString(AdvertisementKey, string.Empty);
-                return string.IsNullOrEmpty(campaignString)
-                    ? null
-                    : JsonConvert.DeserializeObject<Campaign>(campaignString);
+                var jsonString = PlayerPrefs.GetString(CachedAdGroupsKey, string.Empty);
+                return string.IsNullOrEmpty(jsonString)
+                    ? new Dictionary<AdFormat, AdGroup>()
+                    : JsonConvert.DeserializeObject<Dictionary<AdFormat, AdGroup>>(jsonString);
             }
             set
             {
-                var campaignString = JsonConvert.SerializeObject(value);
-                PlayerPrefs.SetString(AdvertisementKey, campaignString);
+                var jsonString = JsonConvert.SerializeObject(value);
+                PlayerPrefs.SetString(CachedAdGroupsKey, jsonString);
                 PlayerPrefs.Save();
             }
         }
@@ -49,12 +58,83 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
+        /// Rolling list of recently shown ad group IDs, used for frequency-capping requests to the AdGroup selection API
+        /// </summary>
+        internal static List<string> RecentAdGroupIds
+        {
+            get
+            {
+                var jsonString = PlayerPrefs.GetString(RecentAdGroupIdsKey, string.Empty);
+                return string.IsNullOrEmpty(jsonString)
+                    ? new List<string>()
+                    : JsonConvert.DeserializeObject<List<string>>(jsonString);
+            }
+            private set
+            {
+                var jsonString = JsonConvert.SerializeObject(value);
+                PlayerPrefs.SetString(RecentAdGroupIdsKey, jsonString);
+                PlayerPrefs.Save();
+            }
+        }
+
+        /// <summary>
+        /// Rolling list of recently shown campaign IDs, used for frequency-capping requests to the AdGroup selection API
+        /// </summary>
+        internal static List<string> RecentCampaignIds
+        {
+            get
+            {
+                var jsonString = PlayerPrefs.GetString(RecentCampaignIdsKey, string.Empty);
+                return string.IsNullOrEmpty(jsonString)
+                    ? new List<string>()
+                    : JsonConvert.DeserializeObject<List<string>>(jsonString);
+            }
+            private set
+            {
+                var jsonString = JsonConvert.SerializeObject(value);
+                PlayerPrefs.SetString(RecentCampaignIdsKey, jsonString);
+                PlayerPrefs.Save();
+            }
+        }
+
+        /// <summary>
+        /// Records that an ad group (and its campaign) was just shown, appending to the rolling
+        /// frequency-capping history and trimming to <see cref="MaxHistorySize"/>.
+        /// </summary>
+        internal static void RecordShownAdGroup(AdGroup adGroup)
+        {
+            if (adGroup == null) return;
+
+            if (!string.IsNullOrEmpty(adGroup.id))
+            {
+                var adGroupIds = RecentAdGroupIds;
+                adGroupIds.RemoveAll(id => id == adGroup.id);
+                adGroupIds.Add(adGroup.id);
+                if (adGroupIds.Count > MaxHistorySize)
+                    adGroupIds = adGroupIds.Skip(adGroupIds.Count - MaxHistorySize).ToList();
+                RecentAdGroupIds = adGroupIds;
+            }
+
+            if (!string.IsNullOrEmpty(adGroup.campaign_id))
+            {
+                var campaignIds = RecentCampaignIds;
+                campaignIds.RemoveAll(id => id == adGroup.campaign_id);
+                campaignIds.Add(adGroup.campaign_id);
+                if (campaignIds.Count > MaxHistorySize)
+                    campaignIds = campaignIds.Skip(campaignIds.Count - MaxHistorySize).ToList();
+                RecentCampaignIds = campaignIds;
+            }
+        }
+
+        /// <summary>
         /// Clears all cached advertisement data
         /// </summary>
         internal static void ClearAll()
         {
-            PlayerPrefs.DeleteKey(AdvertisementKey);
+            PlayerPrefs.DeleteKey(CachedAdGroupsKey);
             PlayerPrefs.DeleteKey(CachedAssetsKey);
+            PlayerPrefs.DeleteKey(RecentAdGroupIdsKey);
+            PlayerPrefs.DeleteKey(RecentCampaignIdsKey);
             PlayerPrefs.Save();
         }
     }

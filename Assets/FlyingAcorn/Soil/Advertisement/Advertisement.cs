@@ -26,11 +26,11 @@ namespace FlyingAcorn.Soil.Advertisement
         [UsedImplicitly]
         public static bool Ready => _campaignSelectionSucceeded;
         private static string AdvertisementBaseUrl => $"{Core.Data.Constants.ApiUrl}/advertisement/";
-        private static string CampaignsUrl => $"{AdvertisementBaseUrl}campaigns/";
-        private static string CampaignsSelectUrl => $"{CampaignsUrl}select/";
+        private static string AdGroupsUrl => $"{AdvertisementBaseUrl}adgroups/";
+        private static string AdGroupsSelectUrl => $"{AdGroupsUrl}select/";
         private static bool _campaignRequested;
         private static bool _isInitializing;
-        private static Campaign availableCampaign = null;
+        private static readonly Dictionary<AdFormat, AdGroup> _selectedAdGroups = new();
         private static bool _campaignSelectionSucceeded;
         private static List<AdFormat> _requestedFormats;
         private static UniTask _cachedAssetsTask;
@@ -64,7 +64,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
 
-            if (availableCampaign != null)
+            if (_selectedAdGroups.Count > 0)
                 return;
 
             if (_isInitializing)
@@ -131,43 +131,72 @@ namespace FlyingAcorn.Soil.Advertisement
 
             _campaignRequested = true;
             _campaignSelectionSucceeded = false; // reset before attempt
-            try
+            _selectedAdGroups.Clear();
+
+            // Select formats sequentially (not in parallel): each selection is added to this round's
+            // exclusion set immediately, so the next format's request prefers a different ad group
+            // (and thus a different advertised app). Frequency capping is best-effort - see
+            // SelectAdGroupWithFrequencyCapAsync - so limited inventory falls back to showing an ad
+            // rather than starving. A single format's failure is logged and skipped rather than
+            // aborting the whole round, since the other formats' requests are independent - but if
+            // every single format failed with an exception (e.g. total network outage), that's
+            // reported as an init failure rather than silently "no ads available".
+            var recentAdGroups = AdvertisementPlayerPrefs.RecentAdGroupIds;
+            var recentCampaigns = AdvertisementPlayerPrefs.RecentCampaignIds;
+            var roundAdGroups = new List<string>();
+            var roundCampaigns = new List<string>();
+            Exception lastException = null;
+            var failureCount = 0;
+            foreach (var format in _requestedFormats)
             {
-                var campaignResponse = await SelectCampaignAsync();
-                if (campaignResponse?.campaign == null)
+                try
                 {
-                    await ClearAssetCacheAsync();
-                    availableCampaign = null;
-                    AdvertisementPlayerPrefs.CachedCampaign = null;
-                    _campaignSelectionSucceeded = true; // success path (no active campaign available)
-                    _campaignRequested = false;
-                    _isInitializing = false;
-                    Events.InvokeOnInitialized();
-                    return;
+                    var adGroup = await SelectAdGroupWithFrequencyCapAsync(
+                        format, recentAdGroups, recentCampaigns, roundAdGroups, roundCampaigns);
+                    if (adGroup == null) continue;
+
+                    _selectedAdGroups[format] = adGroup;
+
+                    // Exclude this app from the remaining formats in THIS round to avoid duplicates.
+                    if (!string.IsNullOrEmpty(adGroup.id)) roundAdGroups.Add(adGroup.id);
+                    if (!string.IsNullOrEmpty(adGroup.campaign_id)) roundCampaigns.Add(adGroup.campaign_id);
+
+                    // Persist for cross-session variety preference.
+                    AdvertisementPlayerPrefs.RecordShownAdGroup(adGroup);
                 }
-                availableCampaign = campaignResponse.campaign;
-                _campaignSelectionSucceeded = true; // success path (campaign obtained)
+                catch (Exception ex)
+                {
+                    failureCount++;
+                    lastException = ex;
+                    MyDebug.LogWarning($"Failed to select ad group for format {format}: {ex.Message}");
+                }
             }
-            catch (SoilException ex)
+
+            if (failureCount == _requestedFormats.Count && lastException != null)
             {
                 _campaignRequested = false;
                 _isInitializing = false;
-                _campaignSelectionSucceeded = false; // failed attempt
-                Events.InvokeOnInitializeFailed($"Failed to select campaign: {ex.Message} - {ex.ErrorCode}");
+                _campaignSelectionSucceeded = false;
+                Events.InvokeOnInitializeFailed($"Failed to select ad groups: {lastException.Message}");
                 return;
             }
-            catch (Exception ex)
+
+            _campaignSelectionSucceeded = true; // success path, regardless of per-format availability
+
+            if (_selectedAdGroups.Count == 0)
             {
+                await ClearAssetCacheAsync();
+                AdvertisementPlayerPrefs.CachedAdGroups = new Dictionary<AdFormat, AdGroup>();
                 _campaignRequested = false;
                 _isInitializing = false;
-                _campaignSelectionSucceeded = false; // failed attempt
-                Events.InvokeOnInitializeFailed($"Unexpected error selecting campaign: {ex.Message}");
+                Events.InvokeOnInitialized();
                 return;
             }
+
             GetOrCreatePersistentAdCanvas();
             Events.InvokeOnInitialized();
             // Start asset caching in background - don't block initialization on this
-            CacheAds(availableCampaign).Forget();
+            CacheAds().Forget();
             _campaignRequested = false;
             _isInitializing = false;
         }
@@ -190,41 +219,40 @@ namespace FlyingAcorn.Soil.Advertisement
             _rewardedPlacementGO = _adPlacementManager.rewardedAdPlacement?.gameObject;
         }
 
-        // Downloads and caches ads for the selected campaign.
+        // Downloads and caches ads for each format's selected ad group.
         // This method caches each format separately and invokes events as each format becomes ready.
-        private static async UniTask CacheAds(Campaign availableCampaign)
+        private static async UniTask CacheAds()
         {
-            // Simple and reliable cache management
-            bool isDifferentCampaign = AdvertisementPlayerPrefs.CachedCampaign?.id != availableCampaign.id;
-
-            if (isDifferentCampaign)
-            {
-                // Clear all for different campaigns - simple and predictable
-                await ClearAssetCacheAsync();
-            }
-
-            AdvertisementPlayerPrefs.CachedCampaign = availableCampaign;
-
-            // Pre-filter requested formats to only include those that are actually available in the campaign
-            var availableFormats = GetAvailableFormatsInCampaign(availableCampaign, _requestedFormats);
-
-            if (!availableFormats.Any())
-            {
-                MyDebug.LogWarning("No requested ad formats are available in the selected campaign");
-                return;
-            }
-
-            MyDebug.Verbose($"Caching assets for available formats: {string.Join(", ", availableFormats)}");
-
-            // Cache assets for each AVAILABLE format separately
+            var cachedAdGroups = AdvertisementPlayerPrefs.CachedAdGroups;
+            var updatedCachedAdGroups = new Dictionary<AdFormat, AdGroup>(cachedAdGroups);
             var cachingTasks = new List<UniTask>();
 
-            foreach (var adFormat in availableFormats) // ← Now only processes available formats
+            foreach (var (adFormat, adGroup) in _selectedAdGroups)
             {
-                // Start caching task for this format
-                var formatTask = CacheFormatAssetsAsync(availableCampaign, adFormat);
-                cachingTasks.Add(formatTask);
+                // Only re-cache if the ad group selected for this format actually changed, AND we still
+                // have cached assets for it (they may have been evicted by ClearOldAssetsAsync/RemoveCachedAsset
+                // even though the AdGroup pointer itself didn't change) - otherwise the placement would
+                // preload against an empty cache.
+                bool isSameAdGroupStillCached = cachedAdGroups.TryGetValue(adFormat, out var previousAdGroup)
+                    && previousAdGroup?.id == adGroup.id
+                    && AssetCache.GetCachedAssets(adFormat).Any();
+
+                if (!isSameAdGroupStillCached)
+                {
+                    cachingTasks.Add(CacheFormatAssetsAsync(adGroup, adFormat));
+                }
+                else
+                {
+                    // Assets already cached from a previous session; just (re)preload the placement.
+                    OnFormatAssetsReady(adFormat);
+                }
+
+                updatedCachedAdGroups[adFormat] = adGroup;
             }
+
+            AdvertisementPlayerPrefs.CachedAdGroups = updatedCachedAdGroups;
+
+            MyDebug.Verbose($"Caching assets for formats: {string.Join(", ", _selectedAdGroups.Keys)}");
 
             // Wait for all formats to complete (though each will fire events individually)
             try
@@ -238,35 +266,12 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Pre-filters requested formats to only include those that are actually available in the campaign
-        /// </summary>
-        private static List<AdFormat> GetAvailableFormatsInCampaign(Campaign campaign, List<AdFormat> requestedFormats)
-        {
-            if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
-                return new List<AdFormat>();
-
-            var availableFormats = new List<AdFormat>();
-
-            foreach (var requestedFormat in requestedFormats)
-            {
-                // Check if any ad group has ads for this format
-
-                bool formatAvailable = campaign.ad_groups.Any(adGroup =>
-                    AssetCache.HasAdsForFormat(adGroup, requestedFormat));
-
-                if (formatAvailable)
-                    availableFormats.Add(requestedFormat);
-            }
-
-            return availableFormats;
-        }
-
-        /// <summary>
         /// Caches assets for a specific ad format and marks them ready when done
         /// </summary>
-        private static async UniTask CacheFormatAssetsAsync(Campaign campaign, AdFormat adFormat)
+        private static async UniTask CacheFormatAssetsAsync(AdGroup adGroup, AdFormat adFormat)
         {
-            await AssetCache.CacheAssetsForFormatAsync(campaign, adFormat, OnFormatAssetsReady);
+            await AssetCache.ClearFormatCacheAsync(adFormat);
+            await AssetCache.CacheAssetsForAdGroupAsync(adGroup, adFormat, OnFormatAssetsReady);
         }
 
         /// <summary>
@@ -275,13 +280,16 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            // Instantiate and preload the ad prefab for this format (hidden, prepared)
-            PreloadAndPrepareAdInstance(adFormat);
-
-            // Notify internal listeners that assets are ready. This should
-            // NOT be used to fire OnXAdLoaded events; those only come from
+            // Notify internal listeners that assets are ready BEFORE preloading the placement below.
+            // Placements set an internal "_isFormatReady" flag from this event and consult it inside
+            // their own (synchronous, for banner/interstitial) Load() call; firing it after would let
+            // Load() run against a stale flag and could report AdNotReady even though assets are cached.
+            // This should NOT be used to fire OnXAdLoaded events; those only come from
             // explicit LoadAd/placement.Load calls.
             Events.InvokeOnAdFormatAssetsLoaded(adFormat);
+
+            // Instantiate and preload the ad prefab for this format (hidden, prepared)
+            PreloadAndPrepareAdInstance(adFormat);
         }
 
         /// <summary>
@@ -378,15 +386,21 @@ namespace FlyingAcorn.Soil.Advertisement
                 child.gameObject.layer = layer;
         }
 
-        private static async UniTask<CampaignSelectResponse> SelectCampaignAsync()
+        private static async UniTask<AdGroupSelectResponse> SelectAdGroupAsync(
+            AdFormat adFormat, List<string> previousAdGroups, List<string> previousCampaigns)
         {
             if (!SoilServices.Ready)
                 throw new SoilException("Soil services are not ready. Please initialize Soil first.", SoilExceptionErrorCode.NotReady);
 
-            var body = new { previous_campaigns = new List<string>() }; // TODO: Populate from prefs/session
+            var body = new
+            {
+                format = adFormat.ToString(),
+                previous_ad_groups = previousAdGroups ?? new List<string>(),
+                previous_campaigns = previousCampaigns ?? new List<string>()
+            };
             var jsonBody = JsonConvert.SerializeObject(body);
 
-            using var request = new UnityWebRequest(CampaignsSelectUrl, UnityWebRequest.kHttpVerbPOST)
+            using var request = new UnityWebRequest(AdGroupsSelectUrl, UnityWebRequest.kHttpVerbPOST)
             {
                 uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
                 downloadHandler = new DownloadHandlerBuffer()
@@ -407,7 +421,7 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             catch (Exception ex)
             {
-                throw new SoilException($"Unexpected error while selecting campaign: {ex.Message}", SoilExceptionErrorCode.TransportError);
+                throw new SoilException($"Unexpected error while selecting ad group: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
             // Map non-success status codes
@@ -423,23 +437,64 @@ namespace FlyingAcorn.Soil.Advertisement
                     System.Net.HttpStatusCode.ServiceUnavailable => SoilExceptionErrorCode.ServiceUnavailable,
                     _ => SoilExceptionErrorCode.TransportError
                 };
-                throw new SoilException($"Failed to select campaign: {request.responseCode} - {responseText}", errorCode);
+                throw new SoilException($"Failed to select ad group: {request.responseCode} - {responseText}", errorCode);
             }
 
             var content = request.downloadHandler?.text ?? string.Empty;
             try
             {
                 if (string.IsNullOrEmpty(content))
-                    return new CampaignSelectResponse { campaign = null, selection_reason = SelectionReason.only_eligible };
+                    return new AdGroupSelectResponse { ad_group = null, selection_reason = SelectionReason.only_eligible };
 
-                var result = JsonConvert.DeserializeObject<CampaignSelectResponse>(content);
+                var result = JsonConvert.DeserializeObject<AdGroupSelectResponse>(content);
                 return result;
             }
             catch (Exception)
             {
-                MyDebug.LogError($"[Advertisement] Failed to parse campaign response. Treating as no active campaign. Raw: {content}");
-                return new CampaignSelectResponse { campaign = null, selection_reason = SelectionReason.only_eligible };
+                MyDebug.LogError($"[Advertisement] Failed to parse ad group response. Treating as no available ad group. Raw: {content}");
+                return new AdGroupSelectResponse { ad_group = null, selection_reason = SelectionReason.only_eligible };
             }
+        }
+
+        /// <summary>
+        /// Selects an ad group for a format, applying frequency capping as a best-effort PREFERENCE
+        /// rather than a hard filter. The backend hard-excludes previous_ad_groups/previous_campaigns,
+        /// so with limited inventory an accumulated exclusion list would starve selection and return
+        /// nothing. We therefore try progressively weaker exclusion sets and stop at the first that
+        /// yields an ad group:
+        ///   1. cross-session recent history + this round's already-selected apps (best variety)
+        ///   2. only this round's already-selected apps (still avoids the same app across formats now)
+        ///   3. no exclusions (guarantees an ad whenever any eligible inventory exists)
+        /// Duplicate exclusion sets are skipped so we never issue the same request twice.
+        /// </summary>
+        private static async UniTask<AdGroup> SelectAdGroupWithFrequencyCapAsync(
+            AdFormat adFormat,
+            List<string> recentAdGroups, List<string> recentCampaigns,
+            List<string> roundAdGroups, List<string> roundCampaigns)
+        {
+            var attempts = new List<(List<string> adGroups, List<string> campaigns)>
+            {
+                (recentAdGroups.Concat(roundAdGroups).Distinct().ToList(),
+                 recentCampaigns.Concat(roundCampaigns).Distinct().ToList()),
+                (roundAdGroups, roundCampaigns),
+                (new List<string>(), new List<string>()),
+            };
+
+            var triedSignatures = new HashSet<string>();
+            foreach (var (adGroups, campaigns) in attempts)
+            {
+                // Skip an attempt whose exclusion set is identical to one we already tried.
+                var signature = string.Join(",", adGroups.OrderBy(x => x))
+                    + "|" + string.Join(",", campaigns.OrderBy(x => x));
+                if (!triedSignatures.Add(signature))
+                    continue;
+
+                var response = await SelectAdGroupAsync(adFormat, adGroups, campaigns);
+                if (response?.ad_group != null)
+                    return response.ad_group;
+            }
+
+            return null;
         }
 
         /// <summary>

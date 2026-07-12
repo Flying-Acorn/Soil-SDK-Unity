@@ -6,6 +6,8 @@ namespace FlyingAcorn.Soil.Advertisement.Models
     {
         public string id;
         public string name;
+        public string campaign_id;
+        public string campaign_name;
         public string impression_url;
         public string click_url;
         public List<Ad> image_ads;

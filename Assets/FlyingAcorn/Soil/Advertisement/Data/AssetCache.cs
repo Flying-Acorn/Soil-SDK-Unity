@@ -79,83 +79,22 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Caches assets from a campaign, ensuring only one asset of each type per ad format (random ad group/ad)
-        /// </summary>
-        public static async UniTask CacheAssetsAsync(Campaign campaign, List<AdFormat> requestedFormats)
-        {
-            if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
-                return;
-
-            var cachingTasks = new List<UniTask>();
-            var random = new System.Random();
-
-            foreach (var adFormat in requestedFormats)
-            {
-                // Get all ad groups that have at least one ad of this format
-                var eligibleAdGroups = campaign.ad_groups
-                    .Where(g => g.allAds != null && g.allAds.Any(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat))
-                    .ToList();
-                if (!eligibleAdGroups.Any())
-                    continue;
-                // Pick a random ad group
-                var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
-                // Get all ads in this group with the requested format
-                var eligibleAds = adGroup.allAds
-                    .Where(a => Enum.TryParse<AdFormat>(a.format, true, out var f) && f == adFormat)
-                    .ToList();
-                if (!eligibleAds.Any())
-                    continue;
-                // Pick a random ad
-                var ad = eligibleAds[random.Next(eligibleAds.Count)];
-                // Cache one asset of each type for this ad format
-                var assetsToCache = GetAssetsToCache(ad, adFormat);
-                foreach (var (asset, assetType) in assetsToCache)
-                {
-                    if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
-                    {
-                        var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                        cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
-                    }
-                }
-            }
-            await UniTask.WhenAll(cachingTasks);
-        }
-
-        /// <summary>
         /// Caches assets for a specific ad format from multiple ads within the same ad group to ensure comprehensive asset coverage.
         /// This approach ensures that video ads have image fallbacks by caching from both video and image ads in the same group.
+        /// The ad group itself is expected to already be selected (server-side, weighted) for this format.
         /// </summary>
-        public static async UniTask CacheAssetsForFormatAsync(Campaign campaign, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
+        public static async UniTask CacheAssetsForAdGroupAsync(AdGroup adGroup, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
-            MyDebug.Verbose($"Starting CacheAssetsForFormatAsync for {adFormat}");
+            MyDebug.Verbose($"Starting CacheAssetsForAdGroupAsync for {adFormat}");
 
-            if (campaign?.ad_groups == null || !campaign.ad_groups.Any())
+            if (adGroup == null || !HasAdsForFormat(adGroup, adFormat))
             {
-                MyDebug.LogWarning($"No campaign or ad groups available for {adFormat}");
+                MyDebug.LogWarning($"No ad group or matching ads available for {adFormat}");
                 onFormatReady?.Invoke(adFormat);
                 return;
             }
-
-            MyDebug.Verbose($"Campaign has {campaign.ad_groups.Count} ad groups");
 
             var random = new System.Random();
-
-            // Get all ad groups that have ads of this format in either image_ads or video_ads
-            var eligibleAdGroups = campaign.ad_groups
-                .Where(g => HasAdsForFormat(g, adFormat))
-                .ToList();
-
-            MyDebug.Verbose($"Found {eligibleAdGroups.Count} eligible ad groups for {adFormat}");
-
-            if (!eligibleAdGroups.Any())
-            {
-                MyDebug.Info($"No assets found to cache for {adFormat} format");
-                onFormatReady?.Invoke(adFormat);
-                return;
-            }
-
-            // Pick a random ad group
-            var adGroup = eligibleAdGroups[random.Next(eligibleAdGroups.Count)];
 
             // Get all ads in this group with the requested format
             var eligibleAds = GetEligibleAdsForFormat(adGroup, adFormat);
@@ -179,11 +118,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             MyDebug.Verbose($"Ad group breakdown - Video ads: {videoAds.Count}, Image ads: {imageAds.Count}");
 
             // Cache from video ad (if available) to get video + any accompanying assets
+            Ad videoAd = null;
+            HashSet<AssetType> videoAdAssetTypes = new();
             if (videoAds.Any())
             {
-                var videoAd = videoAds[random.Next(videoAds.Count)];
+                videoAd = videoAds[random.Next(videoAds.Count)];
                 MyDebug.Verbose($"Caching assets from video ad: {videoAd.id}");
                 var videoAssetsToCache = GetAssetsToCache(videoAd, adFormat);
+                videoAdAssetTypes = videoAssetsToCache.Select(x => x.assetType).ToHashSet();
 
                 foreach (var (asset, assetType) in videoAssetsToCache)
                 {
@@ -201,18 +143,16 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 var imageAd = imageAds[random.Next(imageAds.Count)];
 
                 // Only cache if it's different from the video ad (avoid duplicates) or if no video ad was processed
-                if (!videoAds.Any() || !videoAds.Any(va => va.id == imageAd.id))
+                if (videoAd == null || videoAd.id != imageAd.id)
                 {
                     MyDebug.Verbose($"Caching assets from image ad: {imageAd.id}");
                     var imageAssetsToCache = GetAssetsToCache(imageAd, adFormat);
 
-                    // Track which asset types we're already caching from video ad
-                    var existingAssetTypes = new HashSet<AssetType>();
-                    if (videoAds.Any())
-                    {
-                        var videoAssetsToCache = GetAssetsToCache(videoAds.First(), adFormat);
-                        existingAssetTypes = videoAssetsToCache.Select(x => x.assetType).ToHashSet();
-                    }
+                    // Track which asset types the actually-cached video ad already covers (must match
+                    // the same videoAd instance used above, not just any video ad in the group, otherwise
+                    // this can either skip caching a needed fallback image or cache a second, mismatched
+                    // image alongside the video's own image).
+                    var existingAssetTypes = videoAdAssetTypes;
 
                     foreach (var (asset, assetType) in imageAssetsToCache)
                     {
@@ -831,6 +771,50 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     MyDebug.Verbose("Cleared all cached assets");
                 }
             }
+        }
+
+        /// <summary>
+        /// Clears cached assets for a single ad format asynchronously, leaving other formats' assets untouched.
+        /// Used when the ad group selected for a format changes without affecting other formats.
+        /// </summary>
+        public static async UniTask ClearFormatCacheAsync(AdFormat adFormat)
+        {
+            List<string> keysToRemove;
+            List<AssetCacheEntry> assetsToDelete;
+
+            lock (_lockObject)
+            {
+                keysToRemove = _cachedAssets
+                    .Where(kvp => kvp.Value.AdFormat == adFormat)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                assetsToDelete = keysToRemove.Select(key => _cachedAssets[key]).ToList();
+                foreach (var key in keysToRemove)
+                {
+                    _cachedAssets.Remove(key);
+                }
+            }
+
+            await UniTask.RunOnThreadPool(() =>
+            {
+                foreach (var asset in assetsToDelete)
+                {
+                    try
+                    {
+                        if (File.Exists(asset.LocalPath))
+                        {
+                            File.Delete(asset.LocalPath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MyDebug.LogWarning($"Failed to delete cached file {asset.LocalPath}: {ex.Message}");
+                    }
+                }
+            });
+
+            PersistCachedAssets();
+            MyDebug.Verbose($"Cleared {assetsToDelete.Count} cached assets for format {adFormat}");
         }
 
         /// Clears old cached assets based on age (older than specified days)
