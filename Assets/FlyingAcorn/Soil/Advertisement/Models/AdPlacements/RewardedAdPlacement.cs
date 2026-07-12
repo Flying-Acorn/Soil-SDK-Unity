@@ -242,8 +242,9 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             if (string.IsNullOrEmpty(clickUrl))
                 Analytics.MyDebug.Info("No click URL found in cached assets");
 
-            // Get ad-level text content from cached assets (use first available asset that has this data)
-            var assetWithAdData = cachedAssets.FirstOrDefault(a => !string.IsNullOrEmpty(a.AdId)) ?? mainAsset ?? logoAsset;
+            // Get ad-level text content from the SAME ad as the primary displayed asset (mainAsset), so the
+            // header/CTA shown always belongs to the ad whose image/video is on screen - never a sibling ad's.
+            var assetWithAdData = mainAsset ?? logoAsset ?? cachedAssets.FirstOrDefault(a => !string.IsNullOrEmpty(a.AdId));
             var mainHeaderText = assetWithAdData?.MainHeaderText;
             var actionButtonText = assetWithAdData?.ActionButtonText;
             var descriptionText = assetWithAdData?.DescriptionText;
