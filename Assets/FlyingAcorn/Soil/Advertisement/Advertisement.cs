@@ -416,12 +416,30 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             catch (SoilException sx)
             {
-                // Preserve specific SoilException types
-                throw sx.ErrorCode == SoilExceptionErrorCode.Timeout ? sx : sx;
+                // Preserve specific SoilException types. Kept as explicit per-code branches so
+                // individual error codes (timeout, transport, etc.) can be handled differently
+                // later without reshaping this catch.
+                switch (sx.ErrorCode)
+                {
+                    case SoilExceptionErrorCode.Timeout:
+                        throw;
+                    default:
+                        throw;
+                }
             }
             catch (Exception ex)
             {
                 throw new SoilException($"Unexpected error while selecting ad group: {ex.Message}", SoilExceptionErrorCode.TransportError);
+            }
+
+            // A transport-level failure (no network, DNS failure, connection refused, aborted)
+            // completes with responseCode 0 and an empty body. Surface it as a TransportError
+            // instead of letting it fall through to the status-code branch, which would report
+            // the meaningless "Failed to select ad group: 0 - ".
+            if (request.result == UnityWebRequest.Result.ConnectionError
+                || request.result == UnityWebRequest.Result.DataProcessingError)
+            {
+                throw new SoilException($"Failed to select ad group: {request.error}", SoilExceptionErrorCode.TransportError);
             }
 
             // Map non-success status codes
