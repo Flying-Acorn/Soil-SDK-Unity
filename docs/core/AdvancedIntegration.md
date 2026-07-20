@@ -78,8 +78,15 @@ if (userInfo != null)
 {
     Debug.Log($"User ID: {userInfo.uuid}");
     Debug.Log($"Username: {userInfo.name}");
+    Debug.Log($"Public ID: {userInfo.public_id}");
 }
 ```
+
+`public_id` is a short, uppercase code (for example `K7M29QX4`) that is safe to show to
+players and easy to read out loud or retype — use it anywhere you would otherwise ask a
+player to share their `uuid`. The server assigns it when the account is created and never
+changes it, so it cannot be set through `UpdatePlayerInfo()`. It is `null` for users whose
+info was cached before this field existed, until the next fetch refreshes them.
 
 ## Error Handling
 

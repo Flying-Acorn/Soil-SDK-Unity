@@ -29,6 +29,7 @@ namespace FlyingAcorn.Soil.Core.User
         [JsonProperty] internal Dictionary<string, object> custom_properties;
         [JsonProperty] internal string username;
         [JsonProperty] internal string uuid;
+        [JsonProperty] internal string public_id;
         [JsonProperty] internal List<AppParty> linkable_parties;
 
         [CanBeNull]
@@ -43,6 +44,7 @@ namespace FlyingAcorn.Soil.Core.User
         {
             newUser.Validate();
             uuid = newUser.uuid;
+            public_id = newUser.public_id;
             return RecordAvatarAsset(newUser.avatar_asset).RecordName(newUser.name).RecordUsername(newUser.username);
         }
 
