@@ -159,6 +159,11 @@ private void OnApplicationFocus(bool hasFocus)
   - At the beginning of app/shop initialization to catch any missed verifications
 - This ensures completed purchases are properly validated and rewards are granted
 
+**Do not skip the call when your local list looks empty.** The first
+`SafeVerifyAllPurchases()` of each session also asks the server which purchases are still
+in flight, which is how the SDK finds purchases it did not create itself — see
+[Discovering purchases made outside the game](#discovering-purchases-made-outside-the-game).
+
 ### 7. Grant Purchase Rewards
 
 When `OnPurchaseSuccessful` fires (after verification), grant the purchased items to the player by matching the purchase SKU with the item data:
@@ -315,6 +320,48 @@ private void OnApplicationFocus(bool hasFocus)
 
 This ensures that purchases made in external browsers or payment apps are properly validated and rewards granted when the user returns to your game.
 
+### Discovering Purchases Made Outside the Game
+
+The SDK keeps a local list of purchases awaiting verification, written the moment
+`BuyItem()` succeeds. That list cannot cover purchases the client never created — for
+example one bought from a web store — or a list lost with local storage.
+
+To close that gap, the **first `SafeVerifyAllPurchases()` call of each session** also reads
+the server's pending list and merges anything it does not already know about into the local
+set before verifying. You do not need to call anything extra; just make sure
+`SafeVerifyAllPurchases()` runs at least once per session, either via
+`Initialize(verifyOnInitialize: true)` or your own call once the game is ready to grant items.
+
+```csharp
+private void Start()
+{
+    Purchasing.OnPurchaseSuccessful += OnPurchaseCompleted;
+
+    // Runs the pending-list fetch once the system is ready.
+    Purchasing.Initialize(verifyOnInitialize: true);
+}
+
+private void OnApplicationFocus(bool hasFocus)
+{
+    if (hasFocus)
+    {
+        // Safe to call every time: only the first call of a session hits the network
+        // for the pending list; later calls verify from local state.
+        Purchasing.SafeVerifyAllPurchases();
+    }
+}
+```
+
+**Notes**:
+- The pending list is fetched **once per session**, deliberately, so that repeated focus
+  changes do not each cost a request. A purchase created while the game is already running
+  is therefore picked up on the next session — tell the buyer to reopen the game.
+- A failed fetch does not consume the attempt; it is retried on the next call.
+- The list is scoped to the authenticated user by the access token, so it can only ever
+  contain that user's own purchases.
+- The local pending list is a **set**: ids are unique, and merging the server's list never
+  introduces duplicates.
+
 ## Additional Features
 
 ### Manual Verification
@@ -350,7 +397,12 @@ Purchasing.DeInitialize();
 Purchasing.RollbackUnpaidPurchases();
 ```
 
-**When to use**: Particularly when for any reason you don't want the previous unpai purchases to be in the flow of verifications. .eg when player uuid is different(like when user is linked to a third party and is not the same user anymore)
+**When to use**: Particularly when for any reason you don't want the previous unpaid purchases to be in the flow of verifications. .eg when player uuid is different(like when user is linked to a third party and is not the same user anymore)
+
+**Caution**: This abandons any purchase still in flight. A payment that was made but not yet
+verified will never be captured, and the gateway will reverse it automatically. Only call it
+when discarding those purchases is what you intend. Note that the server-side pending list may
+re-surface such a purchase on the next session if it is still within its payment window.
 
 ## Demo Scene
 

@@ -36,6 +36,7 @@ namespace FlyingAcorn.Soil.Purchasing
         private static string CreatePurchaseUrl => $"{PurchaseBaseUrl}/";
         private static string VerifyPurchaseUrl => $"{PurchaseBaseUrl}/verify/";
         private static string BatchVerifyPurchaseUrl => $"{PurchaseBaseUrl}/batchverify/";
+        private static string PendingPurchasesUrl => $"{PurchaseBaseUrl}/pending/";
         private static string PurchaseInvoiceUrl => PurchaseBaseUrl + "/{purchase_id}/invoice/";
 
         private static string _apiAtItemsFetch;                // API base used when we first (or last) fetched items
@@ -72,7 +73,17 @@ namespace FlyingAcorn.Soil.Purchasing
         /// </summary>
         [UsedImplicitly] public static Action<SoilException> OnInitializationFailed;
         [UsedImplicitly] public static Action<Dictionary<string, string>> OnDeeplinkActivated;
+
+        /// <summary>
+        /// Event fired when the server reports in-flight purchases this client did not know about,
+        /// before they are verified. Fires at most once per session and only when there is something
+        /// new. A reported sku may be absent from <see cref="AvailableItems"/> — the purchase is still
+        /// real; it just was not created against this build's catalog.
+        /// </summary>
+        [UsedImplicitly] public static Action<List<Purchase>> OnPendingPurchasesDiscovered;
         private static UniTask? _verifyTask;
+        private static bool _isVerifying;
+        private static bool _pendingPurchasesFetched;
         private static bool _verifyOnInitialize;
 
         private static UniTaskCompletionSource<bool> _remoteConfigCompletionSource;
@@ -292,6 +303,8 @@ namespace FlyingAcorn.Soil.Purchasing
             _isInitializing = false;
             _initialized = false;
             _verifyTask = null;
+            _isVerifying = false;
+            _pendingPurchasesFetched = false;
             _verifyOnInitialize = false;
             _remoteConfigCompletionSource?.TrySetResult(false);
             _remoteConfigCompletionSource = null;
@@ -302,6 +315,7 @@ namespace FlyingAcorn.Soil.Purchasing
             OnInitializationFailed = null;
             OnPurchaseStart = null;
             OnPurchaseSuccessful = null;
+            OnPendingPurchasesDiscovered = null;
         }
 
         private static void OpenInvoice(Dictionary<string, string> obj)
@@ -598,6 +612,9 @@ namespace FlyingAcorn.Soil.Purchasing
 
         /// <summary>
         /// Removes unpaid purchases from local storage to prevent accumulation of failed transactions.
+        /// This abandons any purchase still in flight: the local pending list is the only record of
+        /// it, so a payment that was made but not yet verified will never be captured and the gateway
+        /// will reverse it automatically. Only call this when discarding those purchases is intended.
         /// </summary>
         public static void RollbackUnpaidPurchases()
         {
@@ -607,24 +624,85 @@ namespace FlyingAcorn.Soil.Purchasing
                 PurchasingPlayerPrefs.RemoveUnverifiedPurchaseId(purchaseId);
         }
 
+        /// <summary>
+        /// Asks the server which purchases this user still has in flight and merges them into
+        /// the local pending set. Covers purchases the client never created itself (bought
+        /// outside the game) and ids lost with local storage. The purchaser is taken from the
+        /// access token, so this only ever returns the caller's own purchases.
+        ///
+        /// Runs at most once per session. Purchases made in-game are already tracked locally,
+        /// so this exists only for externally created ones — and a buyer is told to reopen the
+        /// game to collect those. Re-fetching on every focus regain would cost a request per
+        /// player per app switch to catch an event that a session boundary already covers.
+        /// Failures are non-fatal and do not consume the attempt: verification proceeds with
+        /// whatever is known locally, and the fetch is retried on the next call.
+        /// </summary>
+        private static async UniTask FetchPendingPurchases()
+        {
+            if (!Ready || _pendingPurchasesFetched)
+                return;
+
+            try
+            {
+                using var request = UnityWebRequest.Get(PendingPurchasesUrl);
+                var authHeader = Authenticate.GetAuthorizationHeaderString();
+                if (!string.IsNullOrEmpty(authHeader)) request.SetRequestHeader("Authorization", authHeader);
+                request.SetRequestHeader("Accept", "application/json");
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout);
+
+                if (request.responseCode < 200 || request.responseCode >= 300)
+                {
+                    MyDebug.Info($"FlyingAcorn ====> Failed to fetch pending purchases: {(System.Net.HttpStatusCode)request.responseCode}");
+                    return;
+                }
+
+                var response = JsonConvert.DeserializeObject<BatchVerifyResponse>(request.downloadHandler?.text ?? string.Empty);
+                if (response?.purchases == null)
+                    return;
+
+                // Only a completed round trip consumes the session's attempt.
+                _pendingPurchasesFetched = true;
+
+                var added = PurchasingPlayerPrefs.MergeUnverifiedPurchaseIds(
+                    response.purchases.Select(purchase => purchase.purchase_id));
+                if (added.Count == 0)
+                    return;
+
+                MyDebug.Info($"FlyingAcorn ====> Discovered {added.Count} pending purchase(s) from the server");
+                var discovered = response.purchases.Where(purchase => added.Contains(purchase.purchase_id)).ToList();
+                OnPendingPurchasesDiscovered?.Invoke(discovered);
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"FlyingAcorn ====> Could not fetch pending purchases: {ex.Message}");
+            }
+        }
+
         [UsedImplicitly]
         /// <summary>
         /// Verifies any pending purchases. Call this when the app regains focus to ensure purchases are validated.
+        /// The first call of a session also reads the server's pending list, so purchases created
+        /// outside this client are picked up; later calls verify from local state only.
         /// </summary>
         public static async void SafeVerifyAllPurchases()
         {
+            // Set synchronously before the first await: _verifyTask is only assigned after the
+            // pending fetch, so it alone would let a second caller through in the meantime.
+            if (_isVerifying || _verifyTask?.AsTask() is { IsCompleted: false })
+            {
+                MyDebug.Info("FlyingAcorn ====> Verify task is already running");
+                return;
+            }
+            _isVerifying = true;
+
             try
             {
-                if (_verifyTask?.AsTask() is { IsCompleted: false })
-                {
-                    MyDebug.Info("FlyingAcorn ====> Verify task is already running");
-                    return;
-                }
+                await FetchPendingPurchases();
 
                 var idsToVerify = PurchasingPlayerPrefs.UnverifiedPurchaseIds;
                 _verifyTask = idsToVerify.Count == 1
                     ? VerifyPurchase(idsToVerify[0])
-                    : BatchVerifyPurchases(PurchasingPlayerPrefs.UnverifiedPurchaseIds);
+                    : BatchVerifyPurchases(idsToVerify);
                 await _verifyTask.Value;
             }
             catch (Exception e)
@@ -632,7 +710,14 @@ namespace FlyingAcorn.Soil.Purchasing
                 var message = $"Failed to batch verify purchases - {e} - {e.StackTrace}";
                 MyDebug.LogWarning(message);
             }
-            _verifyTask = null;
+            finally
+            {
+                // Must be finally: this is async void, so anything escaping here (including a
+                // throw from the catch block) would leave the flag set and kill verification
+                // for the rest of the session.
+                _verifyTask = null;
+                _isVerifying = false;
+            }
         }
 
         internal static async UniTask<bool> HealthCheck(string apiUrl)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
 using FlyingAcorn.Soil.Core.Data;
@@ -35,6 +36,10 @@ namespace FlyingAcorn.Soil.Purchasing
             private set => PlayerPrefs.SetString(PrefsPrefix + "purchasingSettings", JsonConvert.SerializeObject(value));
         }
 
+        /// <summary>
+        /// Purchases awaiting verification. Always a set: ids are unique, non-empty and
+        /// deduplicated on both read and write, so no caller can introduce a duplicate.
+        /// </summary>
         public static List<string> UnverifiedPurchaseIds
         {
             get
@@ -42,7 +47,7 @@ namespace FlyingAcorn.Soil.Purchasing
                 var jsonString = PlayerPrefs.GetString(PrefsPrefix + "unverifiedPurchaseIds", "[]");
                 try
                 {
-                    return JsonConvert.DeserializeObject<List<string>>(jsonString);
+                    return Normalize(JsonConvert.DeserializeObject<List<string>>(jsonString));
                 }
                 catch (Exception e)
                 {
@@ -51,22 +56,55 @@ namespace FlyingAcorn.Soil.Purchasing
                     return new List<string>();
                 }
             }
-            private set =>
-                PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(value));
+            private set
+            {
+                PlayerPrefs.SetString(PrefsPrefix + "unverifiedPurchaseIds", JsonConvert.SerializeObject(Normalize(value)));
+                PlayerPrefs.Save();
+            }
+        }
+
+        private static List<string> Normalize(IEnumerable<string> ids)
+        {
+            if (ids == null)
+                return new List<string>();
+            return ids.Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
         }
 
         public static void RemoveUnverifiedPurchaseId(string purchaseID)
         {
             var unverifiedPurchaseIds = UnverifiedPurchaseIds;
-            unverifiedPurchaseIds.RemoveAll(id => id == purchaseID);
+            if (unverifiedPurchaseIds.RemoveAll(id => id == purchaseID) == 0)
+                return;
             UnverifiedPurchaseIds = unverifiedPurchaseIds;
         }
 
         public static void AddUnverifiedPurchaseId(string purchaseId)
         {
+            if (string.IsNullOrEmpty(purchaseId))
+                return;
             var unverifiedPurchaseIds = UnverifiedPurchaseIds;
+            if (unverifiedPurchaseIds.Contains(purchaseId))
+                return;
             unverifiedPurchaseIds.Add(purchaseId);
             UnverifiedPurchaseIds = unverifiedPurchaseIds;
+        }
+
+        /// <summary>
+        /// Unions server-reported pending ids into the local set in a single write.
+        /// Returns the ids that were not already known, in the order supplied.
+        /// </summary>
+        internal static List<string> MergeUnverifiedPurchaseIds(IEnumerable<string> purchaseIds)
+        {
+            if (purchaseIds == null)
+                return new List<string>();
+            var unverifiedPurchaseIds = UnverifiedPurchaseIds;
+            var known = new HashSet<string>(unverifiedPurchaseIds);
+            var added = Normalize(purchaseIds).Where(id => known.Add(id)).ToList();
+            if (added.Count == 0)
+                return added;
+            unverifiedPurchaseIds.AddRange(added);
+            UnverifiedPurchaseIds = unverifiedPurchaseIds;
+            return added;
         }
 
         public static string GetPurchaseDeeplink()

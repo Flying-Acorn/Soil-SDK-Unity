@@ -10,12 +10,14 @@ The Purchasing module provides a complete in-app purchase solution for Unity gam
 - **Receipt Management**: Handle payment confirmations and invoice generation
 - **Event-Driven Architecture**: Comprehensive events for all purchase states
 - **Offline Support**: Local caching and verification retry on app resume
+- **Server-Side Recovery**: Purchases created outside the client are discovered and verified
 
 ## Features
 
 - Real-time item availability updates
 - Batch purchase verification for performance
 - Automatic verification on app focus regain
+- Once-per-session sync of the server's pending-purchase list
 - Support for multiple payment methods
 - Analytics integration for purchase tracking
 - Deeplink handling for payment completion
