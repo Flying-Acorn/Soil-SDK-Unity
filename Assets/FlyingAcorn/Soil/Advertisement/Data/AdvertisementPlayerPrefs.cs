@@ -25,9 +25,17 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             get
             {
                 var jsonString = PlayerPrefs.GetString(CachedAdGroupsKey, string.Empty);
-                return string.IsNullOrEmpty(jsonString)
-                    ? new Dictionary<AdFormat, AdGroup>()
-                    : JsonConvert.DeserializeObject<Dictionary<AdFormat, AdGroup>>(jsonString);
+                if (string.IsNullOrEmpty(jsonString)) return new Dictionary<AdFormat, AdGroup>();
+                try
+                {
+                    return JsonConvert.DeserializeObject<Dictionary<AdFormat, AdGroup>>(jsonString)
+                           ?? new Dictionary<AdFormat, AdGroup>();
+                }
+                catch
+                {
+                    Debug.LogError($"Failed to deserialize cached ad groups: {jsonString}");
+                    return new Dictionary<AdFormat, AdGroup>();
+                }
             }
             set
             {
@@ -45,9 +53,17 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             get
             {
                 var assetsString = PlayerPrefs.GetString(CachedAssetsKey, string.Empty);
-                return string.IsNullOrEmpty(assetsString)
-                    ? new List<AssetCacheEntry>()
-                    : JsonConvert.DeserializeObject<List<AssetCacheEntry>>(assetsString);
+                if (string.IsNullOrEmpty(assetsString)) return new List<AssetCacheEntry>();
+                try
+                {
+                    return JsonConvert.DeserializeObject<List<AssetCacheEntry>>(assetsString)
+                           ?? new List<AssetCacheEntry>();
+                }
+                catch
+                {
+                    Debug.LogError($"Failed to deserialize cached assets: {assetsString}");
+                    return new List<AssetCacheEntry>();
+                }
             }
             set
             {
