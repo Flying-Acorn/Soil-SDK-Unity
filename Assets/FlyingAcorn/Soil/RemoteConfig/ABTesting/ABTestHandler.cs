@@ -155,11 +155,14 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
         private static Challenger PickAChallenger(List<Challenger> challengers)
         {
             var sumOfChallengersPercent = GetSumOfChallengersPercent(challengers);
-            var randomNumber = Random.value;
-            if (randomNumber * 100 > sumOfChallengersPercent) // The player remains non-tester
+            if (Random.value * 100 > sumOfChallengersPercent) // The player remains non-tester
                 return null;
             challengers.Shuffle();
-            var pickedPercent = randomNumber * sumOfChallengersPercent;
+            // A second draw, deliberately not the enrollment one. Reusing that draw confines
+            // this value to [0, sum^2/100], which only covers the cumulative weights walked
+            // below when sum is 100. At any lower enrollment the walk collapses to "whichever
+            // challenger the shuffle put first", so unequal weights split evenly instead.
+            var pickedPercent = Random.value * sumOfChallengersPercent;
             var percent = 0f;
 
             foreach (var challenger in challengers)

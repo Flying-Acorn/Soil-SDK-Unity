@@ -26,7 +26,16 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
 
         internal static void SetLastExperimentId(string experimentId)
         {
+            // Flushed here rather than left to Unity's own shutdown write. HandleCohortChange
+            // rewrites the same value on every launch, so the guard below makes the steady
+            // state cheaper than it was, and the one write that matters -- the first
+            // assignment -- becomes durable immediately instead of depending on an unrelated
+            // module calling PlayerPrefs.Save() before the process dies.
+            if (PlayerPrefs.GetString(LastExperimentKey, Constants.NoCohortName) == experimentId)
+                return;
+
             PlayerPrefs.SetString(LastExperimentKey, experimentId);
+            PlayerPrefs.Save();
         }
 
         internal static void SetSeenChallengers(IEnumerable<string> challengersIds)
@@ -34,7 +43,12 @@ namespace FlyingAcorn.Soil.RemoteConfig.ABTesting
             var enumerable = challengersIds as string[] ?? challengersIds.ToArray();
             if (!enumerable.Any()) return;
 
-            PlayerPrefs.SetString(SeenChallengersKey, string.Join(",", enumerable));
+            var joined = string.Join(",", enumerable);
+            if (PlayerPrefs.GetString(SeenChallengersKey, "") == joined)
+                return;
+
+            PlayerPrefs.SetString(SeenChallengersKey, joined);
+            PlayerPrefs.Save();
         }
 
         internal static List<string> GetSeenChallengers()
