@@ -136,6 +136,12 @@ namespace FlyingAcorn.Soil.Core.Data
             // Fast-path: already finished (rare but possible if using a cached result)
             if (request.isDone) return;
 
+            // Capture the url now, while the native request is guaranteed alive. By the time the timeout
+            // branch runs the request may already be disposed, and then `request.url` throws too - which
+            // is how timeouts end up reported with no endpoint to identify them by.
+            var requestUrl = "<unavailable>";
+            try { requestUrl = request.url ?? "<null>"; } catch { /* native request may already be gone */ }
+
             var tcs = new UniTaskCompletionSource();
             var operation = request.SendWebRequest();
 
@@ -170,10 +176,7 @@ namespace FlyingAcorn.Soil.Core.Data
                 // Abort the underlying request; some platforms may still invoke completed later, but tcs already resolved or will be ignored.
                 try { request.Abort(); } catch { /* ignore */ }
 
-                var safeUrl = "<unavailable>";
-                try { safeUrl = request.url ?? "<null>"; } catch { /* native request may already be disposed */ }
-
-                throw new SoilException($"Request timed out (url: {safeUrl})", SoilExceptionErrorCode.Timeout);
+                throw new SoilException($"Request timed out (url: {requestUrl})", SoilExceptionErrorCode.Timeout);
             }
 
             // Cancel timeout so Delay task stops (avoids needless continuation work)
