@@ -62,7 +62,7 @@ namespace FlyingAcorn.Soil.Core.Data
 
             var region = Region.WW;
 
-            if (utcOffset == TimeSpan.FromHours(3.5) || utcOffset == TimeSpan.FromHours(4.5) ||
+            if (utcOffset == TimeSpan.FromHours(3.5) ||
                 standardName.Contains("Iran", StringComparison.OrdinalIgnoreCase) ||
                 standardName.Contains("Tehran", StringComparison.OrdinalIgnoreCase))
             {
