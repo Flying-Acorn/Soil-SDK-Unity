@@ -417,7 +417,7 @@ See the [Purchasing Demo](../README.md#demo-scenes) (`SoilPurchasingExample.unit
 - `Purchasing.VerifyPurchase(string purchaseId)`
 - `Purchasing.BatchVerifyPurchases(List<string> purchaseIds)`
 - `Purchasing.SafeVerifyAllPurchases()`
-- `Purchasing.OpenInvoice(string purchaseId)`
+- `Purchasing.OpenReceipt(string purchaseId)`
 - `Purchasing.RollbackUnpaidPurchases()`
 - `Purchasing.DeInitialize()`
 

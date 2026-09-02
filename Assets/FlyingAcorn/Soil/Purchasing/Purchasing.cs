@@ -37,7 +37,10 @@ namespace FlyingAcorn.Soil.Purchasing
         private static string VerifyPurchaseUrl => $"{PurchaseBaseUrl}/verify/";
         private static string BatchVerifyPurchaseUrl => $"{PurchaseBaseUrl}/batchverify/";
         private static string PendingPurchasesUrl => $"{PurchaseBaseUrl}/pending/";
-        private static string PurchaseInvoiceUrl => PurchaseBaseUrl + "/{purchase_id}/invoice/";
+        // The receipt is a page for a person, so it sits at the site root rather than
+        // under the API prefix - hence the origin rather than PurchaseBaseUrl.
+        private static string ReceiptBaseUrl => $"{new Uri(PurchasingAPIUrl).GetLeftPart(UriPartial.Authority)}/receipt";
+        private static string PurchaseReceiptUrl => ReceiptBaseUrl + "/{purchase_id}/";
 
         private static string _apiAtItemsFetch;                // API base used when we first (or last) fetched items
         private static string _lastItemsQueryApi;              // Last API actually used inside QueryItems()
@@ -279,8 +282,8 @@ namespace FlyingAcorn.Soil.Purchasing
         private static void InitializeInternal()
         {
             UnsubscribeFromCore();
-            OnPaymentDeeplinkActivated -= OpenInvoice;
-            OnPaymentDeeplinkActivated += OpenInvoice;
+            OnPaymentDeeplinkActivated -= HandlePaymentDeeplink;
+            OnPaymentDeeplinkActivated += HandlePaymentDeeplink;
             if (_verifyOnInitialize)
             {
                 OnPurchasingInitialized -= SafeVerifyAllPurchases;
@@ -318,7 +321,7 @@ namespace FlyingAcorn.Soil.Purchasing
             OnPendingPurchasesDiscovered = null;
         }
 
-        private static void OpenInvoice(Dictionary<string, string> obj)
+        private static void HandlePaymentDeeplink(Dictionary<string, string> obj)
         {
             var parametersString = string.Join("&", obj.Select(pair => $"{pair.Key}={pair.Value}"));
             MyDebug.Info($"User returned from payment. Parameters: {parametersString}");
@@ -580,12 +583,12 @@ namespace FlyingAcorn.Soil.Purchasing
 
         [UsedImplicitly]
         /// <summary>
-        /// Opens the invoice for a specific purchase in the browser.
+        /// Opens the receipt for a specific purchase in the browser.
         /// </summary>
         /// <param name="purchaseId">The ID of the purchase.</param>
-        public static void OpenInvoice(string purchaseId)
+        public static void OpenReceipt(string purchaseId)
         {
-            Application.OpenURL(PurchaseInvoiceUrl.Replace("{purchase_id}", purchaseId));
+            Application.OpenURL(PurchaseReceiptUrl.Replace("{purchase_id}", purchaseId));
         }
 
         private static void OnVerificationResponse(VerifyResponse response)
