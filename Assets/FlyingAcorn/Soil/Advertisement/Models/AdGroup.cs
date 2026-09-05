@@ -12,6 +12,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models
         public string click_url;
         public List<Ad> image_ads;
         public List<Ad> video_ads;
+        public List<Ad> native_ads;
         
         public List<Ad> allAds
         {
@@ -20,6 +21,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models
                 var allAds = new List<Ad>();
                 if (image_ads != null) allAds.AddRange(image_ads);
                 if (video_ads != null) allAds.AddRange(video_ads);
+                if (native_ads != null) allAds.AddRange(native_ads);
                 return allAds;
             }
         }

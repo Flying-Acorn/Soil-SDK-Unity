@@ -10,6 +10,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             banner,
             interstitial,
             rewarded,
+            native,
         }
 
         public enum AssetType
@@ -19,7 +20,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             header_text,
             description_text,
             button_text,
-            logo
+            logo,
+            native_icon,
+            native_image
         }
 
         public enum SelectionReason

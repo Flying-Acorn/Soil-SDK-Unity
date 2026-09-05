@@ -108,6 +108,33 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
             var cachingTasks = new List<UniTask>();
 
+            // Native ads are cached whole, from a single randomly chosen ad. The video/image
+            // fallback pairing below exists so a video ad can borrow another ad's image; native
+            // ads have no video and are rendered by the game as one creative, so mixing assets
+            // across ads here would put one advertiser's icon next to another's headline.
+            if (adFormat == AdFormat.native)
+            {
+                var nativeAd = eligibleAds[random.Next(eligibleAds.Count)];
+                MyDebug.Verbose($"Caching native assets from ad: {nativeAd.id}");
+                foreach (var (asset, assetType) in GetAssetsToCache(nativeAd, adFormat))
+                {
+                    if (!string.IsNullOrEmpty(asset?.url))
+                    {
+                        var nativeCacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
+                        cachingTasks.Add(CacheAssetAsync(nativeCacheKey, asset, assetType, adFormat, adGroup.click_url, nativeAd));
+                    }
+                }
+
+                if (cachingTasks.Count > 0)
+                    await UniTask.WhenAll(cachingTasks);
+                else
+                    MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
+
+                PersistCachedAssets();
+                onFormatReady?.Invoke(adFormat);
+                return;
+            }
+
             // NEW APPROACH: Cache assets from multiple ads in the same ad group to ensure we have both video and image fallbacks
             // This ensures that even if one ad only has video, another ad in the same group provides the image fallback
 
@@ -244,8 +271,12 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return formatMatches;
             }) == true;
 
-            var result = hasInImageAds || hasInVideoAds;
-            MyDebug.Verbose($"HasAdsForFormat({adFormat}): {result} (image: {hasInImageAds}, video: {hasInVideoAds}");
+            // native_ads carry no format field server-side (a NativeAd is always 'native'),
+            // so they count for the native format and nothing else.
+            var hasInNativeAds = adFormat == AdFormat.native && adGroup.native_ads?.Any() == true;
+
+            var result = hasInImageAds || hasInVideoAds || hasInNativeAds;
+            MyDebug.Verbose($"HasAdsForFormat({adFormat}): {result} (image: {hasInImageAds}, video: {hasInVideoAds}, native: {hasInNativeAds})");
 
             return result;
         }
@@ -310,6 +341,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
             }
 
+            // Native ads only ever satisfy the native format.
+            if (adFormat == AdFormat.native && adGroup.native_ads != null && adGroup.native_ads.Any())
+            {
+                MyDebug.Verbose($"Found {adGroup.native_ads.Count} native ads");
+                eligibleAds.AddRange(adGroup.native_ads);
+            }
+
             MyDebug.Verbose($"Total eligible ads for {adFormat}: {eligibleAds.Count} (including both videos and images)");
             return eligibleAds;
         }
@@ -335,7 +373,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 { AssetType.image, ad.main_image },
                 { AssetType.video, ad.main_video }, // Keep for metadata tracking
-                { AssetType.logo, ad.logo }
+                { AssetType.logo, ad.logo },
+                // Native ads deliver their square icon here; the real type comes from the
+                // asset's own asset_type, so this key is only a slot placeholder.
+                { AssetType.native_icon, ad.icon }
             };
 
             // Cache images/logos, create metadata entries for videos
@@ -346,9 +387,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     // Determine actual asset type based on URL or asset_type field
                     var actualAssetType = DetermineAssetType(asset);
 
-                    if (actualAssetType == AssetType.image || actualAssetType == AssetType.logo)
+                    if (actualAssetType == AssetType.image || actualAssetType == AssetType.logo
+                        || actualAssetType == AssetType.native_icon || actualAssetType == AssetType.native_image)
                     {
-                        // Cache images and logos normally
+                        // Cache images, logos and native icon/image assets normally
                         assetsToCache.Add((asset, actualAssetType));
                         MyDebug.Verbose($"  - Will cache {actualAssetType}: {asset.id}");
                     }
@@ -875,7 +917,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
 
             // Accept both image and logo assets for texture loading
-            if (asset.AssetType != AssetType.image && asset.AssetType != AssetType.logo)
+            if (asset.AssetType != AssetType.image && asset.AssetType != AssetType.logo
+                && asset.AssetType != AssetType.native_icon && asset.AssetType != AssetType.native_image)
             {
                 MyDebug.LogWarning($"Asset {uuid} is not a visual asset (type: {asset.AssetType})");
                 return null;

@@ -1,0 +1,14 @@
+{
+    "name": "FlyingAcorn.Soil.Advertisement.Logic",
+    "rootNamespace": "FlyingAcorn.Soil.Advertisement.Logic",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

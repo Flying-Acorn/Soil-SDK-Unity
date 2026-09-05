@@ -1,0 +1,19 @@
+{
+    "name": "FlyingAcorn.Soil.Advertisement.Tests",
+    "rootNamespace": "FlyingAcorn.Soil.Advertisement.Tests",
+    "references": [
+        "FlyingAcorn.Soil.Advertisement.Logic"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": []
+}

@@ -98,6 +98,38 @@ namespace FlyingAcorn.Soil.Advertisement
         public static event System.Action<AdEventData> OnRewardedAdRewarded;
 
         /// <summary>
+        /// Fired when a native ad is loaded and ready to be shown.
+        /// </summary>
+        public static event System.Action<AdEventData> OnNativeAdLoaded;
+
+        /// <summary>
+        /// Fired when a native ad fails to load or show.
+        /// </summary>
+        public static event System.Action<AdEventData> OnNativeAdError;
+
+        /// <summary>
+        /// Fired when a native ad is shown to the user.
+        /// </summary>
+        public static event System.Action<AdEventData> OnNativeAdShown;
+
+        /// <summary>
+        /// Fired when a native ad is closed/hidden.
+        /// </summary>
+        public static event System.Action<AdEventData> OnNativeAdClosed;
+
+        /// <summary>
+        /// Fired when a native ad is clicked by the user.
+        /// </summary>
+        public static event System.Action<AdEventData> OnNativeAdClicked;
+
+        /// <summary>
+        /// Fired when a native ad's content is ready to be rendered. Unlike the other formats,
+        /// the SDK does not draw a native ad - the game receives this payload and renders the
+        /// title, description, call to action, icon and image in its own UI.
+        /// </summary>
+        public static event System.Action<NativeAdContent> OnNativeAdContentReady;
+
+        /// <summary>
         /// Fired when assets for an ad format have been loaded and cached. For advanced implementations.
         /// </summary>
         public static event System.Action<Constants.AdFormat> OnAdFormatAssetsLoaded;
@@ -191,6 +223,36 @@ namespace FlyingAcorn.Soil.Advertisement
         internal static void InvokeOnRewardedAdRewarded(AdEventData data)
         {
             OnRewardedAdRewarded?.Invoke(data);
+        }
+
+        internal static void InvokeOnNativeAdLoaded(AdEventData data)
+        {
+            OnNativeAdLoaded?.Invoke(data);
+        }
+
+        internal static void InvokeOnNativeAdError(AdEventData data)
+        {
+            OnNativeAdError?.Invoke(data);
+        }
+
+        internal static void InvokeOnNativeAdShown(AdEventData data)
+        {
+            OnNativeAdShown?.Invoke(data);
+        }
+
+        internal static void InvokeOnNativeAdClosed(AdEventData data)
+        {
+            OnNativeAdClosed?.Invoke(data);
+        }
+
+        internal static void InvokeOnNativeAdClicked(AdEventData data)
+        {
+            OnNativeAdClicked?.Invoke(data);
+        }
+
+        internal static void InvokeOnNativeAdContentReady(NativeAdContent content)
+        {
+            OnNativeAdContentReady?.Invoke(content);
         }
 
         // Internal methods for asset loading events

@@ -9,6 +9,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models
         public Asset description;
         public Asset main_image;
         public Asset main_video;
+        public Asset icon;
         public Asset logo;
     }
 }

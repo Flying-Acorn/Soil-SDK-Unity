@@ -24,7 +24,7 @@ Advertisement.Events.OnInitializeFailed += OnAdsInitFailed;
 bool adsPurchased = CheckIfAdsPurchased(); // Your purchase logic
 List<AdFormat> formats = adsPurchased 
     ? new List<AdFormat> { AdFormat.rewarded }  // Only rewarded if purchased
-    : new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded };
+    : new List<AdFormat> { AdFormat.banner, AdFormat.interstitial, AdFormat.rewarded, AdFormat.native };
 
 Advertisement.InitializeAsync(formats);
 ```
@@ -350,6 +350,158 @@ Advertisement.ResetRewardedAdCooldown();
 
 **Automatic Cooldown Handling**: When you call `LoadAd(AdFormat.rewarded)` during cooldown, the SDK automatically waits for the cooldown to expire before firing the `OnRewardedAdLoaded` event. You don't need to manually wait for cooldown.
 
+### Native Ads
+
+Native ads are different from every other format: **the SDK does not draw them**. It hands you the
+raw assets and *your* UI renders them, so the ad matches your game's look. You then tell the SDK
+which GameObjects you rendered it into, so taps are attributed and open the advertiser's link.
+
+> `Advertisement.ShowAd(AdFormat.native)` is **not** valid — it has no view to draw into and
+> raises `OnNativeAdError` with `AdError.InvalidRequest`. Use `ShowNativeAd` below.
+
+#### 1. Build your own layout
+
+Lay out the ad however you like, and **use as many or as few of the assets as you want** — a
+compact list row might show only the icon and title; a full card might show everything.
+
+| Asset | Content | Always present? |
+|---|---|---|
+| Title | `content.Title` | yes |
+| Call to action | `content.CallToAction` | yes |
+| Icon | `content.Icon` (`Texture2D`) | yes |
+| Description | `content.Description` | may be `null` |
+| Main image | `content.MainImage` (`Texture2D`) | may be `null` — check `content.HasMainImage` |
+
+Whichever assets you show, register the views you drew them into (next step) and every one of
+them becomes clickable. Handle `Description` and `MainImage` being absent by hiding or collapsing
+the view rather than showing an empty box.
+
+#### 2. Load, then show
+
+```csharp
+using FlyingAcorn.Soil.Advertisement;
+using FlyingAcorn.Soil.Advertisement.Data;
+using FlyingAcorn.Soil.Advertisement.Models;
+using static FlyingAcorn.Soil.Advertisement.Data.Constants;
+
+[SerializeField] private RawImage iconImage;
+[SerializeField] private RawImage mainImage;
+[SerializeField] private TMP_Text titleText;
+[SerializeField] private TMP_Text descriptionText;
+[SerializeField] private TMP_Text callToActionText;
+
+private void Start()
+{
+    Advertisement.Events.OnNativeAdLoaded += OnNativeReady;
+    Advertisement.Events.OnNativeAdError += OnNativeError;
+    Advertisement.LoadAd(AdFormat.native);
+}
+
+private void OnNativeReady(AdEventData data)
+{
+    if (!Advertisement.IsFormatReady(AdFormat.native))
+        return;
+
+    // Tell the SDK which views you rendered the ad into so taps are attributed.
+    // Every argument is optional - register only what you actually rendered.
+    var references = new NativeAdReferences(
+        titleGameObject: titleText.gameObject,
+        descriptionGameObject: descriptionText.gameObject,
+        callToActionGameObject: callToActionText.gameObject,
+        iconGameObject: iconImage.gameObject,
+        mainImageGameObject: mainImage.gameObject);
+
+    // ShowNativeAd returns the content directly and also raises OnNativeAdContentReady.
+    var content = Advertisement.ShowNativeAd(references);
+    if (content == null)
+        return;
+
+    titleText.text = content.Title;
+    callToActionText.text = content.CallToAction;
+    iconImage.texture = content.Icon;
+
+    descriptionText.gameObject.SetActive(!string.IsNullOrEmpty(content.Description));
+    descriptionText.text = content.Description;
+
+    mainImage.gameObject.SetActive(content.HasMainImage);
+    if (content.HasMainImage)
+        mainImage.texture = content.MainImage;
+}
+
+private void OnNativeError(AdEventData data)
+{
+    Debug.Log($"No native ad available: {data.AdError}");
+}
+```
+
+Prefer subscribing to `OnNativeAdContentReady` instead of using the return value if the code that
+renders the ad lives somewhere other than the code that shows it — both carry the same object.
+`Advertisement.GetNativeAdContent()` returns the loaded content (or `null`) if you would rather poll.
+
+#### 3. Hide and release
+
+```csharp
+// Stop attributing clicks and raise OnNativeAdClosed. The ad stays loaded and can be shown again.
+Advertisement.HideNativeAd();
+
+// Release the ad entirely; IsFormatReady(AdFormat.native) becomes false until you load again.
+Advertisement.DestroyNativeAd();
+```
+
+Call `DestroyNativeAd()` when the player buys the ad-free upgrade, and before destroying the
+GameObjects you passed in `NativeAdReferences`.
+
+#### Clicks: make the whole ad clickable, or just parts
+
+`ShowNativeAd` attaches a click handler to **every** GameObject you register — a native ad is one
+clickable unit.
+
+Pointer events bubble up to the nearest ancestor handler, so the simplest way to make the entire
+ad clickable — including custom views the SDK knows nothing about, such as a badge, a rating row
+or a background panel — is to register your layout root:
+
+```csharp
+// The whole card is clickable, whatever you put inside it.
+Advertisement.ShowNativeAd(NativeAdReferences.ForContainer(adCardRoot));
+
+// Or mix: a container plus extra views that live outside it.
+var references = new NativeAdReferences(
+    iconGameObject: iconImage.gameObject,
+    containerGameObject: adCardRoot,
+    additionalGameObjects: new[] { floatingCtaButton.gameObject });
+```
+
+Registering nothing at all is also valid — pass `null` and handle clicks yourself using
+`content.ClickUrl` with `Application.OpenURL`. Fire your own reporting in that case, since the SDK
+cannot see those taps.
+
+Clicks travel through uGUI, so each registered view (or one of its children) needs a
+**raycast-target `Graphic`**, and the scene needs an `EventSystem`. `Image`, `RawImage` and
+TextMeshPro text all qualify by default; a bare empty GameObject does not. The SDK logs a warning
+naming any registered view that cannot receive clicks.
+
+#### Asset standard
+
+The backend rejects off-spec uploads and the SDK re-checks them:
+
+| Asset | Dimensions | Max size |
+|---|---|---|
+| Icon | any square (1:1), up to 2000×2000 | 1 MB |
+| Main image | exactly 1200×628 (1.91:1) | 2 MB |
+
+The main image is pinned because your layout reserves a fixed slot for it; 1.91:1 at 1200×628 is
+the most widely used landscape ad-image size, so advertisers can reuse creatives they already
+have. The icon only has to be square — it is scaled into a small view, so only the 1:1 shape
+matters.
+
+An off-spec **main image** is dropped and the ad still shows icon-only. An off-spec **icon** makes
+the ad unusable and raises `OnNativeAdError` with `AdError.InvalidRequest` — the creative needs
+fixing in the dashboard, so retrying will not help. `AdError.NoFill` means there is simply no
+native inventory and retrying later is worthwhile.
+
+Every field on a single `NativeAdContent` always comes from one advertiser — the SDK never pairs
+one creative's icon with another's headline.
+
 ## Additional Event Types
 
 For more granular control, subscribe to additional events:
@@ -359,6 +511,14 @@ For more granular control, subscribe to additional events:
 Advertisement.Events.OnBannerAdClicked += OnAdClicked;
 Advertisement.Events.OnInterstitialAdClicked += OnAdClicked;
 Advertisement.Events.OnRewardedAdClicked += OnAdClicked;
+Advertisement.Events.OnNativeAdClicked += OnAdClicked;
+
+// Native ad lifecycle (see Native Ads above)
+Advertisement.Events.OnNativeAdLoaded += OnNativeAdLoaded;
+Advertisement.Events.OnNativeAdError += OnNativeAdError;
+Advertisement.Events.OnNativeAdShown += OnNativeAdShown;
+Advertisement.Events.OnNativeAdClosed += OnNativeAdClosed;
+Advertisement.Events.OnNativeAdContentReady += OnNativeAdContentReady;  // Action<NativeAdContent>
 
 // General events
 Advertisement.Events.OnInitialized += OnAdsInitialized;
@@ -386,6 +546,8 @@ Before shipping, thoroughly test the following:
 - ✅ Test long ads and simulate failures to ensure failsafe unblocks input after ~40s
 - ✅ Test multi-scene flows and `DontDestroyOnLoad` objects to ensure events work correctly
 - ✅ Verify rewarded ad cooldown works as expected
+- ✅ Verify native ad taps open the advertiser link from every view you registered
+- ✅ Verify your native layout still looks right when `Description` or `MainImage` is `null`
 - ✅ Test that your pause implementation works correctly with ad events
 - ✅ Verify your game audio is muted/ducked during ads and restored after close (without using `AudioListener.pause`)
 
@@ -404,6 +566,12 @@ Before shipping, thoroughly test the following:
 **Input remains blocked**: Check the failsafe is working by calling `SoilAdInputBlocker.FailsafeTick()` in an Update loop (this is done automatically by `SoilAdManager`).
 
 **Ad video freezes or stalls**: Check that you (or a plugin/mediation SDK) are not setting `AudioListener.pause = true` while an ad is showing. This can starve the native video decoder and freeze the ad, independent of any `ignoreListenerPause` settings on individual audio sources. Mute your own audio sources directly instead — see [Muting Your Game Audio](#muting-your-game-audio).
+
+## Example Script
+
+`Assets/FlyingAcorn/Soil/Advertisement/Demo/NativeAdExample.cs` is a complete, runnable native ad
+integration: initialization, load, show, render, click registration, hide, and every event. Drop it
+on a panel under a Canvas, wire the icon/image/text fields, and it works.
 
 ## Demo Scene
 

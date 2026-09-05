@@ -13,6 +13,7 @@ using FlyingAcorn.Soil.Advertisement.Models.AdPlacements;
 using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 using System.Linq;
 using FlyingAcorn.Soil.Advertisement.Data;
+using FlyingAcorn.Soil.Advertisement.Logic;
 using UnityEngine;
 using UnityEngine.UI;
 using FlyingAcorn.Analytics;
@@ -46,6 +47,12 @@ namespace FlyingAcorn.Soil.Advertisement
 
         // Track active ad placement instances
         private static readonly Dictionary<AdFormat, GameObject> _activePlacements = new();
+
+        // Native ads have no prefab or placement GameObject: the game renders them itself, so the
+        // loaded ad lives here as plain content plus the click handlers attached to the game's own
+        // views while it is on screen.
+        private static NativeAdContent _nativeAdContent;
+        private static readonly List<SoilNativeAdClickHandler> _nativeAdClickHandlers = new();
 
         // Rewarded ad cooldown tracking
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
@@ -297,6 +304,14 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static void PreloadAndPrepareAdInstance(AdFormat adFormat)
         {
+            // Native ads have no prefab to instantiate - "preparing" one just means rebuilding
+            // the content from the freshly cached assets.
+            if (adFormat == AdFormat.native)
+            {
+                LoadNativeAd();
+                return;
+            }
+
             // If an instance already exists, ensure it reloads to pick up freshly cached assets
             if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat])
             {
@@ -646,6 +661,9 @@ namespace FlyingAcorn.Soil.Advertisement
                 case AdFormat.rewarded:
                     Events.InvokeOnRewardedAdError(errorData);
                     break;
+                case AdFormat.native:
+                    Events.InvokeOnNativeAdError(errorData);
+                    break;
                 default:
                     MyDebug.LogError($"Unknown ad format for error event: {adFormat}");
                     break;
@@ -682,6 +700,15 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <param name="adFormat">The ad format to show (banner, interstitial, rewarded).</param>
         public static void ShowAd(AdFormat adFormat)
         {
+            // A native ad needs the game's own views to render into, so it cannot be shown
+            // through this format-only entry point.
+            if (adFormat == AdFormat.native)
+            {
+                MyDebug.LogError("[Advertisement] Native ads must be shown via ShowNativeAd(NativeAdReferences).");
+                InvokeAdErrorEvent(adFormat, new AdEventData(adFormat, AdError.InvalidRequest));
+                return;
+            }
+
             // Check if assets are available for this ad format
             if (!IsFormatReady(adFormat))
             {
@@ -745,6 +772,12 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <param name="adFormat">The ad format to hide (typically banner).</param>
         public static void HideAd(AdFormat adFormat)
         {
+            if (adFormat == AdFormat.native)
+            {
+                HideNativeAd();
+                return;
+            }
+
             if (_activePlacements.TryGetValue(adFormat, out var instance) && instance != null)
             {
                 // Call Hide but keep placement GameObject active so it can reload
@@ -797,6 +830,10 @@ namespace FlyingAcorn.Soil.Advertisement
                     // TODO: Start video preparation here if not already prepared (preload video)
                 }
             }
+            else if (adFormat == AdFormat.native)
+            {
+                LoadNativeAd();
+            }
             else
             {
                 var errorData = new AdEventData(adFormat, AdError.InvalidRequest);
@@ -804,6 +841,219 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
         }
+        #region Native ads
+
+        /// <summary>
+        /// Builds the native ad from the cached native assets and fires OnNativeAdLoaded, or
+        /// OnNativeAdError when the cached assets cannot make a complete ad. Called automatically
+        /// once native assets finish caching, and by LoadAd(AdFormat.native).
+        /// </summary>
+        private static void LoadNativeAd()
+        {
+            var assets = AssetCache.GetCachedAssets(AdFormat.native);
+            var model = NativeAdContentBuilder.Build(ToNativeAssetInfo(assets), out var buildError);
+
+            if (model == null)
+            {
+                _nativeAdContent = null;
+                MyDebug.Verbose($"[Advertisement] Native ad not available: {buildError}");
+                Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, ToAdError(buildError)));
+                return;
+            }
+
+            _nativeAdContent = new NativeAdContent(
+                model.AdId,
+                model.Title,
+                model.Description,
+                model.CallToAction,
+                model.ClickUrl,
+                AssetCache.LoadTexture(model.IconAssetId),
+                model.HasMainImage ? AssetCache.LoadTexture(model.MainImageAssetId) : null);
+
+            // The icon is the one image a native layout cannot do without, so a texture that
+            // fails to decode makes the ad unusable rather than merely degraded.
+            if (_nativeAdContent.Icon == null)
+            {
+                _nativeAdContent = null;
+                MyDebug.LogWarning("[Advertisement] Native ad icon texture could not be loaded.");
+                Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, AdError.InternalError));
+                return;
+            }
+
+            MyDebug.Verbose($"[Advertisement] Native ad loaded (ad {model.AdId}, image: {_nativeAdContent.HasMainImage})");
+            Events.InvokeOnNativeAdLoaded(new AdEventData(AdFormat.native));
+        }
+
+        /// <summary>
+        /// Projects cached entries onto the Unity-free shape the content builder works with.
+        /// Entries that are not native icon/image assets are ignored.
+        /// </summary>
+        private static List<NativeAdAssetInfo> ToNativeAssetInfo(List<AssetCacheEntry> assets)
+        {
+            var infos = new List<NativeAdAssetInfo>();
+            if (assets == null) return infos;
+
+            foreach (var entry in assets)
+            {
+                if (entry == null) continue;
+                if (entry.AssetType != AssetType.native_icon && entry.AssetType != AssetType.native_image)
+                    continue;
+
+                infos.Add(new NativeAdAssetInfo
+                {
+                    Id = entry.Id,
+                    Kind = entry.AssetType == AssetType.native_icon
+                        ? NativeAdAssetKind.Icon
+                        : NativeAdAssetKind.MainImage,
+                    Width = entry.Width ?? 0,
+                    Height = entry.Height ?? 0,
+                    SizeBytes = entry.FileSize,
+                    ClickUrl = entry.ClickUrl,
+                    AdId = entry.AdId,
+                    TitleText = entry.MainHeaderText,
+                    DescriptionText = entry.DescriptionText,
+                    CallToActionText = entry.ActionButtonText
+                });
+            }
+
+            return infos;
+        }
+
+        private static AdError ToAdError(NativeAdContentError error)
+        {
+            return error switch
+            {
+                NativeAdContentError.NoAssets => AdError.NoFill,
+                NativeAdContentError.MissingIcon => AdError.NoFill,
+                // An icon that exists but breaks the size standard is a bad creative, not an
+                // empty inventory - surfaced separately so it shows up in reporting.
+                NativeAdContentError.OffSpecIcon => AdError.InvalidRequest,
+                NativeAdContentError.MissingTitle => AdError.InvalidRequest,
+                NativeAdContentError.MissingCallToAction => AdError.InvalidRequest,
+                _ => AdError.Unknown
+            };
+        }
+
+        /// <summary>
+        /// Gets the loaded native ad content, or null when no native ad is ready. Useful when the
+        /// game prefers polling over the OnNativeAdContentReady event.
+        /// </summary>
+        [UsedImplicitly]
+        public static NativeAdContent GetNativeAdContent()
+        {
+            return _nativeAdContent;
+        }
+
+        /// <summary>
+        /// Shows the loaded native ad. The SDK does not draw anything: it delivers the content
+        /// through OnNativeAdContentReady (and returns it here) and registers the supplied
+        /// GameObjects so taps anywhere on the ad are attributed and open the click URL.
+        /// </summary>
+        /// <param name="references">The GameObjects the game renders the ad into. May be null if the game handles its own clicks.</param>
+        /// <returns>The content to render, or null when no native ad is ready.</returns>
+        [UsedImplicitly]
+        public static NativeAdContent ShowNativeAd(NativeAdReferences references)
+        {
+            if (_nativeAdContent == null)
+            {
+                MyDebug.Verbose("[Advertisement] ShowNativeAd called with no native ad ready.");
+                Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, AdError.AdNotReady));
+                return null;
+            }
+
+            RegisterNativeAdClickTargets(references);
+
+            var content = _nativeAdContent;
+            Events.InvokeOnNativeAdContentReady(content);
+            Events.InvokeOnNativeAdShown(new AdEventData(AdFormat.native));
+            return content;
+        }
+
+        private static void RegisterNativeAdClickTargets(NativeAdReferences references)
+        {
+            ClearNativeAdClickTargets();
+            if (references == null) return;
+
+            foreach (var target in references.All())
+            {
+                if (!target) continue;
+                // The same view can legitimately fill two slots (e.g. the container is also the
+                // main image); bind it once.
+                if (_nativeAdClickHandlers.Any(h => h && h.gameObject == target)) continue;
+
+                // Clicks arrive through uGUI raycasting, so a view with no raycast-target Graphic
+                // on itself or a child can never be hit and would silently swallow every tap.
+                // Children count because a pointer event bubbles up to the nearest handler.
+                if (!target.GetComponentsInChildren<Graphic>(true).Any(g => g.raycastTarget))
+                    MyDebug.LogWarning($"[Advertisement] Native ad view '{target.name}' has no raycast-target Graphic; clicks on it will not register.");
+
+                if (!target.TryGetComponent(out SoilNativeAdClickHandler handler))
+                    handler = target.AddComponent<SoilNativeAdClickHandler>();
+
+                handler.Bind(OnNativeAdClicked);
+                _nativeAdClickHandlers.Add(handler);
+            }
+        }
+
+        /// <summary>
+        /// Unbinds every click handler currently attached to the game's views. The components are
+        /// deliberately NOT destroyed: Object.Destroy is deferred to the end of the frame, so a
+        /// hide-then-show (or two shows) within one frame would re-bind a component Unity is
+        /// about to delete, and clicks would silently stop working. An unbound handler is inert,
+        /// and the next show re-binds it.
+        /// </summary>
+        private static void ClearNativeAdClickTargets()
+        {
+            foreach (var handler in _nativeAdClickHandlers)
+            {
+                if (handler)
+                    handler.Bind(null);
+            }
+
+            _nativeAdClickHandlers.Clear();
+        }
+
+        private static void OnNativeAdClicked()
+        {
+            var clickUrl = _nativeAdContent?.ClickUrl;
+            Events.InvokeOnNativeAdClicked(new AdEventData(AdFormat.native));
+
+            if (string.IsNullOrEmpty(clickUrl))
+            {
+                MyDebug.Info("[Advertisement] Native ad clicked but no click URL is available.");
+                return;
+            }
+
+            MyDebug.Verbose($"[Advertisement] Opening native ad URL: {clickUrl}");
+            Application.OpenURL(clickUrl);
+        }
+
+        /// <summary>
+        /// Stops attributing clicks for the native ad currently on screen and fires
+        /// OnNativeAdClosed. The loaded content is kept, so the ad can be shown again without a
+        /// reload; use DestroyNativeAd to release it.
+        /// </summary>
+        [UsedImplicitly]
+        public static void HideNativeAd()
+        {
+            ClearNativeAdClickTargets();
+            if (_nativeAdContent != null)
+                Events.InvokeOnNativeAdClosed(new AdEventData(AdFormat.native));
+        }
+
+        /// <summary>
+        /// Releases the loaded native ad. After this, IsFormatReady(AdFormat.native) is false
+        /// until LoadAd(AdFormat.native) succeeds again.
+        /// </summary>
+        [UsedImplicitly]
+        public static void DestroyNativeAd()
+        {
+            ClearNativeAdClickTargets();
+            _nativeAdContent = null;
+        }
+
+        #endregion
+
         /// <summary>
         /// Downloads a video from the given URL and caches it locally. Returns the local file path if successful, otherwise null.
         /// </summary>
@@ -1010,6 +1260,10 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <returns>True if the ad can be shown immediately</returns>
         public static bool IsFormatReady(AdFormat adFormat)
         {
+            // Native ads have no placement GameObject; readiness is simply "content was built".
+            if (adFormat == AdFormat.native)
+                return _nativeAdContent != null;
+
             // Step 1: Check if placement instance has a loaded ad ready to show
             if (_activePlacements.TryGetValue(adFormat, out GameObject instance) && instance != null)
             {
