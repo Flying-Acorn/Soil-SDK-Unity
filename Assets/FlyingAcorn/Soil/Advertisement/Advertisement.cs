@@ -52,7 +52,12 @@ namespace FlyingAcorn.Soil.Advertisement
         // loaded ad lives here as plain content plus the click handlers attached to the game's own
         // views while it is on screen.
         private static NativeAdContent _nativeAdContent;
-        private static readonly List<SoilNativeAdClickHandler> _nativeAdClickHandlers = new();
+        // One native ad can be rendered in several places at once (the native banner, a
+        // leaderboard row). Click handlers are tracked PER registered view set, so showing the ad
+        // in a second place does not unbind the first place's taps, and hiding one place does not
+        // silence the other.
+        private static readonly Dictionary<NativeAdReferences, List<SoilNativeAdClickHandler>>
+            _nativeAdClickHandlers = new();
 
         // Rewarded ad cooldown tracking
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
@@ -971,15 +976,18 @@ namespace FlyingAcorn.Soil.Advertisement
 
         private static void RegisterNativeAdClickTargets(NativeAdReferences references)
         {
-            ClearNativeAdClickTargets();
             if (references == null) return;
 
+            // Re-showing into the SAME views replaces only their handlers.
+            ClearNativeAdClickTargets(references);
+
+            var handlers = new List<SoilNativeAdClickHandler>();
             foreach (var target in references.All())
             {
                 if (!target) continue;
                 // The same view can legitimately fill two slots (e.g. the container is also the
                 // main image); bind it once.
-                if (_nativeAdClickHandlers.Any(h => h && h.gameObject == target)) continue;
+                if (handlers.Any(h => h && h.gameObject == target)) continue;
 
                 // Clicks arrive through uGUI raycasting, so a view with no raycast-target Graphic
                 // on itself or a child can never be hit and would silently swallow every tap.
@@ -991,8 +999,10 @@ namespace FlyingAcorn.Soil.Advertisement
                     handler = target.AddComponent<SoilNativeAdClickHandler>();
 
                 handler.Bind(OnNativeAdClicked);
-                _nativeAdClickHandlers.Add(handler);
+                handlers.Add(handler);
             }
+
+            _nativeAdClickHandlers[references] = handlers;
         }
 
         /// <summary>
@@ -1002,15 +1012,25 @@ namespace FlyingAcorn.Soil.Advertisement
         /// about to delete, and clicks would silently stop working. An unbound handler is inert,
         /// and the next show re-binds it.
         /// </summary>
-        private static void ClearNativeAdClickTargets()
+        private static void ClearNativeAdClickTargets(NativeAdReferences references)
         {
-            foreach (var handler in _nativeAdClickHandlers)
+            if (references == null || !_nativeAdClickHandlers.TryGetValue(references, out var handlers))
+                return;
+
+            foreach (var handler in handlers)
             {
                 if (handler)
                     handler.Bind(null);
             }
 
-            _nativeAdClickHandlers.Clear();
+            _nativeAdClickHandlers.Remove(references);
+        }
+
+        /// <summary>Unbinds every registered view set. Used when the ad itself goes away.</summary>
+        private static void ClearAllNativeAdClickTargets()
+        {
+            foreach (var references in _nativeAdClickHandlers.Keys.ToList())
+                ClearNativeAdClickTargets(references);
         }
 
         private static void OnNativeAdClicked()
@@ -1033,10 +1053,24 @@ namespace FlyingAcorn.Soil.Advertisement
         /// OnNativeAdClosed. The loaded content is kept, so the ad can be shown again without a
         /// reload; use DestroyNativeAd to release it.
         /// </summary>
+        /// <summary>
+        /// Stops attributing clicks for ONE place the ad was shown in and fires OnNativeAdClosed.
+        /// Pass the same references given to ShowNativeAd; other places showing this ad keep
+        /// working. Call this from a view's OnDisable - DestroyNativeAd would take the ad away
+        /// from every other place too.
+        /// </summary>
+        [UsedImplicitly]
+        public static void HideNativeAd(NativeAdReferences references)
+        {
+            ClearNativeAdClickTargets(references);
+            if (_nativeAdContent != null)
+                Events.InvokeOnNativeAdClosed(new AdEventData(AdFormat.native));
+        }
+
         [UsedImplicitly]
         public static void HideNativeAd()
         {
-            ClearNativeAdClickTargets();
+            ClearAllNativeAdClickTargets();
             if (_nativeAdContent != null)
                 Events.InvokeOnNativeAdClosed(new AdEventData(AdFormat.native));
         }
@@ -1048,7 +1082,7 @@ namespace FlyingAcorn.Soil.Advertisement
         [UsedImplicitly]
         public static void DestroyNativeAd()
         {
-            ClearNativeAdClickTargets();
+            ClearAllNativeAdClickTargets();
             _nativeAdContent = null;
         }
 

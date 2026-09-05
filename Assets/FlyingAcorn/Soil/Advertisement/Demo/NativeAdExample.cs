@@ -20,6 +20,10 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
     /// RawImage for the icon, a RawImage for the main image, and three TMP_Text objects for the
     /// headline, body and call to action. Drop this component on the panel and wire the fields.
     /// Everything except the icon, headline and call to action is optional.
+    ///
+    /// The same ad can be shown in several places at once - a native banner and a leaderboard
+    /// row, each rendering whichever assets suit it. Put this component on each layout; every one
+    /// registers its own views, so their clicks stay independent.
     /// </summary>
     public class NativeAdExample : MonoBehaviour
     {
@@ -30,6 +34,8 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text descriptionText;
         [SerializeField] private TMP_Text callToActionText;
+
+        private NativeAdReferences _references;
 
         [Header("Demo controls")]
         [SerializeField] private Button loadButton;
@@ -71,8 +77,9 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             Events.OnNativeAdClicked -= OnNativeAdClicked;
             Events.OnNativeAdClosed -= OnNativeAdClosed;
 
-            // Release the ad before the views it was registered against are destroyed.
-            Advertisement.DestroyNativeAd();
+            // Release this view's registration before its GameObjects are destroyed. The ad
+            // stays loaded for any other place showing it.
+            Advertisement.HideNativeAd(_references);
         }
 
         private void OnInitialized()
@@ -111,7 +118,7 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
             // Register every view you render the ad into - each one becomes clickable. If your
             // layout has a single root, NativeAdReferences.ForContainer(adRoot) is equivalent and
             // shorter, because clicks bubble up from children to the container's handler.
-            var references = new NativeAdReferences(
+            _references ??= new NativeAdReferences(
                 titleGameObject: titleText ? titleText.gameObject : null,
                 descriptionGameObject: descriptionText ? descriptionText.gameObject : null,
                 callToActionGameObject: callToActionText ? callToActionText.gameObject : null,
@@ -120,7 +127,7 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
 
             // ShowNativeAd returns the content and also raises OnNativeAdContentReady, so the
             // rendering code can live elsewhere if you prefer.
-            var content = Advertisement.ShowNativeAd(references);
+            var content = Advertisement.ShowNativeAd(_references);
             if (content == null)
             {
                 Log("No native ad ready to show.");
@@ -167,9 +174,8 @@ namespace FlyingAcorn.Soil.Advertisement.Demo
         {
             if (adRoot) adRoot.SetActive(false);
 
-            // Stops click attribution and raises OnNativeAdClosed. The ad stays loaded, so it can
-            // be shown again without another request; use DestroyNativeAd to release it.
-            Advertisement.HideNativeAd();
+            // Releases only THIS view's clicks. Other places showing the same ad keep working.
+            Advertisement.HideNativeAd(_references);
         }
 
         private void OnNativeAdError(AdEventData data)

@@ -438,18 +438,40 @@ Prefer subscribing to `OnNativeAdContentReady` instead of using the return value
 renders the ad lives somewhere other than the code that shows it — both carry the same object.
 `Advertisement.GetNativeAdContent()` returns the loaded content (or `null`) if you would rather poll.
 
-#### 3. Hide and release
+#### 3. Showing the ad in more than one place
+
+One loaded native ad can be rendered in several places at once — a native banner and a leaderboard
+row, say — each showing whichever assets suit it. The row might use only the icon and headline; the
+banner the full set. Nothing extra to configure: call `ShowNativeAd` from each view with **its own**
+`NativeAdReferences`, and each registers its clicks independently.
 
 ```csharp
-// Stop attributing clicks and raise OnNativeAdClosed. The ad stays loaded and can be shown again.
+Advertisement.ShowNativeAd(bannerReferences);       // icon + image + headline + body + CTA
+Advertisement.ShowNativeAd(leaderboardReferences);  // icon + headline only
+```
+
+Keep the references object your view created — you need it to release just that view.
+
+#### 4. Hide and release
+
+```csharp
+// Release ONE view's clicks. Other places showing this ad keep working.
+Advertisement.HideNativeAd(myReferences);
+
+// Release every view's registration, keeping the ad loaded.
 Advertisement.HideNativeAd();
 
-// Release the ad entirely; IsFormatReady(AdFormat.native) becomes false until you load again.
+// Release the ad itself, everywhere.
 Advertisement.DestroyNativeAd();
 ```
 
-Call `DestroyNativeAd()` when the player buys the ad-free upgrade, and before destroying the
-GameObjects you passed in `NativeAdReferences`.
+Call `HideNativeAd(myReferences)` from a view's `OnDisable`, **not** `DestroyNativeAd()` — the
+latter takes the ad away from every other place showing it. Reserve `DestroyNativeAd()` for
+teardown and the ad-free purchase.
+
+> One ad shared across places means the same advertiser appears in each. Fine for places the
+> player reaches separately. If a **single screen** shows several native slots at once they would
+> all render the identical creative — show one slot per screen.
 
 #### Clicks: make the whole ad clickable, or just parts
 
