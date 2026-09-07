@@ -38,9 +38,23 @@ namespace FlyingAcorn.Soil.Purchasing
         private static string BatchVerifyPurchaseUrl => $"{PurchaseBaseUrl}/batchverify/";
         private static string PendingPurchasesUrl => $"{PurchaseBaseUrl}/pending/";
         // The receipt is a page for a person, so it sits at the site root rather than
-        // under the API prefix - hence the origin rather than PurchaseBaseUrl.
-        private static string ReceiptBaseUrl => $"{new Uri(PurchasingAPIUrl).GetLeftPart(UriPartial.Authority)}/receipt";
-        private static string PurchaseReceiptUrl => ReceiptBaseUrl + "/{purchase_id}/";
+        // under the API prefix - hence the origin rather than PurchaseBaseUrl. The API can come
+        // from saved settings, so it is not guaranteed to be an absolute URL with an origin to
+        // take; new Uri would throw on one that is not, and a receipt is never worth an exception.
+        private static string ReceiptBaseUrl
+        {
+            get
+            {
+                var api = PurchasingAPIUrl;
+                return Uri.TryCreate(api, UriKind.Absolute, out var uri)
+                    ? $"{uri.GetLeftPart(UriPartial.Authority)}/receipt"
+                    : null;
+            }
+        }
+
+        private static string PurchaseReceiptUrl => ReceiptBaseUrl == null
+            ? null
+            : ReceiptBaseUrl + "/{purchase_id}/";
 
         private static string _apiAtItemsFetch;                // API base used when we first (or last) fetched items
         private static string _lastItemsQueryApi;              // Last API actually used inside QueryItems()
@@ -588,7 +602,20 @@ namespace FlyingAcorn.Soil.Purchasing
         /// <param name="purchaseId">The ID of the purchase.</param>
         public static void OpenReceipt(string purchaseId)
         {
-            Application.OpenURL(PurchaseReceiptUrl.Replace("{purchase_id}", purchaseId));
+            if (string.IsNullOrEmpty(purchaseId))
+            {
+                MyDebug.LogWarning("OpenReceipt called without a purchase id.");
+                return;
+            }
+
+            var url = PurchaseReceiptUrl;
+            if (url == null)
+            {
+                MyDebug.LogWarning($"Cannot open receipt: '{PurchasingAPIUrl}' is not an absolute URL.");
+                return;
+            }
+
+            Application.OpenURL(url.Replace("{purchase_id}", purchaseId));
         }
 
         private static void OnVerificationResponse(VerifyResponse response)
