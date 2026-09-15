@@ -97,8 +97,11 @@ namespace FlyingAcorn.Soil.Core.User.Authentication
             }
 
             var currentPlayerInfo = UserPlayerPrefs.UserInfoInstance;
+            // public_id was added server-side after many installs had already cached their user info;
+            // treat a missing one as missing info so legacy installs backfill it on next launch.
             var playerInfoIsMissing = currentPlayerInfo == null || string.IsNullOrEmpty(currentPlayerInfo.uuid);
-            if (forceSyncPlayerInfo || playerInfoIsMissing)
+            var publicIdIsMissing = !playerInfoIsMissing && string.IsNullOrEmpty(currentPlayerInfo.public_id);
+            if (forceSyncPlayerInfo || playerInfoIsMissing || publicIdIsMissing)
             {
                 try
                 {

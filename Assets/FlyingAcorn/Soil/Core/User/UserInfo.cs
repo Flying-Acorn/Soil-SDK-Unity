@@ -52,6 +52,9 @@ namespace FlyingAcorn.Soil.Core.User
         {
             if (comingUser.country != null)
                 country = comingUser.country;
+            // The remote config response carries public_id too; use it to backfill installs cached before it existed.
+            if (string.IsNullOrEmpty(public_id) && !string.IsNullOrEmpty(comingUser.public_id))
+                public_id = comingUser.public_id;
             var newRealtimeCountry = comingUser.RealtimeCountry();
             if (newRealtimeCountry == null) return this;
             properties ??= new Properties();
