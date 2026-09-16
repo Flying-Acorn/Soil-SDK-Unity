@@ -4,7 +4,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 {
     public class Constants
     {
-        public string AssetsBaseDomain => DataUtils.GetTheHatedRegionDomain();
+        public string AssetsBaseDomain => DataUtils.GetRegionalApiDomain();
         public enum AdFormat
         {
             banner,

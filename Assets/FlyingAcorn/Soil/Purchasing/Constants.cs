@@ -4,7 +4,7 @@ namespace FlyingAcorn.Soil.Purchasing
 {
     public static class Constants
     {
-        internal static string ApiUrl => $"{DataUtils.GetTheHatedRegionDomain()}/api/iap";
+        internal static string ApiUrl => $"{DataUtils.GetRegionalApiDomain()}/api/iap";
 
 
         public enum FeeType
