@@ -12,7 +12,7 @@ namespace FlyingAcorn.Soil.Core.Data
     {
         private static string _cachedDomain;
 
-        internal static string GetTheHatedRegionDomain()
+        internal static string GetRegionalApiDomain()
         {
             if (_cachedDomain != null) return _cachedDomain;
 
@@ -57,19 +57,12 @@ namespace FlyingAcorn.Soil.Core.Data
         {
             var tz = System.TimeZoneInfo.Local;
 
+            // BaseUtcOffset is the zone's standard offset; +3:30 is the only zone the IR region uses.
             var utcOffset = tz.BaseUtcOffset;
-            var standardName = tz.StandardName ?? string.Empty;
 
-            var region = Region.WW;
+            var region = utcOffset == TimeSpan.FromHours(3.5) ? Region.IR : Region.WW;
 
-            if (utcOffset == TimeSpan.FromHours(3.5) ||
-                standardName.Contains("Iran", StringComparison.OrdinalIgnoreCase) ||
-                standardName.Contains("Tehran", StringComparison.OrdinalIgnoreCase))
-            {
-                region = Region.IR;
-            }
-
-            MyDebug.Verbose($"TimeZone - Offset: {utcOffset}, StandardName: {standardName}, Mapped Region: {region}");
+            MyDebug.Verbose($"TimeZone - Offset: {utcOffset}, Mapped Region: {region}");
 
             switch (region)
             {
