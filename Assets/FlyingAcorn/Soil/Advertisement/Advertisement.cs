@@ -344,15 +344,15 @@ namespace FlyingAcorn.Soil.Advertisement
                     // Force a reload so placement picks up the newest cached assets (e.g., when ad group changes)
                     if (existing.TryGetComponent(out BannerAdPlacement existingBanner) && adFormat == AdFormat.banner)
                     {
-                        existingBanner.Load();
+                        existingBanner.Reload();
                     }
                     else if (existing.TryGetComponent(out InterstitialAdPlacement existingInterstitial) && adFormat == AdFormat.interstitial)
                     {
-                        existingInterstitial.Load();
+                        existingInterstitial.Reload();
                     }
                     else if (existing.TryGetComponent(out RewardedAdPlacement existingRewarded) && adFormat == AdFormat.rewarded)
                     {
-                        existingRewarded.Load();
+                        existingRewarded.Reload();
                     }
                 }
                 return; // Instance already present and refreshed
@@ -387,18 +387,20 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             _activePlacements[adFormat] = instance;
 
-            // Preload and prepare video/image asynchronously
+            // Preload and prepare video/image asynchronously. A host may already have called
+            // LoadAd from OnInitialized, before this cache existed; that ad points at assets the
+            // re-cache has since deleted, so it is replaced rather than kept.
             if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
             {
-                banner.Load();
+                banner.Reload();
             }
             else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
             {
-                interstitial.Load(); // Prepares ad and video in background
+                interstitial.Reload(); // Prepares ad and video in background
             }
             else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
             {
-                rewarded.Load(); // Prepares ad and video in background
+                rewarded.Reload(); // Prepares ad and video in background
             }
 
             var layer = targetCanvas.gameObject.layer;

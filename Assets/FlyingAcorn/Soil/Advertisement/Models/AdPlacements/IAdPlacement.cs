@@ -12,6 +12,7 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
         void Hide();
         bool IsReady();
         void Load();
+        void Reload();
 
         Action OnError { get; set; }
         Action OnLoaded { get; set; }

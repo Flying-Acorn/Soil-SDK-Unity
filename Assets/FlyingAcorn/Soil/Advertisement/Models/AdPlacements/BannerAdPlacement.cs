@@ -78,6 +78,17 @@ namespace FlyingAcorn.Soil.Advertisement.Models.AdPlacements
             return _currentAd != null && adDisplayComponent != null;
         }
 
+        /// <summary>
+        /// Loads against the freshly cached assets, dropping an ad built from an earlier cache.
+        /// A placement that is on screen keeps its ad; the reload happens on its close instead.
+        /// </summary>
+        public void Reload()
+        {
+            if (!gameObject.activeSelf)
+                _currentAd = null;
+            Load();
+        }
+
         public void Load()
         {
             // Don't reload if already loaded
