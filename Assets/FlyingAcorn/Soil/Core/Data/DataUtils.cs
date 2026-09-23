@@ -80,9 +80,11 @@ namespace FlyingAcorn.Soil.Core.Data
 
             switch (store)
             {
+#if !UNITY_IOS || UNITY_EDITOR
                 case Analytics.BuildData.Constants.Store.CafeBazaar:
                 case Analytics.BuildData.Constants.Store.Myket:
                     return IRApiUrl();
+#endif
                 case Analytics.BuildData.Constants.Store.LandingPage:
                 case Analytics.BuildData.Constants.Store.Unknown:
                 case Analytics.BuildData.Constants.Store.BetaChannel:
