@@ -15,5 +15,7 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Data
         [JsonProperty] public string display_name { get; set; } = string.Empty;
         [JsonProperty] public string profile_picture { get; set; } = string.Empty;
         [JsonProperty] public string extra_data { get; set; } = string.Empty;
+        // Signed by the provider; the server matches the link on its claims, not on social_account_id.
+        [JsonProperty] public string id_token { get; set; } = string.Empty;
     }
 }

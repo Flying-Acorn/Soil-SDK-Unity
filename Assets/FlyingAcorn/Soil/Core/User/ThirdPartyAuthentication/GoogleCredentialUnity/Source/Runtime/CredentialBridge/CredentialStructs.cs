@@ -26,6 +26,7 @@ namespace CredentialBridge
         public string id;
         public string phoneNumber;
         public string profilePictureUri;
+        public string idToken;
     }
 
     [Serializable]

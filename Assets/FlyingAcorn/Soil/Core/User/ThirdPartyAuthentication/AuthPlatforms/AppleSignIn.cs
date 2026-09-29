@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using AppleAuth;
 using AppleAuth.Enums;
 using AppleAuth.Extensions;
@@ -139,7 +140,18 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
                 last_name = appleIdCredential.FullName?.FamilyName,
                 display_name = appleIdCredential.FullName?.GivenName,
                 profile_picture = "",
-                extra_data = JsonConvert.SerializeObject(appleIdCredential)
+                // Without the identity token and authorization code: the token travels as id_token.
+                extra_data = JsonConvert.SerializeObject(new
+                {
+                    appleIdCredential.User,
+                    appleIdCredential.Email,
+                    appleIdCredential.FullName,
+                    appleIdCredential.AuthorizedScopes,
+                    appleIdCredential.RealUserStatus
+                }),
+                id_token = appleIdCredential.IdentityToken == null
+                    ? string.Empty
+                    : Encoding.UTF8.GetString(appleIdCredential.IdentityToken)
             }, ThirdPartySettings);
         }
 

@@ -35,7 +35,7 @@ namespace CredentialBridge
             CredentialManager.OnLoginSucess.Invoke(data);
         }
 
-        private void OnExcepetion(string message)
+        private void OnException(string message)
         {
             CredentialExceptionData data = JsonUtility.FromJson<CredentialExceptionData>(message);
             if (data.type == null || data.type == string.Empty)

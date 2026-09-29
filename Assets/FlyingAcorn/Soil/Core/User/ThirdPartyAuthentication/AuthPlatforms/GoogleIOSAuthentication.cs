@@ -60,6 +60,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             {
                 var accessTokenResponse = await _authenticationSession.AuthenticateAsync();
                 var authenticatedUser = await GetUserInfoAsync();
+                // Only issued when the scope includes openid.
+                authenticatedUser.id_token = accessTokenResponse.idToken ?? string.Empty;
                 IPlatformAuthentication.OnSignInSuccessCallback?.Invoke(authenticatedUser, ThirdPartySettings);
             }
             catch (AuthorizationCodeRequestException ex)

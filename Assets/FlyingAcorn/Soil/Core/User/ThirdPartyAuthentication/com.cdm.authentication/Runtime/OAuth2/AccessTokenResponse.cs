@@ -45,6 +45,13 @@ namespace Cdm.Authentication.OAuth2
         public string scope { get; set; }
 
         /// <summary>
+        /// Gets or sets the OpenID Connect ID token, returned when the scope includes <c>openid</c>.
+        /// </summary>
+        [Preserve]
+        [DataMember(Name = "id_token")]
+        public string idToken { get; set; }
+
+        /// <summary>
         /// The date and time that this token was issued, expressed in UTC.
         /// </summary>
         /// <remarks>

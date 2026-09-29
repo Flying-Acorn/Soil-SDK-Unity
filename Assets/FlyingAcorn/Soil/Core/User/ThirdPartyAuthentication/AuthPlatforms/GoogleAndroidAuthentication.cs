@@ -9,6 +9,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
     public class GoogleAndroidAuthentication : IPlatformAuthentication
     {
+        // What Credential Manager reports when the player dismisses the account picker.
+        private const string UserCanceledType = "android.credentials.GetCredentialException.TYPE_USER_CANCELED";
+
         public ThirdPartySettings ThirdPartySettings { get; }
 
         public GoogleAndroidAuthentication(ThirdPartySettings thirdPartySettings)
@@ -47,14 +50,20 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
         private void OnLoginFailed(CredentialExceptionData arg0)
         {
             Debug.LogError($"OnLoginFailed: {arg0.message}");
+            var errorCode = arg0.type == UserCanceledType
+                ? SoilExceptionErrorCode.Canceled
+                : SoilExceptionErrorCode.Unknown;
             IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.google,
-                new SoilException(arg0.message));
+                new SoilException(arg0.message, errorCode));
         }
 
         private void OnLoginSuccess(CredentialUserData arg0)
         {
             Debug.Log($"OnLoginSuccess: {arg0}");
-            var extraData = JsonConvert.SerializeObject(arg0);
+            // Keep the token out of extra_data.
+            var shown = arg0;
+            shown.idToken = null;
+            var extraData = JsonConvert.SerializeObject(shown);
             var user = new LinkAccountInfo
             {
                 social_account_id = arg0.id,
@@ -63,7 +72,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
                 last_name = arg0.familyName,
                 display_name = arg0.displayName,
                 profile_picture = arg0.profilePictureUri,
-                extra_data = extraData
+                extra_data = extraData,
+                id_token = arg0.idToken ?? string.Empty
             };
             IPlatformAuthentication.OnSignInSuccessCallback?.Invoke(user, ThirdPartySettings);
         }

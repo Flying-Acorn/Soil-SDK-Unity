@@ -30,7 +30,8 @@ namespace CredentialBridge
         private const string m_objectName = "JavaBridge";
         private const string m_methodSucessName = "OnLogin";
         private const string m_methodExceptionName = "OnException";
-        private const string m_libaryObjectName = "com.example.loginlibary.LibraryMain";
+        // The bundled AAR drops the ID token, so this in-source bridge replaces it.
+        private const string m_libaryObjectName = "com.flyingacorn.soil.credential.SoilCredentialBridge";
         private const string m_libaryObjectMethod = "getUserDataUnity";
         private string m_oathID = "";
 
