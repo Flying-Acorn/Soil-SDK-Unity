@@ -58,6 +58,23 @@ public static class SoilAdsE2EBuild
         }
     }
 
+    /// <summary>
+    /// Runs the scenarios in Play mode against the Editor's simulated player (no build). The
+    /// runner quits the Editor when it is done; its exit code is the verdict.
+    /// </summary>
+    public static void PlayInEditor()
+    {
+        CreateScene();
+        EditorApplication.isPlaying = true;
+    }
+
+    private static void CreateScene()
+    {
+        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+        new GameObject("SoilAdsE2E").AddComponent<SoilAdsE2ERunner>();
+        EditorSceneManager.SaveScene(scene, ScenePath);
+    }
+
     private static void Build(BuildTarget target, string output)
     {
         // The studio's build tools refuse a batch build without a store; any store will do here
@@ -73,9 +90,7 @@ public static class SoilAdsE2EBuild
         }
         AssetDatabase.SaveAssets();
 
-        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-        new GameObject("SoilAdsE2E").AddComponent<SoilAdsE2ERunner>();
-        EditorSceneManager.SaveScene(scene, ScenePath);
+        CreateScene();
 
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {

@@ -3,6 +3,7 @@
 #
 #   NativeAds/unity-e2e/run.sh android   # emulator or device visible to adb
 #   NativeAds/unity-e2e/run.sh ios       # iOS simulator $SIMULATOR (default "iPhone 16 Pro"), booted if needed
+#   NativeAds/unity-e2e/run.sh editor    # Play mode with the Editor's simulated player (opens the Editor)
 #
 # Copies the harness into Assets/SoilAdsE2E, builds the test player with Unity in batch mode,
 # removes the harness again, then installs, launches and drives the player (drive.py), which
@@ -10,7 +11,7 @@
 # Close the Unity Editor on this project first; batch mode cannot open a project twice.
 set -euo pipefail
 
-PLATFORM=${1:?usage: run.sh android|ios}
+PLATFORM=${1:?usage: run.sh android|ios|editor}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 HERE="$ROOT/NativeAds/unity-e2e"
 UNITY=${UNITY:-/Applications/Unity/Hub/Editor/2022.3.62f3/Unity.app/Contents/MacOS/Unity}
@@ -44,6 +45,14 @@ case "$PLATFORM" in
     xcodebuild -project "$OUT/xcode/Unity-iPhone.xcodeproj" -scheme Unity-iPhone -configuration Debug \
       -sdk iphonesimulator -derivedDataPath "$OUT/derived" CODE_SIGNING_ALLOWED=NO build \
       > "$OUT/xcodebuild.log" 2>&1 || { grep -E "error:" "$OUT/xcodebuild.log" | head -40; exit 1; }
+    ;;
+  editor)
+    # Not batch mode: Play mode and IMGUI need the Editor's window. The runner quits it.
+    rm -rf "$OUT"/*.png
+    "$UNITY" -projectPath "$ROOT" -executeMethod SoilAdsE2EBuild.PlayInEditor -logFile "$OUT/editor.log" || true
+    grep -a "SOILADS-E2E" "$OUT/editor.log" | sed 's/^.*SOILADS-E2E //' | grep -v "^EVENT"
+    grep -aq "SOILADS-E2E DONE passed=[1-9][0-9]* failed=0" "$OUT/editor.log"
+    exit $?
     ;;
   *) echo "unknown platform $PLATFORM"; exit 2 ;;
 esac

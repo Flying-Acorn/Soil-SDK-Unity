@@ -11,8 +11,9 @@ using static FlyingAcorn.Soil.Advertisement.Data.Constants;
 namespace FlyingAcorn.Soil.Advertisement.E2E
 {
     /// <summary>
-    /// Device end-to-end test of the native ad players through the real Unity bridge. Copied into
-    /// the project only while run.sh builds it; never shipped.
+    /// End-to-end test of the ad players through the real Unity bridge: the native players on a
+    /// device, or the Editor's simulated player in Play mode. Copied into the project only while
+    /// run.sh uses it; never shipped.
     ///
     /// Every step logs one line "SOILADS-E2E ..." that the driver script reads:
     ///   STEP name              a scenario started
@@ -33,7 +34,14 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
         private int _failed;
         private string _dir;
 
-        private static void Log(string line) => Debug.Log($"SOILADS-E2E {line}");
+        private static void Log(string line)
+        {
+            Debug.Log($"SOILADS-E2E {line}");
+#if UNITY_EDITOR
+            // No driver in the Editor: the runner captures the Game view itself.
+            if (line.StartsWith("SCREENSHOT ")) Screenshot(line.Substring("SCREENSHOT ".Length));
+#endif
+        }
 
         private void Awake()
         {
@@ -71,8 +79,16 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
             yield return Scenario("banner_click", BannerClick());
             yield return Scenario("interstitial_click_then_close", InterstitialClick());
 #endif
+#if UNITY_EDITOR
+            yield return Scenario("editor_clicks_are_not_counted", EditorClicksAreNotCounted());
+            yield return Scenario("editor_blocks_game_input", EditorBlocksGameInput());
+            yield return Scenario("editor_default_lock_times", EditorDefaultLockTimes());
+#endif
 
             Log($"DONE passed={_passed} failed={_failed}");
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.Exit(_failed == 0 && _passed > 0 ? 0 : 1);
+#endif
         }
 
         private static string Extension(string name) => name switch
@@ -224,19 +240,147 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
 
         #endregion
 
+#if UNITY_EDITOR
+        // ---- Editor: the simulated player's own buttons stand in for a finger.
+
+        private static Player.EditorAdPlayer EditorPlayer => (Player.EditorAdPlayer)Advertisement.PlayerForTesting;
+
+        private static string ScreenshotDir => Path.Combine(Path.GetDirectoryName(Application.dataPath),
+            "NativeAds", "unity-e2e", "out", "editor");
+
+        private static void Screenshot(string name)
+        {
+            Directory.CreateDirectory(ScreenshotDir);
+            ScreenCapture.CaptureScreenshot(Path.Combine(ScreenshotDir, name + ".png"));
+        }
+
+        private IEnumerator WaitForUnlockThenClose(AdFormat format)
+        {
+            var until = Time.realtimeSinceStartup + 60;
+            yield return new WaitForSecondsRealtime(1);
+            Screenshot($"fullscreen_{format}_locked");
+            Check(!EditorPlayer.PressClose() || EditorPlayer.IsFullscreenUnlocked, "close does nothing while locked");
+            while (!EditorPlayer.IsFullscreenUnlocked && Time.realtimeSinceStartup < until) yield return null;
+            yield return null;
+            Screenshot($"fullscreen_{format}_unlocked");
+            yield return null;
+            Check(EditorPlayer.PressClose(), "close works once unlocked");
+        }
+
+        private IEnumerator EditorClicksAreNotCounted()
+        {
+            var notices = new List<string>();
+            void Watch(string message, string stack, LogType type)
+            {
+                if (message.StartsWith(Player.AdLinks.EditorNotice)) notices.Add(message);
+            }
+            Application.logMessageReceived += Watch;
+            try
+            {
+                Prepare(AdFormat.banner, new AdCreative
+                {
+                    AdId = "banner-click", ImagePath = PathOf("image"), ClickUrl = "https://example.com/banner"
+                });
+                yield return Expect("banner:Loaded");
+                Advertisement.ShowAd(AdFormat.banner);
+                yield return Expect("banner:Shown");
+                Check(EditorPlayer.PressBanner(), "banner clickable");
+                yield return Expect("banner:Clicked");
+                Advertisement.HideAd(AdFormat.banner);
+                yield return Expect("banner:Closed");
+
+                Prepare(AdFormat.interstitial, new AdCreative
+                {
+                    AdId = "cta-click", ImagePath = PathOf("image"), Title = "Tap me", CallToAction = "Open",
+                    ClickUrl = "https://example.com/cta"
+                });
+                yield return Expect("interstitial:Loaded");
+                Advertisement.ShowAd(AdFormat.interstitial);
+                yield return Expect("interstitial:Shown");
+                Check(EditorPlayer.PressCallToAction(), "call to action clickable");
+                yield return Expect("interstitial:Clicked");
+                yield return WaitForUnlockThenClose(AdFormat.interstitial);
+                yield return Expect("interstitial:Closed");
+            }
+            finally
+            {
+                Application.logMessageReceived -= Watch;
+            }
+
+            Check(notices.Count == 2 && notices.Any(n => n.EndsWith("/banner")) && notices.Any(n => n.EndsWith("/cta")),
+                $"both clicks were logged, not sent ({notices.Count} notices)");
+        }
+
+        private IEnumerator EditorBlocksGameInput()
+        {
+            var system = new GameObject("GameEventSystem").AddComponent<UnityEngine.EventSystems.EventSystem>();
+            Prepare(AdFormat.interstitial, new AdCreative { AdId = "input", ImagePath = PathOf("image") });
+            yield return Expect("interstitial:Loaded");
+            Advertisement.ShowAd(AdFormat.interstitial);
+            yield return Expect("interstitial:Shown");
+            Check(!system.enabled, "the game's UI gets no clicks under a fullscreen ad");
+            yield return WaitForUnlockThenClose(AdFormat.interstitial);
+            yield return Expect("interstitial:Closed");
+            Check(system.enabled, "the game's UI is back after the ad");
+            Destroy(system.gameObject);
+        }
+
+        private IEnumerator EditorDefaultLockTimes()
+        {
+            // The real defaults: interstitial image 5 s; rewarded video (simulated 6 s) at its end.
+            var saved = Advertisement.FullscreenOptionsOverride;
+            Advertisement.FullscreenOptionsOverride = null;
+            try
+            {
+                foreach (var (format, video, expected) in new[]
+                         { (AdFormat.interstitial, false, 5f), (AdFormat.rewarded, true, 6f) })
+                {
+                    Advertisement.ResetRewardedAdCooldown();
+                    Prepare(format, new AdCreative
+                    {
+                        AdId = $"default-{format}", ImagePath = PathOf("image"), VideoPath = video ? PathOf("video") : null
+                    });
+                    yield return Expect($"{format}:Loaded");
+                    var shownAt = Time.realtimeSinceStartup;
+                    Advertisement.ShowAd(format);
+                    while (!EditorPlayer.IsFullscreenUnlocked && Time.realtimeSinceStartup - shownAt < 30) yield return null;
+                    var took = Time.realtimeSinceStartup - shownAt;
+                    Log($"LOCK {format} unlocked after {took:0.00} s (expected {expected} s)");
+                    Check(Mathf.Abs(took - expected) < 0.75f, $"{format} unlocked after {took:0.00} s, expected {expected} s");
+                    if (format == AdFormat.rewarded)
+                    {
+                        yield return Expect("rewarded:Rewarded");
+                        Check(!_events.Contains("rewarded:Closed"), "reward comes before close");
+                    }
+                    Check(EditorPlayer.PressClose(), "close works once unlocked");
+                    yield return Expect($"{format}:Closed");
+                }
+            }
+            finally
+            {
+                Advertisement.FullscreenOptionsOverride = saved;
+            }
+        }
+#endif
+
         private IEnumerator ShowAndWaitForClose(AdFormat format)
         {
             Log($"EXPECT_TAP {format}");
-#if UNITY_IOS && !UNITY_EDITOR
+#if UNITY_EDITOR
+            Advertisement.ShowAd(format);
+            yield return WaitForUnlockThenClose(format);
+            yield return Expect($"{format}:Closed", 30);
+#elif UNITY_IOS
             // Unity is paused while the ad is up, so the close comes from a background thread
             // straight to the player once the (short) lock has passed.
             var player = Advertisement.PlayerForTesting;
             var timer = new System.Threading.Timer(_ => player.Hide(format.ToString()), null, 12000, -1);
-#endif
             Advertisement.ShowAd(format);
             yield return Expect($"{format}:Closed", 90);
-#if UNITY_IOS && !UNITY_EDITOR
             timer.Dispose();
+#else
+            Advertisement.ShowAd(format);
+            yield return Expect($"{format}:Closed", 90);
 #endif
         }
 
