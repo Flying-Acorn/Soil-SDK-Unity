@@ -121,6 +121,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             }
 
             _slots.Remove(format);
+            SetGameInputBlocked(true);
             _fullscreen = new Presentation
             {
                 Format = format,
@@ -177,14 +178,64 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         {
             var format = _fullscreen.Format;
             _fullscreen = null;
+            SetGameInputBlocked(false);
             Send(format, NativeAdEventType.Closed);
         }
 
         private void Click(string format, AdCreative creative)
         {
-            if (!string.IsNullOrEmpty(creative.ClickUrl))
-                Application.OpenURL(creative.ClickUrl);
             Send(format, NativeAdEventType.Clicked);
+            AdLinks.Open(creative.ClickUrl);
+        }
+
+        // What the placeholder's buttons do, callable by Play-mode tests too.
+
+        /// <summary>The fullscreen ad's close button; does nothing while it is locked.</summary>
+        internal bool PressClose()
+        {
+            if (_fullscreen == null || !_fullscreen.Unlocked) return false;
+            CloseFullscreen();
+            return true;
+        }
+
+        /// <summary>The fullscreen ad's call to action (or its media).</summary>
+        internal bool PressCallToAction()
+        {
+            if (_fullscreen == null) return false;
+            Click(_fullscreen.Format, _fullscreen.Ad.Creative);
+            return true;
+        }
+
+        internal bool PressBanner()
+        {
+            if (_banner == null) return false;
+            Click(AdFormats.Banner, _banner.Creative);
+            return true;
+        }
+
+        internal bool IsFullscreenUnlocked => _fullscreen != null && _fullscreen.Unlocked;
+
+        // On a device the game is paused under a fullscreen ad and gets no input; the Editor keeps it
+        // running to draw the placeholder, so its UI is switched off instead of receiving the clicks
+        // meant for the ad.
+        private readonly List<Behaviour> _blockedInput = new();
+
+        private void SetGameInputBlocked(bool blocked)
+        {
+            if (blocked)
+            {
+                foreach (var system in UnityEngine.Object.FindObjectsByType<UnityEngine.EventSystems.EventSystem>(FindObjectsSortMode.None))
+                {
+                    if (!system.enabled) continue;
+                    system.enabled = false;
+                    _blockedInput.Add(system);
+                }
+                return;
+            }
+
+            foreach (var system in _blockedInput)
+                if (system) system.enabled = true;
+            _blockedInput.Clear();
         }
 
         private void Send(string format, NativeAdEventType type, string media = null, long durationMs = 0,
@@ -199,15 +250,35 @@ namespace FlyingAcorn.Soil.Advertisement.Player
 
         #region Drawing
 
+        private GUIStyle _text, _title, _button, _badge;
+        private float _styledFor;
+        private readonly Dictionary<string, string> _shaped = new();
+
         private void Draw()
         {
+            PrepareStyles();
             if (_banner != null) DrawBanner();
             if (_fullscreen != null) DrawFullscreen(_fullscreen);
         }
 
+        // Sizes follow the Game view, so the placeholder reads like the device ad at any resolution.
+        private float Unit => Mathf.Max(12f, Mathf.Min(Screen.width, Screen.height) / 34f);
+
+        private void PrepareStyles()
+        {
+            if (_text != null && Mathf.Approximately(_styledFor, Unit)) return;
+            _styledFor = Unit;
+            var size = Mathf.RoundToInt(Unit);
+            _text = new GUIStyle(GUI.skin.label) { fontSize = size, wordWrap = true, normal = { textColor = new Color(1, 1, 1, 0.8f) } };
+            _title = new GUIStyle(_text) { fontStyle = FontStyle.Bold, fontSize = Mathf.RoundToInt(size * 1.15f), normal = { textColor = Color.white } };
+            _button = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(size * 1.1f), fontStyle = FontStyle.Bold };
+            _badge = new GUIStyle(GUI.skin.box) { fontSize = Mathf.RoundToInt(size * 0.8f), normal = { textColor = Color.black } };
+            _badge.normal.background = Texture2D.whiteTexture;
+        }
+
         private void DrawBanner()
         {
-            var height = Mathf.Round(Mathf.Min(Screen.width, Screen.height) * 0.14f);
+            var height = Mathf.Round(Unit * 3.2f);
             var y = _bannerPosition switch
             {
                 // Screen.safeArea is bottom-up; IMGUI is top-down.
@@ -217,57 +288,101 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             };
             var rect = new Rect(0, y, Screen.width, height);
 
-            GUI.Box(rect, GUIContent.none);
+            Fill(rect, new Color(0.11f, 0.11f, 0.11f));
             var creative = _banner.Creative;
             if (_banner.Image != null)
                 GUI.DrawTexture(rect, _banner.Image, ScaleMode.ScaleToFit);
             else
-                GUI.Label(Inset(rect, 12), $"{creative.Title}\n{creative.Description}");
+                DrawTexts(Inset(rect, Unit * 0.5f), creative, 1);
 
-            GUI.Label(new Rect(rect.x + 4, rect.y + 2, 60, 20), "Ad");
+            Badge(new Vector2(rect.x + 4, rect.y + 4));
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none))
-                Click(AdFormats.Banner, creative);
+                PressBanner();
         }
 
         private void DrawFullscreen(Presentation p)
         {
-            var screen = new Rect(0, 0, Screen.width, Screen.height);
-            GUI.color = Color.black;
-            GUI.DrawTexture(screen, Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            Fill(new Rect(0, 0, Screen.width, Screen.height), Color.black);
 
             var creative = p.Ad.Creative;
-            var barHeight = Screen.height * 0.16f;
+            var barHeight = Unit * 4.5f;
             var media = new Rect(0, 0, Screen.width, Screen.height - barHeight);
             if (p.Ad.Image != null)
                 GUI.DrawTexture(media, p.Ad.Image, ScaleMode.ScaleToFit);
             if (p.Ad.IsVideo)
-                GUI.Label(Inset(media, 40), $"▶ Video ad (simulated {SimulatedVideoSeconds:0} s in the Editor)");
+                GUI.Label(new Rect(media.x, media.center.y - Unit * 3, media.width, Unit * 2),
+                    $"▶ Video ad (simulated {SimulatedVideoSeconds:0} s in the Editor)",
+                    new GUIStyle(_title) { alignment = TextAnchor.MiddleCenter });
             if (GUI.Button(media, GUIContent.none, GUIStyle.none))
-                Click(p.Format, creative);
+                PressCallToAction();
 
             var bar = new Rect(0, Screen.height - barHeight, Screen.width, barHeight);
-            GUI.Box(bar, GUIContent.none);
-            GUI.Label(Inset(new Rect(bar.x, bar.y, bar.width * 0.65f, bar.height), 16),
-                $"{creative.Title}\n{creative.Description}");
-            var cta = new Rect(bar.width * 0.68f, bar.y + bar.height * 0.25f, bar.width * 0.28f, bar.height * 0.5f);
-            if (GUI.Button(cta, string.IsNullOrEmpty(creative.CallToAction) ? "Open" : creative.CallToAction))
-                Click(p.Format, creative);
+            Fill(bar, new Color(0.07f, 0.07f, 0.07f));
+            var cta = new Rect(bar.xMax - Unit * 7.5f, bar.y + (barHeight - Unit * 2.2f) / 2, Unit * 6.5f, Unit * 2.2f);
+            DrawTexts(new Rect(bar.x + Unit, bar.y + Unit * 0.6f, cta.x - bar.x - Unit * 2, barHeight - Unit * 1.2f),
+                creative, 2);
+            if (GUI.Button(cta, Shape(string.IsNullOrEmpty(creative.CallToAction) ? "Open" : creative.CallToAction), _button))
+                PressCallToAction();
 
-            GUI.Label(new Rect(16, 16, 200, 24), "Ad (Editor)");
-            var size = Mathf.Max(48f, Screen.height * 0.06f);
-            var close = new Rect(Screen.width - size - 16, 16, size, size);
+            Badge(new Vector2(Unit, Unit), "Ad (Editor)");
+            var size = Unit * 2.2f;
+            var close = new Rect(Screen.width - size - Unit, Unit, size, size);
             if (p.Unlocked)
             {
-                if (GUI.Button(close, "✕")) CloseFullscreen();
+                if (GUI.Button(close, "✕", _button)) PressClose();
             }
             else
             {
                 var visible = Time.realtimeSinceStartup - p.StartedAt;
                 var remaining = FullscreenLockPolicy.SecondsRemaining(p.Options, p.Ad.IsVideo, SimulatedVideoSeconds,
                     visible, Mathf.Min(visible, SimulatedVideoSeconds), visible >= SimulatedVideoSeconds, false);
-                GUI.Box(close, remaining.ToString());
+                GUI.Box(close, Mathf.Max(1, remaining).ToString(), _button);
             }
+        }
+
+        private void DrawTexts(Rect area, AdCreative creative, int descriptionLines)
+        {
+            var rtl = IsRightToLeft(creative.Title) || IsRightToLeft(creative.Description);
+            var title = new GUIStyle(_title) { alignment = rtl ? TextAnchor.UpperRight : TextAnchor.UpperLeft, wordWrap = false };
+            var text = new GUIStyle(_text) { alignment = rtl ? TextAnchor.UpperRight : TextAnchor.UpperLeft };
+            var titleHeight = title.fontSize * 1.4f;
+            GUI.Label(new Rect(area.x, area.y, area.width, titleHeight), Shape(creative.Title), title);
+            GUI.Label(new Rect(area.x, area.y + titleHeight, area.width, text.fontSize * 1.35f * descriptionLines),
+                Shape(creative.Description), text);
+        }
+
+        private void Badge(Vector2 at, string label = "Ad")
+        {
+            var content = new GUIContent(label);
+            var size = _badge.CalcSize(content);
+            GUI.color = new Color(1f, 0.8f, 0.2f);
+            GUI.Box(new Rect(at, size), content, _badge);
+            GUI.color = Color.white;
+        }
+
+        private static void Fill(Rect rect, Color color)
+        {
+            GUI.color = color;
+            GUI.DrawTexture(rect, Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
+
+        private static bool IsRightToLeft(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            foreach (var c in text)
+                if (RTLTMPro.TextUtils.IsRTLCharacter(c)) return true;
+            return false;
+        }
+
+        // IMGUI draws characters as they come; Persian and Arabic need joining and reordering first.
+        private string Shape(string text)
+        {
+            if (!IsRightToLeft(text)) return text ?? "";
+            if (_shaped.TryGetValue(text, out var shaped)) return shaped;
+            var output = new RTLTMPro.FastStringBuilder(RTLTMPro.RTLSupport.DefaultBufferSize);
+            RTLTMPro.RTLSupport.FixRTL(text, output, farsi: true, fixTextTags: false);
+            return _shaped[text] = output.ToString();
         }
 
         private static Rect Inset(Rect r, float by) => new(r.x + by, r.y + by, r.width - 2 * by, r.height - 2 * by);

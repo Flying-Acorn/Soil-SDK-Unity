@@ -1024,8 +1024,8 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
 
-            MyDebug.Verbose($"[Advertisement] Opening native ad URL: {clickUrl}");
-            Application.OpenURL(clickUrl);
+            MyDebug.Verbose("[Advertisement] Opening the native ad's link");
+            AdLinks.Open(clickUrl);
         }
 
         /// <summary>

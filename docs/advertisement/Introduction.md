@@ -30,3 +30,7 @@ Demo scene: `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample
 - Android 5.1 (API 22) or newer — no extra Gradle dependencies.
 - iOS 12 or newer — no CocoaPods.
 - How the native players work, and the contract between C# and them: [`NativeAds/PROTOCOL.md`](../../NativeAds/PROTOCOL.md).
+
+## Dependencies
+
+- <a href="https://github.com/pnarimani/RTLTMPro/" target="_blank">RTL Text Mesh Pro</a> (shapes right-to-left text in the Editor's ad placeholders; the device players use the OS)
