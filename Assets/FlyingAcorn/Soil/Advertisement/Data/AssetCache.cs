@@ -48,11 +48,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
         }
 
-        public bool IsValid =>
-            !string.IsNullOrEmpty(LocalPath) &&
-            (AssetType == AssetType.video
-                ? (LocalPath.StartsWith("http://") || LocalPath.StartsWith("https://")) // Videos: URL validation
-                : File.Exists(LocalPath)); // Images/Logos: File existence validation
+        // Every asset, videos included, is a downloaded file. Entries from older SDK versions that
+        // stored a video's streaming URL here are invalid and get downloaded again.
+        public bool IsValid => !string.IsNullOrEmpty(LocalPath) && File.Exists(LocalPath);
 
         public string DisplayName => $"{AdFormat}_{AssetType}_{Id}";
 
@@ -353,11 +351,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Gets the assets to cache for a given ad
-        /// IMPORTANT: Videos are no longer cached to reduce storage footprint.
-        /// Only images and logos are cached for offline display fallback.
-        /// Videos will be streamed directly from URLs when online.
-        /// However, we still create cache entries for videos to track metadata.
+        /// Gets the assets to cache for a given ad. Everything is downloaded, videos included, since
+        /// the native players only play local files; banners never play video, so theirs is skipped.
         /// </summary>
         private static List<(Asset asset, AssetType assetType)> GetAssetsToCache(Ad ad, AdFormat adFormat)
         {
@@ -368,18 +363,16 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             MyDebug.Verbose($"  - main_video: {(ad.main_video?.url != null ? "available" : "null")}");
             MyDebug.Verbose($"  - logo: {(ad.logo?.url != null ? "available" : "null")}");
 
-            // Map ad properties to asset types - INCLUDE VIDEO for metadata tracking
             var assetMappings = new Dictionary<AssetType, Asset>
             {
                 { AssetType.image, ad.main_image },
-                { AssetType.video, ad.main_video }, // Keep for metadata tracking
+                { AssetType.video, adFormat == AdFormat.banner ? null : ad.main_video },
                 { AssetType.logo, ad.logo },
                 // Native ads deliver their square icon here; the real type comes from the
                 // asset's own asset_type, so this key is only a slot placeholder.
                 { AssetType.native_icon, ad.icon }
             };
 
-            // Cache images/logos, create metadata entries for videos
             foreach (var (assetType, asset) in assetMappings)
             {
                 if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
@@ -396,9 +389,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     }
                     else if (actualAssetType == AssetType.video)
                     {
-                        // Create metadata entry for video (URL will be stored directly, no file download)
                         assetsToCache.Add((asset, actualAssetType));
-                        MyDebug.Verbose($"  - Will create metadata entry for video: {asset.id} (streaming only)");
+                        MyDebug.Verbose($"  - Will cache video: {asset.id}");
                     }
                 }
             }
@@ -464,64 +456,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 var resolvedUrl = ResolveAssetUrl(asset.url);
                 Analytics.MyDebug.Verbose($"Processing asset {cacheKey} ({assetType}) from URL: {resolvedUrl}");
 
-                // For videos, create metadata entry without downloading
-                if (assetType == AssetType.video)
-                {
-                    Analytics.MyDebug.Verbose($"Creating metadata entry for video {cacheKey} (no download)");
-
-                    var cachedVideoAsset = new AssetCacheEntry
-                    {
-                        Id = asset.id,
-                        AssetType = assetType,
-                        AdFormat = adFormat,
-                        LocalPath = resolvedUrl, // Store URL directly for streaming
-                        OriginalUrl = resolvedUrl,
-                        ClickUrl = clickUrl,
-                        Width = asset.width,
-                        Height = asset.height,
-                        AltText = asset.alt_text,
-                        CachedAt = DateTime.UtcNow,
-                        // Store ad-level data for later use in placements
-                        AdId = ad?.id,
-                        MainHeaderText = ad?.main_header?.text_content,
-                        ActionButtonText = ad?.action_button?.text_content,
-                        DescriptionText = ad?.description?.text_content
-                    };
-
-                    lock (_lockObject)
-                    {
-                        _cachedAssets[cacheKey] = cachedVideoAsset;
-                        _currentlyDownloading.Remove(cacheKey);
-                    }
-
-                    Analytics.MyDebug.Verbose($"Video metadata entry created for {cacheKey}");
-                    return;
-                }
-
-                // For images and logos, download and cache normally
-                using var request = UnityWebRequest.Get(resolvedUrl);
-                request.downloadHandler = new DownloadHandlerBuffer();
-                try
-                {
-                    // Asset (image/logo) download: can be larger than JSON but usually cached quickly -> 1.5x
-                    var effectiveTimeout = (int)(UserPlayerPrefs.RequestTimeout * 1.5f);
-                    await DataUtils.ExecuteUnityWebRequestWithTimeout(request, effectiveTimeout);
-                }
-                catch (SoilException sx)
-                {
-                    throw new Exception($"Failed to download asset from {resolvedUrl}: {sx.Message}");
-                }
-
-                var data = request.downloadHandler?.data;
-                if (data == null || data.Length == 0)
-                {
-                    throw new Exception($"Failed to download asset from {resolvedUrl}: No data received");
-                }
-
-                // Generate unique filename with timestamp to avoid conflicts
+                // Every file - videos included - is on disk before its ad counts as ready: the
+                // native players only play local files, so a slow network delays an ad instead of
+                // stalling it on screen. Downloads stream straight to disk.
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-                var originalFileName = Path.GetFileName(resolvedUrl);
-                var extension = Path.GetExtension(originalFileName);
+                var extension = Path.GetExtension(new Uri(resolvedUrl).AbsolutePath);
                 var fileName = $"{cacheKey}_{timestamp}{extension}";
                 var filePath = Path.Combine(CacheDirectory, fileName);
 
@@ -534,8 +473,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     counter++;
                 }
 
-                // Write file with proper error handling
-                await WriteFileWithRetry(filePath, data);
+                // Videos are megabytes where images are kilobytes; give them time on slow networks.
+                var timeoutSeconds = assetType == AssetType.video
+                    ? Math.Max(60, UserPlayerPrefs.RequestTimeout * 6)
+                    : (int)(UserPlayerPrefs.RequestTimeout * 1.5f);
+                await DownloadToFileAsync(resolvedUrl, filePath, timeoutSeconds);
 
                 var cachedAsset = new AssetCacheEntry
                 {
@@ -581,26 +523,37 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Writes a file with retry logic to handle sharing violations
+        /// Downloads a URL to a file, through a temporary file so a failed or partial download
+        /// never leaves something that looks cached.
         /// </summary>
-        private static async UniTask WriteFileWithRetry(string filePath, byte[] data, int maxRetries = 3)
+        private static async UniTask DownloadToFileAsync(string url, string filePath, int timeoutSeconds)
         {
-            for (int attempt = 0; attempt < maxRetries; attempt++)
+            var partialPath = filePath + ".part";
+            using var request = UnityWebRequest.Get(url);
+            request.downloadHandler = new DownloadHandlerFile(partialPath) { removeFileOnAbort = true };
+            try
             {
-                try
-                {
-                    await File.WriteAllBytesAsync(filePath, data);
-                    return; // Success, exit method
-                }
-                catch (IOException ex) when (ex.Message.Contains("sharing violation") || ex.Message.Contains("being used by another process"))
-                {
-                    if (attempt == maxRetries - 1)
-                    {
-                        throw; // Re-throw on final attempt
-                    }
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, timeoutSeconds);
 
-                    // Wait before retry with exponential backoff
-                    await UniTask.Delay(100 * (attempt + 1));
+                if (request.result != UnityWebRequest.Result.Success
+                    || request.responseCode < 200 || request.responseCode >= 300)
+                    throw new Exception($"Failed to download asset from {url}: {request.responseCode} {request.error}");
+
+                if (!File.Exists(partialPath) || new FileInfo(partialPath).Length == 0)
+                    throw new Exception($"Failed to download asset from {url}: No data received");
+
+                if (File.Exists(filePath)) File.Delete(filePath);
+                File.Move(partialPath, filePath);
+            }
+            catch (SoilException sx)
+            {
+                throw new Exception($"Failed to download asset from {url}: {sx.Message}");
+            }
+            finally
+            {
+                if (File.Exists(partialPath))
+                {
+                    try { File.Delete(partialPath); } catch { /* best effort */ }
                 }
             }
         }

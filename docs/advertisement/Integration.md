@@ -45,98 +45,25 @@ private void OnAdsInitFailed(string error)
 }
 ```
 
-### 1.5 Implementing Game Pause During Ads
+### 1.5 Game Pause, Input and Audio During Ads
 
-**Important**: The SDK does **not** automatically pause your game. You must implement pause behavior in your game code using ad lifecycle events.
+Interstitial and rewarded ads are drawn natively **on top of Unity**:
 
-#### Why Manual Pause Control?
+- **Android**: the ad opens in its own activity. Unity's activity pauses underneath, which pauses the game loop and the game's audio.
+- **iOS**: the ad is presented over Unity's view controller and Unity is paused (`UnityPause`) until it closes.
 
-Setting `Time.timeScale = 0` was found to break UI input and ad clickability in some Unity configurations. To ensure ads work reliably across platforms, the SDK leaves pause control to your game code.
+So gameplay receives no input and makes no sound while a fullscreen ad is up, without any code in your game. Events raised while Unity is paused (`Shown`, `Rewarded`, `Clicked`) are delivered, in order, as soon as it resumes — right before `Closed`.
 
-#### Input Blocking Behavior
-
-The SDK helps prevent gameplay input during ads by:
-- Disabling `PlayerInput` components (New Input System only)
-- Exposing `SoilAdInputBlocker.IsBlocked` for checking blocked state
-- Including a 40-second failsafe timeout to prevent permanent blocking
-
-**Note**: If you use the old Input API, custom input handlers, or direct raycasts, you must implement your own input blocking.
-
-#### Recommended Pause Implementation
-
-Subscribe to ad events and disable gameplay systems explicitly:
+`SoilAdInputBlocker.IsBlocked` (or `Advertisement.IsFullscreenAdShowing`) is true while a fullscreen ad is on screen, for game code that wants to know. If your game keeps its own timers in real time, pause them from the events:
 
 ```csharp
-void Start()
-{
-    // Subscribe to ad lifecycle events
-    Advertisement.Events.OnInterstitialAdShown += HandleAdShown;
-    Advertisement.Events.OnRewardedAdShown += HandleAdShown;
-    Advertisement.Events.OnInterstitialAdClosed += HandleAdClosed;
-    Advertisement.Events.OnRewardedAdClosed += HandleAdClosed;
-}
-
-private void HandleAdShown(AdEventData data)
-{
-    // Disable gameplay systems explicitly
-    PlayerController.Instance.enabled = false;
-    EnemySpawner.Instance.SetEnabled(false);
-    // Disable physics-based controls, AI, timers, etc.
-}
-
-private void HandleAdClosed(AdEventData data)
-{
-    // Re-enable gameplay systems
-    PlayerController.Instance.enabled = true;
-    EnemySpawner.Instance.SetEnabled(true);
-}
-
-void OnDestroy()
-{
-    // Always unsubscribe to prevent memory leaks
-    Advertisement.Events.OnInterstitialAdShown -= HandleAdShown;
-    Advertisement.Events.OnRewardedAdShown -= HandleAdShown;
-    Advertisement.Events.OnInterstitialAdClosed -= HandleAdClosed;
-    Advertisement.Events.OnRewardedAdClosed -= HandleAdClosed;
-}
+Advertisement.Events.OnInterstitialAdShown += _ => PauseGame();
+Advertisement.Events.OnInterstitialAdClosed += _ => ResumeGame();
+Advertisement.Events.OnRewardedAdShown += _ => PauseGame();
+Advertisement.Events.OnRewardedAdClosed += _ => ResumeGame();
 ```
 
-#### Alternative: Check Input Blocker in Update
-
-```csharp
-void Update()
-{
-    // Skip gameplay logic while ads are shown
-    if (SoilAdInputBlocker.IsBlocked)
-        return;
-    
-    // Normal gameplay code here
-    HandlePlayerInput();
-    UpdateGameLogic();
-}
-```
-
-**Warning**: Do not use `Time.timeScale = 0` to pause during ads, as it can break ad clickability and UI interactions.
-
-#### Muting Your Game Audio
-
-**Important**: The SDK does **not** automatically mute or duck your game's audio. You are responsible for silencing your own music/SFX while an ad is shown, using the same ad lifecycle events.
-
-**Do not set `AudioListener.pause = true`** (or otherwise pause the `AudioListener`) to achieve this. On device, that pauses the native audio session, which can starve hardware-accelerated video decoding and cause ad video to freeze or stall — even if your own audio sources aren't involved. Instead, mute or pause your game's own `AudioSource`s (and any music/SFX manager) directly:
-
-```csharp
-private void HandleAdShown(AdEventData data)
-{
-    MyAudioManager.Instance.SetGameAudioMuted(true);
-}
-
-private void HandleAdClosed(AdEventData data)
-{
-    MyAudioManager.Instance.SetGameAudioMuted(false);
-}
-```
-
-The ad's own audio is unaffected by anything you do here — it plays through a separate `AudioSource` that the SDK manages independently.
+Banners are native views over the game and never pause it.
 
 ### 2. Loading Ads
 
@@ -158,7 +85,7 @@ private void OnAdsInitialized()
 }
 ```
 
-**Note**: After an ad is closed, you should call `LoadAd` again to prepare the next ad. The demo scene shows automatic reload in the `OnAdClosed` event handler.
+**Every `LoadAd` is answered** with the format's Loaded or Error event. If the ad's files are still downloading (for example right after initialization), the answer comes when they are ready. After an interstitial or rewarded ad closes, the SDK prepares the same ad again by itself; calling `LoadAd` from `OnAdClosed` is still the simplest pattern and is answered as soon as the ad is ready.
 
 Subscribe to loading events:
 
@@ -283,10 +210,6 @@ For production applications, implement robust retry logic to handle temporary fa
 - **InternalError**: Limited retries - may indicate configuration issues
 - **AdNotReady**: Retry immediately - ad failed to load but can be retried
 
-### Failsafe Timeout
-
-The SDK includes a 40-second failsafe timeout that automatically unblocks input if an ad fails to close properly. This is enforced by `SoilAdManager` calling `SoilAdInputBlocker.FailsafeTick()` each frame. Test long ads and failure scenarios to ensure this works as expected in your game.
-
 ## Ad Purchase Integration
 
 If your game offers ad removal purchases, disable banner ads when purchased:
@@ -305,15 +228,23 @@ private void OnAdPurchaseCompleted()
 
 ### Banner Ads
 
-Banner ads are typically shown at the top or bottom of the screen and can be hidden/shown as needed:
+Banner ads span the width of the safe area — 50 dp/pt high on phones, 90 on tablets — at the bottom (default), top or middle of the screen, and can be hidden/shown as needed:
 
 ```csharp
+// Where banners go (TopCenter, MiddleCenter or BottomCenter)
+Advertisement.BannerPosition = AdPosition.TopCenter;
+
 // Hide banner (useful during gameplay)
 Advertisement.HideAd(AdFormat.banner);
 
-// Show banner again
+// Show banner again; showing a visible banner moves it to BannerPosition
 Advertisement.ShowAd(AdFormat.banner);
+
+// Or both at once
+Advertisement.ShowBanner(AdPosition.BottomCenter);
 ```
+
+A banner with an image shows the image; one without shows the advertiser's logo, title and call to action. Tapping anywhere on it opens the ad.
 
 ### Interstitial Ads
 
@@ -349,6 +280,17 @@ Advertisement.ResetRewardedAdCooldown();
 ```
 
 **Automatic Cooldown Handling**: When you call `LoadAd(AdFormat.rewarded)` during cooldown, the SDK automatically waits for the cooldown to expire before firing the `OnRewardedAdLoaded` event. You don't need to manually wait for cooldown.
+
+### When the Close Button Unlocks
+
+Fullscreen ads keep their close button locked for a moment, showing a countdown; a rewarded ad grants its reward (`OnRewardedAdRewarded`, always before `OnRewardedAdClosed`) at the moment it unlocks.
+
+| | Image ad | Video ad |
+|---|---|---|
+| Interstitial | after 5 s on screen | at 80% of the video (at least 5 s) |
+| Rewarded | after 20 s on screen | at the end of the video |
+
+Only time the ad is actually visible counts: the countdown stops while the app is in the background or the player has left to the advertiser's page. A video that fails mid-play falls back to the ad's image and the image rule. As a safety net the close button always unlocks after 60 s on screen. Android's back button closes an ad only once it is unlocked. Video ads have a mute button and start with sound on (on iOS the device's silent switch is respected, as for the game).
 
 ### Native Ads
 
@@ -552,42 +494,32 @@ Advertisement.Events.OnAdFormatAssetsLoaded += OnAdFormatAssetsLoaded;
 private void OnAdFormatAssetsLoaded(AdFormat format)
 {
     Debug.Log($"Assets cached for {format}");
-    // This fires when assets are cached during initialization
-    // It does NOT fire OnBannerAdLoaded/OnInterstitialAdLoaded/OnRewardedAdLoaded
-    // Those events only fire from explicit LoadAd() calls
+    // Fires when a format's files are cached during initialization. The ad is handed to the
+    // native player at the same moment; its Loaded event follows once the player has it ready.
 }
 ```
 
 ## Testing Checklist
 
-Before shipping, thoroughly test the following:
+Before shipping, thoroughly test the following on real Android and iOS devices:
 
-- ✅ Verify ad click-throughs work on all target platforms (iOS/Android/editor)
-- ✅ Verify ad close behavior returns control reliably across scenes
-- ✅ Test with both New Input System and legacy Input API if your project uses both
-- ✅ Test long ads and simulate failures to ensure failsafe unblocks input after ~40s
-- ✅ Test multi-scene flows and `DontDestroyOnLoad` objects to ensure events work correctly
-- ✅ Verify rewarded ad cooldown works as expected
+- ✅ Banner, interstitial and rewarded ads appear, and tapping them opens the advertiser link
+- ✅ Banners sit inside the safe area (notch, home indicator) in every orientation your game supports
+- ✅ Fullscreen ads cover the game, the countdown unlocks the close button, and closing returns to the game
+- ✅ `OnRewardedAdRewarded` grants the reward exactly once, before `OnRewardedAdClosed`
+- ✅ Leaving the app during a video ad and coming back resumes it without skipping the countdown
+- ✅ Rewarded ad cooldown works as expected
 - ✅ Verify native ad taps open the advertiser link from every view you registered
 - ✅ Verify your native layout still looks right when `Description` or `MainImage` is `null`
-- ✅ Test that your pause implementation works correctly with ad events
-- ✅ Verify your game audio is muted/ducked during ads and restored after close (without using `AudioListener.pause`)
-
-## Compatibility Notes
-
-- The SDK uses `Object.FindObjectsByType` on Unity 2023.1+ and falls back to `FindObjectsOfType` on older versions
-- Expect minor runtime differences across Unity versions — test accordingly
-- If using the old Input API (`Input.GetKey`, `Input.GetMouseButton`, etc.), implement your own input blocking
+- ✅ Test multi-scene flows and `DontDestroyOnLoad` objects to ensure events work correctly
 
 ## Common Issues
 
-**Ad clicks don't work**: Check that you are not setting `Time.timeScale = 0` globally while ads are showing. This is the most common cause of broken ad clickability.
+**Nothing shows on device but the Editor works**: Check the player log for `[Advertisement] Android ad player unavailable` / `iOS ad player unavailable`. It means the native player was stripped from the build — keep `Assets/FlyingAcorn/Soil/Advertisement/Plugins` in the project.
 
 **Events fire multiple times**: Ensure you unsubscribe from events when scenes unload if you attach listeners on objects that are destroyed.
 
-**Input remains blocked**: Check the failsafe is working by calling `SoilAdInputBlocker.FailsafeTick()` in an Update loop (this is done automatically by `SoilAdManager`).
-
-**Ad video freezes or stalls**: Check that you (or a plugin/mediation SDK) are not setting `AudioListener.pause = true` while an ad is showing. This can starve the native video decoder and freeze the ad, independent of any `ignoreListenerPause` settings on individual audio sources. Mute your own audio sources directly instead — see [Muting Your Game Audio](#muting-your-game-audio).
+**`OnXAdLoaded` fires without a `LoadAd` call**: The SDK announces each ad it prepares once (after initialization, and after a fullscreen ad closes). Treat Loaded as "ready to show", not as an answer to one specific call.
 
 ## Example Script
 

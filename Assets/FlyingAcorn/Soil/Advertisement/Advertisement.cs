@@ -1,24 +1,31 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Cysharp.Threading.Tasks;
-using UnityEngine.Networking;
+using FlyingAcorn.Analytics;
+using FlyingAcorn.Soil.Advertisement.Data;
+using FlyingAcorn.Soil.Advertisement.Logic;
+using FlyingAcorn.Soil.Advertisement.Models;
+using FlyingAcorn.Soil.Advertisement.Player;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.User.Authentication;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using FlyingAcorn.Soil.Advertisement.Models;
-using FlyingAcorn.Soil.Advertisement.Models.AdPlacements;
-using static FlyingAcorn.Soil.Advertisement.Data.Constants;
-using System.Linq;
-using FlyingAcorn.Soil.Advertisement.Data;
-using FlyingAcorn.Soil.Advertisement.Logic;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
-using FlyingAcorn.Analytics;
+using static FlyingAcorn.Soil.Advertisement.Data.Constants;
+
 namespace FlyingAcorn.Soil.Advertisement
 {
+    /// <summary>
+    /// Soil ads. Picks an ad group per format from the Soil backend and caches its files; banner,
+    /// interstitial and rewarded ads are then drawn by a native player (Android: MediaPlayer on a
+    /// TextureView, iOS: AVPlayer), while native ads are handed to the game to draw in its own UI.
+    /// In the Editor a simulated player draws plain placeholders.
+    /// </summary>
     public class Advertisement
     {
         /// <summary>
@@ -26,6 +33,20 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         [UsedImplicitly]
         public static bool Ready => _campaignSelectionSucceeded;
+
+        /// <summary>
+        /// Where banners appear. Applied on the next <see cref="ShowAd(AdFormat)"/> of a banner;
+        /// showing a visible banner again moves it.
+        /// </summary>
+        [UsedImplicitly]
+        public static AdPosition BannerPosition { get; set; } = AdPosition.BottomCenter;
+
+        /// <summary>
+        /// True while an interstitial or rewarded ad covers the game.
+        /// </summary>
+        [UsedImplicitly]
+        public static bool IsFullscreenAdShowing => _slots?.IsFullscreenShowing ?? false;
+
         private static string AdvertisementBaseUrl => $"{Core.Data.Constants.ApiUrl}/advertisement/";
         private static string AdGroupsUrl => $"{AdvertisementBaseUrl}adgroups/";
         private static string AdGroupsSelectUrl => $"{AdGroupsUrl}select/";
@@ -36,21 +57,16 @@ namespace FlyingAcorn.Soil.Advertisement
         private static List<AdFormat> _requestedFormats;
         private static UniTask _cachedAssetsTask;
 
-        // Ad placement instances
-        private static SoilAdManager _adPlacementManager;
-        private static GameObject _bannerPlacementGO;
-        private static GameObject _interstitialPlacementGO;
-        private static GameObject _rewardedPlacementGO;
+        // Banner, interstitial and rewarded: one slot per format in front of the native player.
+        private static AdSlots _slots;
+        private static IAdPlayer _player;
+        private static SoilAdsNativeReceiver _receiver;
+        private static readonly Queue<NativeAdEvent> _deferredPlayerEvents = new();
+        private static readonly Dictionary<AdFormat, Ad> _slotAds = new();
 
-        // Persistent canvas for all ad placements
-        private static Canvas _persistentAdCanvas;
-
-        // Track active ad placement instances
-        private static readonly Dictionary<AdFormat, GameObject> _activePlacements = new();
-
-        // Native ads have no prefab or placement GameObject: the game renders them itself, so the
-        // loaded ad lives here as plain content plus the click handlers attached to the game's own
-        // views while it is on screen.
+        // Native ads have no player: the game renders them itself, so the loaded ad lives here as
+        // plain content plus the click handlers attached to the game's own views while it is on
+        // screen.
         private static NativeAdContent _nativeAdContent;
         // One native ad can be rendered in several places at once (the native banner, a
         // leaderboard row). Click handlers are tracked PER registered view set, so showing the ad
@@ -63,11 +79,28 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            _campaignRequested = false;
+            _isInitializing = false;
+            _selectedAdGroups.Clear();
+            _campaignSelectionSucceeded = false;
+            _requestedFormats = null;
+            _slots = null;
+            _player = null;
+            _receiver = null;
+            _deferredPlayerEvents.Clear();
+            _slotAds.Clear();
+            _nativeAdContent = null;
+            _nativeAdClickHandlers.Clear();
+            _lastRewardedAdShownTime = DateTime.MinValue;
+        }
 
         /// <summary>
         /// Initializes the Advertisement service with the desired ad formats. Consider conditional initialization based on user preferences or purchases.
         /// </summary>
-        /// <param name="adFormats">List of ad formats to initialize (banner, interstitial, rewarded).</param>
+        /// <param name="adFormats">List of ad formats to initialize (banner, interstitial, rewarded, native).</param>
         public static void InitializeAsync(List<AdFormat> adFormats)
         {
             if (adFormats == null || adFormats.Count == 0)
@@ -85,8 +118,9 @@ namespace FlyingAcorn.Soil.Advertisement
             _isInitializing = true;
             _requestedFormats = adFormats.Distinct().ToList();
 
-            // Create ad placement manager if it doesn't exist
-            AssignAdPlacementManager();
+            EnsurePlayerRuntime();
+            foreach (var format in _requestedFormats)
+                SlotFor(format)?.BeginCaching();
 
             // Start loading cached assets in background; we'll await inside the success handler
             _cachedAssetsTask = AssetCache.LoadCachedAssetsAsync();
@@ -94,7 +128,6 @@ namespace FlyingAcorn.Soil.Advertisement
             // If SoilServices already ready, proceed immediately
             if (SoilServices.Ready)
             {
-                // run the continuation on the thread pool to avoid blocking caller
                 HandleServicesReadyAsync(_cachedAssetsTask).Forget();
                 return;
             }
@@ -119,6 +152,7 @@ namespace FlyingAcorn.Soil.Advertisement
             UnlistenCore();
             _isInitializing = false;
             _campaignRequested = false;
+            FailCaching(NativeAdErrors.Network);
             Events.InvokeOnInitializeFailed(exception?.Message ?? "Initialization failed");
         }
 
@@ -189,11 +223,16 @@ namespace FlyingAcorn.Soil.Advertisement
                 _campaignRequested = false;
                 _isInitializing = false;
                 _campaignSelectionSucceeded = false;
+                FailCaching(NativeAdErrors.Network);
                 Events.InvokeOnInitializeFailed($"Failed to select ad groups: {lastException.Message}");
                 return;
             }
 
             _campaignSelectionSucceeded = true; // success path, regardless of per-format availability
+
+            // Formats the server had nothing for answer their pending LoadAd calls with NoFill.
+            foreach (var format in _requestedFormats.Where(f => !_selectedAdGroups.ContainsKey(f)))
+                SetSlotCreative(format, null, null);
 
             if (_selectedAdGroups.Count == 0)
             {
@@ -205,7 +244,6 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
 
-            GetOrCreatePersistentAdCanvas();
             Events.InvokeOnInitialized();
             // Start asset caching in background - don't block initialization on this
             CacheAds().Forget();
@@ -213,26 +251,164 @@ namespace FlyingAcorn.Soil.Advertisement
             _isInitializing = false;
         }
 
+        #region Player runtime
 
-        /// <summary>
-        /// Creates the persistent ad placement manager GameObject with all ad placements as children
-        /// </summary>
-        private static void AssignAdPlacementManager()
+        private static void EnsurePlayerRuntime()
         {
-            if (_adPlacementManager != null)
-                return;
+            SoilAdManager.GetOrCreate();
+            if (_slots != null && _receiver) return;
 
-            _adPlacementManager = UnityEngine.Object.FindFirstObjectByType(typeof(SoilAdManager)) as SoilAdManager;
-            if (_adPlacementManager == null)
-                throw new SoilException("SoilAdManager not found in the scene. Please add it to your scene before initializing Advertisement.",
-                    SoilExceptionErrorCode.NotFound);
-            _bannerPlacementGO = _adPlacementManager.bannerAdPlacement?.gameObject;
-            _interstitialPlacementGO = _adPlacementManager.interstitialAdPlacement?.gameObject;
-            _rewardedPlacementGO = _adPlacementManager.rewardedAdPlacement?.gameObject;
+            _receiver = SoilAdsNativeReceiver.GetOrCreate();
+            _receiver.MessageReceived += json => OnPlayerEvent(NativeAdEvent.Parse(json));
+            _receiver.Ticked += TickPlayerRuntime;
+
+            // A player call that fails synchronously is answered on the next frame, like a real
+            // player event, so state changes never re-enter the slot that made the call.
+            void Defer(NativeAdEvent e) => _deferredPlayerEvents.Enqueue(e);
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _player = new AndroidAdPlayer(SoilAdsNativeReceiver.ObjectName, SoilAdsNativeReceiver.MethodName, Defer);
+#elif UNITY_IOS && !UNITY_EDITOR
+            _player = new IosAdPlayer(SoilAdsNativeReceiver.ObjectName, SoilAdsNativeReceiver.MethodName, Defer);
+#else
+            _player = new EditorAdPlayer(_receiver, OnPlayerEvent);
+#endif
+
+            _slots = new AdSlots(_player, IsRewardedAdInCooldown);
+            foreach (var slot in _slots.All)
+            {
+                var format = ToAdFormat(slot.Format);
+                slot.Notice += (notice, error) => OnSlotNotice(format, notice, error);
+            }
         }
 
+        private static void TickPlayerRuntime()
+        {
+            var count = _deferredPlayerEvents.Count;
+            for (var i = 0; i < count; i++)
+                OnPlayerEvent(_deferredPlayerEvents.Dequeue());
+            _slots?.Tick();
+        }
+
+        private static void OnPlayerEvent(NativeAdEvent e)
+        {
+            if (e == null || _slots == null) return;
+            MyDebug.Verbose($"[Advertisement] Player: {e.Format} {e.Type} {e.Media} {e.Error} {e.Message}");
+            _slots.HandleEvent(e);
+        }
+
+        private static AdSlot SlotFor(AdFormat format) => _slots?[format.ToString()];
+
+        private static void FailCaching(string error)
+        {
+            if (_requestedFormats == null) return;
+            foreach (var format in _requestedFormats)
+                SlotFor(format)?.CachingFailed(error);
+        }
+
+        private static void SetSlotCreative(AdFormat format, AdCreative creative, Ad ad)
+        {
+            var slot = SlotFor(format);
+            if (slot == null) return;
+            if (ad != null) _slotAds[format] = ad;
+            slot.SetCreative(creative);
+        }
+
+        private static void OnSlotNotice(AdFormat format, AdSlotNotice notice, string error)
+        {
+            _slotAds.TryGetValue(format, out var ad);
+            var data = new AdEventData(format, error == null ? AdError.None : ToAdError(error)) { ad = ad };
+
+            switch (notice)
+            {
+                case AdSlotNotice.Loaded:
+                    InvokeFormatEvent(format, Events.InvokeOnBannerAdLoaded, Events.InvokeOnInterstitialAdLoaded,
+                        Events.InvokeOnRewardedAdLoaded, data);
+                    break;
+                case AdSlotNotice.LoadFailed:
+                case AdSlotNotice.ShowFailed:
+                    MyDebug.Verbose($"[Advertisement] {format} {notice}: {error}");
+                    InvokeAdErrorEvent(format, data);
+                    break;
+                case AdSlotNotice.Shown:
+                    InvokeFormatEvent(format, Events.InvokeOnBannerAdShown, Events.InvokeOnInterstitialAdShown,
+                        Events.InvokeOnRewardedAdShown, data);
+                    break;
+                case AdSlotNotice.Clicked:
+                    InvokeFormatEvent(format, Events.InvokeOnBannerAdClicked, Events.InvokeOnInterstitialAdClicked,
+                        Events.InvokeOnRewardedAdClicked, data);
+                    break;
+                case AdSlotNotice.Rewarded:
+                    Events.InvokeOnRewardedAdRewarded(data);
+                    break;
+                case AdSlotNotice.Closed:
+                    if (format == AdFormat.rewarded)
+                        SetRewardedAdCooldown();
+                    InvokeFormatEvent(format, Events.InvokeOnBannerAdClosed, Events.InvokeOnInterstitialAdClosed,
+                        Events.InvokeOnRewardedAdClosed, data);
+                    break;
+            }
+        }
+
+        private static void InvokeFormatEvent(AdFormat format, Action<AdEventData> banner,
+            Action<AdEventData> interstitial, Action<AdEventData> rewarded, AdEventData data)
+        {
+            switch (format)
+            {
+                case AdFormat.banner: banner(data); break;
+                case AdFormat.interstitial: interstitial(data); break;
+                case AdFormat.rewarded: rewarded(data); break;
+            }
+        }
+
+        private static AdError ToAdError(string error)
+        {
+            return error switch
+            {
+                NativeAdErrors.NoFill => AdError.NoFill,
+                NativeAdErrors.InvalidCreative => AdError.NoFill,
+                NativeAdErrors.NotLoaded => AdError.AdNotReady,
+                NativeAdErrors.AlreadyShowing => AdError.InvalidRequest,
+                NativeAdErrors.InvalidFormat => AdError.InvalidRequest,
+                NativeAdErrors.Network => AdError.NetworkError,
+                NativeAdErrors.MediaUnreadable => AdError.InternalError,
+                NativeAdErrors.NoHost => AdError.InternalError,
+                NativeAdErrors.Internal => AdError.InternalError,
+                _ => AdError.Unknown
+            };
+        }
+
+        private static AdFormat ToAdFormat(string format) =>
+            Enum.TryParse<AdFormat>(format, out var adFormat) ? adFormat : AdFormat.banner;
+
+        private static string ToBannerPosition(AdPosition position) => position switch
+        {
+            AdPosition.TopCenter => BannerPositions.Top,
+            AdPosition.MiddleCenter => BannerPositions.Center,
+            _ => BannerPositions.Bottom
+        };
+
+        #endregion
+
+        #region Testing hooks (device end-to-end tests in NativeAds/unity-e2e)
+
+        /// <summary>Replaces the fullscreen lock defaults, e.g. to keep device tests short.</summary>
+        internal static FullscreenShowOptions FullscreenOptionsOverride { get; set; }
+
+        internal static IAdPlayer PlayerForTesting => _player;
+
+        /// <summary>Hands local files straight to the player, without the ad server or the cache.</summary>
+        internal static void PrepareForTesting(AdFormat format, AdCreative creative)
+        {
+            EnsurePlayerRuntime();
+            _slotAds.Remove(format);
+            SetSlotCreative(format, creative, creative == null ? null : new Ad { id = creative.AdId, format = format.ToString() });
+        }
+
+        #endregion
+
         // Downloads and caches ads for each format's selected ad group.
-        // This method caches each format separately and invokes events as each format becomes ready.
+        // This method caches each format separately and prepares each format as soon as it is ready.
         private static async UniTask CacheAds()
         {
             var cachedAdGroups = AdvertisementPlayerPrefs.CachedAdGroups;
@@ -243,11 +419,11 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 // Only re-cache if the ad group selected for this format actually changed, AND we still
                 // have cached assets for it (they may have been evicted by ClearOldAssetsAsync/RemoveCachedAsset
-                // even though the AdGroup pointer itself didn't change) - otherwise the placement would
-                // preload against an empty cache.
+                // even though the AdGroup pointer itself didn't change) - otherwise the player would
+                // be handed an empty creative.
                 bool isSameAdGroupStillCached = cachedAdGroups.TryGetValue(adFormat, out var previousAdGroup)
                     && previousAdGroup?.id == adGroup.id
-                    && AssetCache.GetCachedAssets(adFormat).Any();
+                    && AssetCache.GetCachedAssets(adFormat).Any(a => a.IsValid);
 
                 if (!isSameAdGroupStillCached)
                 {
@@ -255,7 +431,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 }
                 else
                 {
-                    // Assets already cached from a previous session; just (re)preload the placement.
+                    // Assets already cached from a previous session; just prepare the format.
                     OnFormatAssetsReady(adFormat);
                 }
 
@@ -282,130 +458,99 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         private static async UniTask CacheFormatAssetsAsync(AdGroup adGroup, AdFormat adFormat)
         {
-            await AssetCache.ClearFormatCacheAsync(adFormat);
-            await AssetCache.CacheAssetsForAdGroupAsync(adGroup, adFormat, OnFormatAssetsReady);
+            try
+            {
+                await AssetCache.ClearFormatCacheAsync(adFormat);
+                await AssetCache.CacheAssetsForAdGroupAsync(adGroup, adFormat, OnFormatAssetsReady);
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"[Advertisement] Caching {adFormat} failed: {ex.Message}");
+                SlotFor(adFormat)?.CachingFailed(NativeAdErrors.Network);
+            }
         }
 
         /// <summary>
-        /// Called when assets for a specific format are cached and ready for use.
-        /// Does not fire any public *Loaded events; those are only fired from explicit LoadAd calls.
+        /// Called when assets for a specific format are cached: builds the ad and hands it to the
+        /// player (or, for native ads, builds the content the game renders).
         /// </summary>
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
-            // Notify internal listeners that assets are ready BEFORE preloading the placement below.
-            // Placements set an internal "_isFormatReady" flag from this event and consult it inside
-            // their own (synchronous, for banner/interstitial) Load() call; firing it after would let
-            // Load() run against a stale flag and could report AdNotReady even though assets are cached.
-            // This should NOT be used to fire OnXAdLoaded events; those only come from
-            // explicit LoadAd/placement.Load calls.
-            Events.InvokeOnAdFormatAssetsLoaded(adFormat);
+            if (adFormat == AdFormat.native)
+                LoadNativeAd();
+            else
+                PrepareFormat(adFormat);
 
-            // Instantiate and preload the ad prefab for this format (hidden, prepared)
-            PreloadAndPrepareAdInstance(adFormat);
+            // Raised after preparing, so a LoadAd from a listener finds the ad already on its way.
+            Events.InvokeOnAdFormatAssetsLoaded(adFormat);
         }
 
-        /// <summary>
-        /// Instantiates, preloads, and prepares the ad prefab for the given format. Keeps it hidden and ready for ShowAd.
-        /// </summary>
-        private static void PreloadAndPrepareAdInstance(AdFormat adFormat)
+        private static void PrepareFormat(AdFormat adFormat)
         {
-            // Native ads have no prefab to instantiate - "preparing" one just means rebuilding
-            // the content from the freshly cached assets.
-            if (adFormat == AdFormat.native)
+            var infos = new List<CreativeAssetInfo>();
+            foreach (var entry in AssetCache.GetCachedAssets(adFormat))
             {
-                LoadNativeAd();
-                return;
-            }
-
-            // If an instance already exists, ensure it reloads to pick up freshly cached assets
-            if (_activePlacements.ContainsKey(adFormat) && _activePlacements[adFormat])
-            {
-                var existing = _activePlacements[adFormat];
-                if (existing)
+                if (entry == null || !entry.IsValid) continue;
+                CreativeAssetKind kind;
+                switch (entry.AssetType)
                 {
-                    // Reparent to persistent canvas in case it was recreated
-                    var targetCanvasExisting = GetOrCreatePersistentAdCanvas();
-                    if (targetCanvasExisting && existing.transform.parent != targetCanvasExisting.transform)
-                    {
-                        existing.transform.SetParent(targetCanvasExisting.transform, false);
-                        existing.transform.SetAsLastSibling();
-                        if (existing.TryGetComponent(out RectTransform rectTransform))
-                        {
-                            rectTransform.anchorMin = Vector2.zero;
-                            rectTransform.anchorMax = Vector2.one;
-                            rectTransform.offsetMin = Vector2.zero;
-                            rectTransform.offsetMax = Vector2.zero;
-                        }
-                        var layerExisting = targetCanvasExisting.gameObject.layer;
-                        foreach (var child in existing.GetComponentsInChildren<Transform>(true))
-                            child.gameObject.layer = layerExisting;
-                    }
-
-                    // Force a reload so placement picks up the newest cached assets (e.g., when ad group changes)
-                    if (existing.TryGetComponent(out BannerAdPlacement existingBanner) && adFormat == AdFormat.banner)
-                    {
-                        existingBanner.Reload();
-                    }
-                    else if (existing.TryGetComponent(out InterstitialAdPlacement existingInterstitial) && adFormat == AdFormat.interstitial)
-                    {
-                        existingInterstitial.Reload();
-                    }
-                    else if (existing.TryGetComponent(out RewardedAdPlacement existingRewarded) && adFormat == AdFormat.rewarded)
-                    {
-                        existingRewarded.Reload();
-                    }
+                    case AssetType.image: kind = CreativeAssetKind.Image; break;
+                    case AssetType.video: kind = CreativeAssetKind.Video; break;
+                    case AssetType.logo: kind = CreativeAssetKind.Logo; break;
+                    default: continue;
                 }
-                return; // Instance already present and refreshed
+
+                infos.Add(new CreativeAssetInfo
+                {
+                    Id = entry.Id,
+                    Kind = kind,
+                    LocalPath = entry.LocalPath,
+                    ClickUrl = entry.ClickUrl,
+                    AdId = entry.AdId,
+                    TitleText = entry.MainHeaderText,
+                    DescriptionText = entry.DescriptionText,
+                    CallToActionText = entry.ActionButtonText
+                });
             }
 
-            var instance = adFormat switch
+            var creative = AdCreativeBuilder.Build(adFormat.ToString(), infos, out var error);
+            if (creative == null)
+                MyDebug.Verbose($"[Advertisement] No {adFormat} ad to prepare: {error}");
+
+            SetSlotCreative(adFormat, creative, creative == null ? null : ToAd(adFormat, creative));
+        }
+
+        /// <summary>Describes the prepared ad in the shape events have always carried.</summary>
+        private static Ad ToAd(AdFormat format, AdCreative creative)
+        {
+            Asset Text(string text) => string.IsNullOrEmpty(text)
+                ? null
+                : new Asset { asset_type = "text", text_content = text, alt_text = text, url = "" };
+
+            Asset File(string id, string type)
             {
-                AdFormat.banner => _bannerPlacementGO,
-                AdFormat.interstitial => _interstitialPlacementGO,
-                AdFormat.rewarded => _rewardedPlacementGO,
-                _ => null
+                if (string.IsNullOrEmpty(id)) return null;
+                var entry = AssetCache.GetCachedAssets(format).FirstOrDefault(a => a.Id == id);
+                return new Asset { id = id, asset_type = type, url = entry?.OriginalUrl };
+            }
+
+            return new Ad
+            {
+                id = creative.AdId,
+                format = format.ToString(),
+                main_header = Text(creative.Title),
+                description = Text(creative.Description),
+                action_button = new Asset
+                {
+                    asset_type = "text",
+                    text_content = creative.CallToAction,
+                    alt_text = creative.CallToAction,
+                    url = creative.ClickUrl
+                },
+                main_image = File(creative.ImageAssetId, AssetType.image.ToString()),
+                main_video = File(creative.VideoAssetId, AssetType.video.ToString()),
+                logo = File(creative.LogoAssetId, AssetType.logo.ToString())
             };
-            if (!instance)
-            {
-                MyDebug.LogError($"[Advertisement] No ad placement instance found for format: {adFormat}");
-                return;
-            }
-            instance.SetActive(false); // Keep hidden until ShowAd
-
-            var targetCanvas = GetOrCreatePersistentAdCanvas();
-            if (targetCanvas)
-            {
-                instance.transform.SetParent(targetCanvas.transform, false);
-                instance.transform.SetAsLastSibling();
-                if (instance.TryGetComponent(out RectTransform rectTransform))
-                {
-                    rectTransform.anchorMin = Vector2.zero;
-                    rectTransform.anchorMax = Vector2.one;
-                    rectTransform.offsetMin = Vector2.zero;
-                    rectTransform.offsetMax = Vector2.zero;
-                }
-            }
-            _activePlacements[adFormat] = instance;
-
-            // Preload and prepare video/image asynchronously. A host may already have called
-            // LoadAd from OnInitialized, before this cache existed; that ad points at assets the
-            // re-cache has since deleted, so it is replaced rather than kept.
-            if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
-            {
-                banner.Reload();
-            }
-            else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
-            {
-                interstitial.Reload(); // Prepares ad and video in background
-            }
-            else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
-            {
-                rewarded.Reload(); // Prepares ad and video in background
-            }
-
-            var layer = targetCanvas.gameObject.layer;
-            foreach (var child in instance.GetComponentsInChildren<Transform>(true))
-                child.gameObject.layer = layer;
         }
 
         private static async UniTask<AdGroupSelectResponse> SelectAdGroupAsync(
@@ -436,18 +581,10 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
             }
-            catch (SoilException sx)
+            catch (SoilException)
             {
-                // Preserve specific SoilException types. Kept as explicit per-code branches so
-                // individual error codes (timeout, transport, etc.) can be handled differently
-                // later without reshaping this catch.
-                switch (sx.ErrorCode)
-                {
-                    case SoilExceptionErrorCode.Timeout:
-                        throw;
-                    default:
-                        throw;
-                }
+                // Preserve specific SoilException types (timeout, transport, ...).
+                throw;
             }
             catch (Exception ex)
             {
@@ -538,78 +675,6 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Creates or gets the persistent ad canvas that survives scene changes and handles all ad types
-        /// </summary>
-        private static Canvas GetOrCreatePersistentAdCanvas()
-        {
-            if (_persistentAdCanvas)
-                return _persistentAdCanvas;
-
-            // Create a new root GameObject for the persistent canvas
-            var canvasObject = new GameObject("PersistentAdCanvas");
-            UnityEngine.Object.DontDestroyOnLoad(canvasObject);
-
-            // Add Canvas component
-            _persistentAdCanvas = canvasObject.AddComponent<Canvas>();
-            _persistentAdCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _persistentAdCanvas.sortingOrder = 1000; // High sorting order to appear above other UI
-
-            // Copy canvas scaler settings from SoilAdManager's canvas reference
-            var canvasScaler = canvasObject.AddComponent<CanvasScaler>();
-            if (_adPlacementManager && _adPlacementManager.canvasReferences != null)
-            {
-                canvasScaler.uiScaleMode = _adPlacementManager.canvasReferences.UIScaleMode;
-                canvasScaler.referenceResolution = _adPlacementManager.canvasReferences.ReferenceResolution;
-                canvasScaler.screenMatchMode = _adPlacementManager.canvasReferences.ScreenMatchMode;
-                canvasScaler.matchWidthOrHeight = _adPlacementManager.canvasReferences.MatchWidthOrHeight;
-                canvasScaler.referencePixelsPerUnit = _adPlacementManager.canvasReferences.ReferencePixelsPerUnit;
-
-                var layer = _adPlacementManager.canvasReferences.Layer;
-                foreach (var child in canvasObject.GetComponentsInChildren<Transform>(true))
-                    child.gameObject.layer = layer;
-            }
-            else
-            {
-                // Fallback to default settings
-                SetDefaultCanvasScalerSettings(canvasScaler);
-            }
-
-            // Add GraphicRaycaster for UI interactions
-            canvasObject.AddComponent<GraphicRaycaster>();
-
-            // Start with canvas disabled
-            canvasObject.SetActive(false);
-
-            return _persistentAdCanvas;
-        }
-
-        /// <summary>
-        /// Sets default canvas scaler settings as fallback
-        /// </summary>
-        private static void SetDefaultCanvasScalerSettings(CanvasScaler canvasScaler)
-        {
-            canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasScaler.referenceResolution = new Vector2(1170, 2532);
-            canvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
-            canvasScaler.referencePixelsPerUnit = 100;
-        }
-
-        /// <summary>
-        /// Enables or disables the persistent ad canvas based on active ads
-        /// </summary>
-        private static void UpdatePersistentCanvasVisibility()
-        {
-            if (_persistentAdCanvas == null) return;
-
-            bool hasActiveAds = _activePlacements.Any(kvp => kvp.Value != null && kvp.Value.activeSelf);
-
-            if (hasActiveAds && !_persistentAdCanvas.gameObject.activeInHierarchy)
-                _persistentAdCanvas.gameObject.SetActive(true);
-            else if (!hasActiveAds && _persistentAdCanvas.gameObject.activeInHierarchy)
-                _persistentAdCanvas.gameObject.SetActive(false);
-        }
-
-        /// <summary>
         /// Checks if rewarded ads are currently in cooldown period
         /// </summary>
         /// <returns>True if in cooldown, false if available</returns>
@@ -678,31 +743,8 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Preloads the fallback image for interstitial/rewarded ads to prevent blank moments when ShowAd is called
-        /// </summary>
-        private static void PreloadFallbackImageForAd(GameObject adInstance, AdFormat adFormat)
-        {
-            if (adInstance == null) return;
-
-            var fallbackImageAsset = GetCachedAsset(adFormat, AssetType.image);
-            if (fallbackImageAsset == null) return;
-
-            // Find the AdDisplayComponent and preload the fallback image
-            var displayComponent = adInstance.GetComponent<AdDisplayComponent>();
-            if (displayComponent != null && displayComponent.rawAssetImage != null)
-            {
-                var texture = LoadTexture(fallbackImageAsset.Id);
-                if (texture != null)
-                {
-                    displayComponent.rawAssetImage.texture = texture;
-                    displayComponent.rawAssetImage.gameObject.SetActive(true);
-                    MyDebug.Verbose($"[Advertisement] Preloaded fallback image for {adFormat} ad to prevent blank display");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Shows an ad of the specified format if it is ready.
+        /// Shows an ad of the specified format if it is ready. Banners appear at
+        /// <see cref="BannerPosition"/>; interstitial and rewarded ads cover the game until closed.
         /// </summary>
         /// <param name="adFormat">The ad format to show (banner, interstitial, rewarded).</param>
         public static void ShowAd(AdFormat adFormat)
@@ -716,67 +758,39 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
 
-            // Check if assets are available for this ad format
-            if (!IsFormatReady(adFormat))
+            if (_slots == null)
             {
-                var errorData = new AdEventData(adFormat, AdError.AdNotReady);
-                InvokeAdErrorEvent(adFormat, errorData);
+                InvokeAdErrorEvent(adFormat, new AdEventData(adFormat, AdError.AdNotReady));
                 return;
             }
 
-            // Check rewarded ad cooldown
             if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
             {
-                var errorData = new AdEventData(adFormat, AdError.AdNotReady);
-                InvokeAdErrorEvent(adFormat, errorData);
+                InvokeAdErrorEvent(adFormat, new AdEventData(adFormat, AdError.AdNotReady));
                 return;
             }
 
-            if (!_activePlacements.TryGetValue(adFormat, out GameObject instance) || instance == null)
-            {
-                // If not preloaded for some reason, preload now
-                PreloadAndPrepareAdInstance(adFormat);
-                // Preload may fail; use TryGetValue to avoid KeyNotFoundException
-                _activePlacements.TryGetValue(adFormat, out instance);
-            }
-            if (instance == null)
-            {
-                var errorData = new AdEventData(adFormat, AdError.InternalError);
-                InvokeAdErrorEvent(adFormat, errorData);
-                return;
-            }
-
-            // For interstitial and rewarded ads, preload fallback image immediately to prevent blank moments
-            if (adFormat == AdFormat.interstitial || adFormat == AdFormat.rewarded)
-            {
-                PreloadFallbackImageForAd(instance, adFormat);
-            }
-
-            instance.SetActive(true);
-
-            // Update canvas visibility
-            UpdatePersistentCanvasVisibility();
-
-            // Show the already-prepared ad (play video or show image)
-            if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
-            {
-                banner.Show();
-            }
-            else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
-            {
-                interstitial.Show(); // Will play video if ready, or show image
-            }
-            else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
-            {
-                rewarded.Show(); // Will play video if ready, or show image
-                // Cooldown timer is set in the placement's onClose callback
-            }
+            var options = adFormat == AdFormat.banner
+                ? BannerPositions.ToJson(ToBannerPosition(BannerPosition))
+                : (FullscreenOptionsOverride ?? FullscreenShowOptions.DefaultsFor(adFormat.ToString())).ToJson();
+            _slots.Show(adFormat.ToString(), options);
         }
 
         /// <summary>
-        /// Hides an ad of the specified format. Useful for banner ads during gameplay.
+        /// Shows a banner at the given position (and remembers it as <see cref="BannerPosition"/>).
         /// </summary>
-        /// <param name="adFormat">The ad format to hide (typically banner).</param>
+        [UsedImplicitly]
+        public static void ShowBanner(AdPosition position)
+        {
+            BannerPosition = position;
+            ShowAd(AdFormat.banner);
+        }
+
+        /// <summary>
+        /// Hides an ad of the specified format. Useful for banner ads during gameplay. For an
+        /// interstitial or rewarded ad on screen this closes it (no reward unless already earned).
+        /// </summary>
+        /// <param name="adFormat">The ad format to hide.</param>
         public static void HideAd(AdFormat adFormat)
         {
             if (adFormat == AdFormat.native)
@@ -785,69 +799,33 @@ namespace FlyingAcorn.Soil.Advertisement
                 return;
             }
 
-            if (_activePlacements.TryGetValue(adFormat, out var instance) && instance != null)
-            {
-                // Call Hide but keep placement GameObject active so it can reload
-                if (instance.TryGetComponent(out BannerAdPlacement banner) && adFormat == AdFormat.banner)
-                {
-                    banner.Hide();
-                    // Don't deactivate - placement needs to stay active for reloading
-                }
-                else if (instance.TryGetComponent(out InterstitialAdPlacement interstitial) && adFormat == AdFormat.interstitial)
-                {
-                    interstitial.Hide();
-                    // Don't deactivate - placement needs to stay active for reloading
-                }
-                else if (instance.TryGetComponent(out RewardedAdPlacement rewarded) && adFormat == AdFormat.rewarded)
-                {
-                    rewarded.Hide();
-                    // Don't deactivate - placement needs to stay active for reloading
-                }
-
-                UpdatePersistentCanvasVisibility();
-            }
+            SlotFor(adFormat)?.Hide();
         }
 
         /// <summary>
-        /// Loads an ad for the specified format. For optimal user experience, load ads immediately after initialization.
-        /// For rewarded ads, if in cooldown, the load will wait until cooldown expires before firing the loaded event.
+        /// Loads an ad for the specified format. Always answered with the format's Loaded or Error
+        /// event - later if the ad's files are still downloading. For rewarded ads in cooldown the
+        /// Loaded event waits until the cooldown expires.
         /// </summary>
-        /// <param name="adFormat">The ad format to load (banner, interstitial, rewarded).</param>
+        /// <param name="adFormat">The ad format to load (banner, interstitial, rewarded, native).</param>
         public static void LoadAd(AdFormat adFormat)
         {
-            // Let placements handle their own readiness checks (including rewarded cooldown)
-            if (adFormat == AdFormat.banner)
-            {
-                if (_bannerPlacementGO != null && _bannerPlacementGO.TryGetComponent(out BannerAdPlacement banner))
-                    banner.Load();
-            }
-            else if (adFormat == AdFormat.interstitial)
-            {
-                if (_interstitialPlacementGO != null && _interstitialPlacementGO.TryGetComponent(out InterstitialAdPlacement interstitial))
-                {
-                    interstitial.Load();
-                    // TODO: Start video preparation here if not already prepared (preload video)
-                }
-            }
-            else if (adFormat == AdFormat.rewarded)
-            {
-                if (_rewardedPlacementGO != null && _rewardedPlacementGO.TryGetComponent(out RewardedAdPlacement rewarded))
-                {
-                    rewarded.Load();
-                    // TODO: Start video preparation here if not already prepared (preload video)
-                }
-            }
-            else if (adFormat == AdFormat.native)
+            if (adFormat == AdFormat.native)
             {
                 LoadNativeAd();
-            }
-            else
-            {
-                var errorData = new AdEventData(adFormat, AdError.InvalidRequest);
-                InvokeAdErrorEvent(adFormat, errorData);
                 return;
             }
+
+            var slot = SlotFor(adFormat);
+            if (slot == null)
+            {
+                InvokeAdErrorEvent(adFormat, new AdEventData(adFormat, AdError.AdNotReady));
+                return;
+            }
+
+            slot.RequestLoad();
         }
+
         #region Native ads
 
         /// <summary>
@@ -1051,11 +1029,6 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Stops attributing clicks for the native ad currently on screen and fires
-        /// OnNativeAdClosed. The loaded content is kept, so the ad can be shown again without a
-        /// reload; use DestroyNativeAd to release it.
-        /// </summary>
-        /// <summary>
         /// Stops attributing clicks for ONE place the ad was shown in and fires OnNativeAdClosed.
         /// Pass the same references given to ShowNativeAd; other places showing this ad keep
         /// working. Call this from a view's OnDisable - DestroyNativeAd would take the ad away
@@ -1069,6 +1042,11 @@ namespace FlyingAcorn.Soil.Advertisement
                 Events.InvokeOnNativeAdClosed(new AdEventData(AdFormat.native));
         }
 
+        /// <summary>
+        /// Stops attributing clicks for the native ad everywhere it is on screen and fires
+        /// OnNativeAdClosed. The loaded content is kept, so the ad can be shown again without a
+        /// reload; use DestroyNativeAd to release it.
+        /// </summary>
         [UsedImplicitly]
         public static void HideNativeAd()
         {
@@ -1089,55 +1067,6 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         #endregion
-
-        /// <summary>
-        /// Downloads a video from the given URL and caches it locally. Returns the local file path if successful, otherwise null.
-        /// </summary>
-        public static System.Collections.IEnumerator DownloadAndCacheVideoAsync(string id, string url, Action<string> onComplete)
-        {
-            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
-            if (!System.IO.Directory.Exists(cacheDir))
-                System.IO.Directory.CreateDirectory(cacheDir);
-            string fileName = id + ".mp4";
-            string filePath = System.IO.Path.Combine(cacheDir, fileName);
-            if (System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0)
-            {
-                onComplete?.Invoke(filePath);
-                yield break;
-            }
-            using (var uwr = UnityEngine.Networking.UnityWebRequest.Get(url))
-            {
-                uwr.downloadHandler = new UnityEngine.Networking.DownloadHandlerFile(filePath);
-                yield return uwr.SendWebRequest();
-                if (uwr.result == UnityEngine.Networking.UnityWebRequest.Result.Success && System.IO.File.Exists(filePath))
-                {
-                    onComplete?.Invoke(filePath);
-                }
-                else
-                {
-                    if (System.IO.File.Exists(filePath))
-                        System.IO.File.Delete(filePath);
-                    onComplete?.Invoke(null);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Checks if a video is already cached locally for the given id.
-        /// This method now runs file operations on a background thread to avoid UI freezes.
-        /// </summary>
-        public static async UniTask<bool> IsVideoCachedAsync(string id)
-        {
-            // Cache the directory path on the main thread before entering background thread
-            string cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
-
-            return await UniTask.RunOnThreadPool(() =>
-            {
-                string fileName = id + ".mp4";
-                string filePath = System.IO.Path.Combine(cacheDir, fileName);
-                return System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0;
-            });
-        }
 
         /// <summary>
         /// Gets a cached asset by ad format and asset type
@@ -1198,7 +1127,6 @@ namespace FlyingAcorn.Soil.Advertisement
             AdvertisementPlayerPrefs.CachedAssets = new List<AssetCacheEntry>();
         }
 
-
         /// <summary>
         /// Clears old cached assets based on age (older than specified days)
         /// </summary>
@@ -1219,38 +1147,6 @@ namespace FlyingAcorn.Soil.Advertisement
         public static Texture2D LoadTexture(string uuid)
         {
             return AssetCache.LoadTexture(uuid);
-        }
-
-        /// <summary>
-        /// Loads a video clip URL from a cached asset for video player
-        /// </summary>
-        /// <param name="uuid">The UUID of the cached asset</param>
-        /// <returns>Video file URL or null if not found</returns>
-        public static string LoadVideoUrl(string uuid)
-        {
-            var asset = AssetCache.GetCachedAssetByUUID(uuid);
-            if (asset == null)
-                return null;
-
-            if (asset.AssetType != AssetType.video)
-                return null;
-
-            // For videos, check if it's a local file or URL
-            if (asset.LocalPath.StartsWith("http://") || asset.LocalPath.StartsWith("https://"))
-            {
-                // Direct URL streaming - return as is
-                return asset.LocalPath;
-            }
-            else if (System.IO.File.Exists(asset.LocalPath))
-            {
-                // Local cached file - return with file:// protocol for cross-platform compatibility
-                var filePath = asset.LocalPath.Replace('\\', '/');
-                return "file://" + filePath;
-            }
-            else
-            {
-                return null;
-            }
         }
 
         /// <summary>
@@ -1288,49 +1184,18 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Checks if an ad format is ready to be shown. This checks BOTH that an ad instance
-        /// is loaded in the placement AND that all conditions are met (assets available, cooldown cleared for rewarded).
-        /// Always check this before calling ShowAd.
+        /// Checks if an ad format is ready to be shown: its ad is decoded by the player (or, for
+        /// native, built) and, for rewarded ads, the cooldown has passed. Always check this before
+        /// calling ShowAd.
         /// </summary>
         /// <param name="adFormat">The ad format to check</param>
         /// <returns>True if the ad can be shown immediately</returns>
         public static bool IsFormatReady(AdFormat adFormat)
         {
-            // Native ads have no placement GameObject; readiness is simply "content was built".
             if (adFormat == AdFormat.native)
                 return _nativeAdContent != null;
 
-            // Step 1: Check if placement instance has a loaded ad ready to show
-            if (_activePlacements.TryGetValue(adFormat, out GameObject instance) && instance != null)
-            {
-                bool instanceReady = adFormat switch
-                {
-                    AdFormat.banner => instance.TryGetComponent(out BannerAdPlacement banner) && banner.IsReady(),
-                    AdFormat.interstitial => instance.TryGetComponent(out InterstitialAdPlacement interstitial) && interstitial.IsReady(),
-                    AdFormat.rewarded => instance.TryGetComponent(out RewardedAdPlacement rewarded) && rewarded.IsReady(),
-                    _ => false
-                };
-                
-                if (!instanceReady)
-                {
-                    MyDebug.Verbose($"Format {adFormat} not ready: no loaded ad instance in placement");
-                    return false;
-                }
-            }
-            else
-            {
-                MyDebug.Verbose($"Format {adFormat} not ready: placement instance not found");
-                return false;
-            }
-
-            // Step 2: For rewarded ads, also check cooldown
-            if (adFormat == AdFormat.rewarded && IsRewardedAdInCooldown())
-            {
-                MyDebug.Verbose($"Format {adFormat} not ready: in cooldown");
-                return false;
-            }
-
-            return true;
+            return SlotFor(adFormat)?.IsReady ?? false;
         }
 
         /// <summary>

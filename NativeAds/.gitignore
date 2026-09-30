@@ -1,0 +1,9 @@
+bin/
+obj/
+build/
+.gradle/
+.build/
+.swiftpm/
+local.properties
+*.xcresult
+DerivedData/
