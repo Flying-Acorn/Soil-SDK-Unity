@@ -74,6 +74,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 throw new SoilException($"Unexpected error while linking account: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
+            // 403: the server refused this link (e.g. it could not check the identity token), which is
+            // not a connection problem, so the game must not tell the player to check their internet.
+            if (request.responseCode == (long)HttpStatusCode.Forbidden)
+            {
+                throw new SoilException($"Server refused the link: {request.downloadHandler?.text}", SoilExceptionErrorCode.RequestRejected);
+            }
+
             if (request.responseCode < 200 || request.responseCode >= 300)
             {
                 throw new SoilException($"Server returned error {(HttpStatusCode)request.responseCode}: {request.downloadHandler?.text}", SoilExceptionErrorCode.TransportError);
