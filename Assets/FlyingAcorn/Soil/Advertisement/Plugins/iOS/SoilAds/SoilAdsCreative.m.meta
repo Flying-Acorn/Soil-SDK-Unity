@@ -1,0 +1,60 @@
+fileFormatVersion: 2
+guid: 4a2b0b0b0f03d4f35aa314cbcb577ca5
+PluginImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  iconMap: {}
+  executionOrder: {}
+  defineConstraints: []
+  isPreloaded: 0
+  isOverridable: 0
+  isExplicitlyReferenced: 0
+  validateReferences: 1
+  platformData:
+  - first:
+      : Any
+    second:
+      enabled: 0
+      settings:
+        Exclude Android: 1
+        Exclude Editor: 1
+        Exclude Linux64: 1
+        Exclude OSXUniversal: 1
+        Exclude VisionOS: 1
+        Exclude Win: 1
+        Exclude Win64: 1
+        Exclude iOS: 0
+        Exclude tvOS: 1
+  - first:
+      Any: 
+    second:
+      enabled: 0
+      settings: {}
+  - first:
+      Editor: Editor
+    second:
+      enabled: 0
+      settings:
+        DefaultValueInitialized: true
+  - first:
+      VisionOS: VisionOS
+    second:
+      enabled: 0
+      settings: {}
+  - first:
+      iPhone: iOS
+    second:
+      enabled: 1
+      settings:
+        AddToEmbeddedBinaries: false
+        CPU: AnyCPU
+        CompileFlags: -fobjc-arc
+        FrameworkDependencies: AVFoundation;CoreMedia;ImageIO;QuartzCore;
+  - first:
+      tvOS: tvOS
+    second:
+      enabled: 0
+      settings: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
