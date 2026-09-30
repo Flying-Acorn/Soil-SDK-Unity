@@ -18,7 +18,8 @@ OUT=${OUT:-$HERE/out/$PLATFORM}
 mkdir -p "$OUT"
 
 # The build switches platform and store; put the project's settings files back afterwards.
-SETTINGS=("ProjectSettings/ProjectSettings.asset" "ProjectSettings/EditorBuildSettings.asset" "Assets/Resources/FA_Build_Settings.asset")
+SETTINGS=("ProjectSettings/ProjectSettings.asset" "ProjectSettings/EditorBuildSettings.asset" "Assets/Resources/FA_Build_Settings.asset"
+  "ProjectSettings/AndroidResolverDependencies.xml" "Assets/Plugins/Android/AndroidManifest.xml" "Assets/Plugins/Android/mainTemplate.gradle")
 BACKUP=$(mktemp -d)
 for f in "${SETTINGS[@]}"; do [ -f "$ROOT/$f" ] && mkdir -p "$BACKUP/$(dirname "$f")" && cp "$ROOT/$f" "$BACKUP/$f"; done
 restore_settings() { for f in "${SETTINGS[@]}"; do [ -f "$BACKUP/$f" ] && cp "$BACKUP/$f" "$ROOT/$f"; done; }
