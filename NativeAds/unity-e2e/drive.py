@@ -64,7 +64,52 @@ class AndroidRun:
             return text, ((x1 + x2) // 2, (y1 + y2) // 2)
         return None
 
-    def close_fullscreen_when_unlocked(self, format_name):
+    def find_view(self, description):
+        """Center of the on-screen view with this content description, or None."""
+        dump = sh(self.adb, "exec-out", "uiautomator", "dump", "/dev/tty").stdout
+        for node in re.findall(r"<node [^>]*>", dump):
+            if f'content-desc="{description}"' in node:
+                x1, y1, x2, y2 = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node).groups())
+                return (x1 + x2) // 2, (y1 + y2) // 2
+        return None
+
+    def tap_view(self, description, timeout=30):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            center = self.find_view(description)
+            if center:
+                print(f"  tapping {description} at {center[0]},{center[1]}", flush=True)
+                sh(self.adb, "shell", "input", "tap", str(center[0]), str(center[1]))
+                return True
+            time.sleep(0.5)
+        print(f"  {description} never appeared", flush=True)
+        return False
+
+    def return_to_app(self):
+        """After a click opened the browser, come back with the back button."""
+        time.sleep(3)
+        for _ in range(3):
+            focus = sh(self.adb, "shell", "dumpsys", "window").stdout
+            current = re.search(r"mCurrentFocus=.*", focus)
+            if current and APP in current.group(0):
+                return
+            sh(self.adb, "shell", "input", "keyevent", "4")
+            time.sleep(2)
+
+    def click(self, format_name):
+        def run():
+            if self.tap_view("soil_ad_banner"):
+                self.return_to_app()
+        threading.Thread(target=run, daemon=True).start()
+
+    def click_then_close(self, format_name):
+        def run():
+            if self.tap_view("soil_ad_cta"):
+                self.return_to_app()
+            self.close_fullscreen_when_unlocked(format_name, threaded=False)
+        threading.Thread(target=run, daemon=True).start()
+
+    def close_fullscreen_when_unlocked(self, format_name, threaded=True):
         def run():
             deadline = time.time() + 90
             captured = False
@@ -82,7 +127,10 @@ class AndroidRun:
                 time.sleep(0.5)
             print(f"  close button of {format_name} never unlocked", flush=True)
 
-        threading.Thread(target=run, daemon=True).start()
+        if threaded:
+            threading.Thread(target=run, daemon=True).start()
+        else:
+            run()
 
     def stop(self):
         if self.proc:
@@ -156,6 +204,10 @@ def main():
             print(message, flush=True)
             if message.startswith("EXPECT_TAP "):
                 run.close_fullscreen_when_unlocked(message.split()[1])
+            elif message.startswith("EXPECT_CLICK_THEN_TAP "):
+                run.click_then_close(message.split()[1])
+            elif message.startswith("EXPECT_CLICK "):
+                run.click(message.split()[1])
             elif message.startswith("SCREENSHOT "):
                 run.screenshot(message.split()[1])
             elif message.startswith("DONE"):

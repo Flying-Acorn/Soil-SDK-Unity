@@ -54,7 +54,7 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
             // Short locks so the run stays quick; the lock formula itself is unit-tested natively.
             Advertisement.FullscreenOptionsOverride = new FullscreenShowOptions
             {
-                ImageLockSeconds = 2, VideoLockFraction = 1, MinVideoLockSeconds = 0, MaxLockSeconds = 30
+                ImageLockSeconds = 2, VideoLockFraction = 1, MinVideoLockSeconds = 0
             };
 
             yield return Scenario("banner_image", BannerImage());
@@ -65,6 +65,12 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
             yield return Scenario("interstitial_image", Fullscreen(AdFormat.interstitial, video: false));
             yield return Scenario("rewarded_video", Fullscreen(AdFormat.rewarded, video: true));
             yield return Scenario("rewarded_again_after_close", RewardedAgain());
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Real taps need the driver's UI automation, which only Android has here; the iOS
+            // player's clicks are covered by its XCTests.
+            yield return Scenario("banner_click", BannerClick());
+            yield return Scenario("interstitial_click_then_close", InterstitialClick());
+#endif
 
             Log($"DONE passed={_passed} failed={_failed}");
         }
@@ -183,6 +189,37 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
             yield return Expect("rewarded:Loaded");
             yield return ShowAndWaitForClose(AdFormat.rewarded);
             Check(_events.Contains("rewarded:Rewarded"), "rewarded again");
+        }
+
+        private IEnumerator BannerClick()
+        {
+            Prepare(AdFormat.banner, new AdCreative
+            {
+                AdId = "banner-click", ImagePath = PathOf("image"), ClickUrl = "https://example.com/"
+            });
+            yield return Expect("banner:Loaded");
+            Advertisement.ShowAd(AdFormat.banner);
+            yield return Expect("banner:Shown");
+            Log("EXPECT_CLICK banner");
+            yield return Expect("banner:Clicked", 60);
+            Advertisement.HideAd(AdFormat.banner);
+            yield return Expect("banner:Closed");
+        }
+
+        private IEnumerator InterstitialClick()
+        {
+            Prepare(AdFormat.interstitial, new AdCreative
+            {
+                AdId = "interstitial-click", ImagePath = PathOf("image"), Title = "Tap me",
+                CallToAction = "Open", ClickUrl = "https://example.com/"
+            });
+            yield return Expect("interstitial:Loaded");
+            Log("EXPECT_CLICK_THEN_TAP interstitial");
+            Advertisement.ShowAd(AdFormat.interstitial);
+            yield return Expect("interstitial:Closed", 120);
+            var expected = new[] { "interstitial:Shown", "interstitial:Clicked", "interstitial:Closed" };
+            var got = _events.Where(e => expected.Contains(e)).ToList();
+            Check(got.SequenceEqual(expected), $"events in order: {string.Join(",", got)}");
         }
 
         #endregion
