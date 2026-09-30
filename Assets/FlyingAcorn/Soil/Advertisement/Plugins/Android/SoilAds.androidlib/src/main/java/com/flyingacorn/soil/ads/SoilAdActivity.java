@@ -479,6 +479,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                 && firstFrameRendered;
         boolean show = session.ad.image != null && (!session.ad.isVideo() || !videoOnScreen);
         imageView.setVisibility(show ? View.VISIBLE : View.GONE);
+        // Once the image stands in for an ended or failed video, the last video frame must not
+        // show around it (an aspect-fit image rarely covers the whole area).
+        if (textureView != null && firstFrameRendered) {
+            textureView.setVisibility(show ? View.INVISIBLE : View.VISIBLE);
+        }
     }
 
     /** Aspect-fit: a TextureView stretches its content, so scale it back around the center. */

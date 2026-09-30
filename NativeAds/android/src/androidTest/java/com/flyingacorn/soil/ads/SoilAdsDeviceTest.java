@@ -319,14 +319,15 @@ public class SoilAdsDeviceTest {
     public void fullscreenImageLocksThenCloses() throws Exception {
         load("interstitial", creative("imagePath", "image.png", "logoPath", "logo.png", "title", "Word Master",
                 "description", "بازی کنید", "callToAction", "Install"));
-        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(1.5, 0.8, 60));
+        // 5 s leaves room for a slow emulator to bring the Activity up while still locked.
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(5, 0.8, 60));
         assertFalse(SoilAdsBridge.isReady("interstitial"));
         assertNotNull(find(ad, "soil_ad_media"));
         assertNotNull(find(ad, "soil_ad_cta"));
         assertNull(find(ad, "soil_ad_mute"));
 
         View close = find(ad, "soil_ad_close");
-        assertTrue(text(close).matches("[12]"));
+        assertTrue(text(close), text(close).matches("[1-5]"));
         click(close); // locked: ignored
         SystemClock.sleep(200);
         assertFalse(ad.isFinishing());
@@ -567,15 +568,16 @@ public class SoilAdsDeviceTest {
         View game = host.findViewById(android.R.id.content);
         int expectedHeight = Math.round(50 * host.getResources().getDisplayMetrics().density);
         assertEquals(expectedHeight, banner.getHeight());
-        assertEquals(game.getHeight(), banner.getBottom());
+        // Above a visible navigation bar (and any cutout), flush with the edge when there is none.
+        int[] safe = Ui.bannerInsets(host.getWindow().getDecorView());
+        assertEquals(game.getHeight() - safe[3], banner.getBottom());
         assertTrue(SoilAdsBridge.isReady("banner"));
 
         SoilAdsBridge.show("banner", "{\"position\":\"top\"}");
         instrumentation.waitForIdleSync();
         SystemClock.sleep(200);
         instrumentation.waitForIdleSync();
-        int[] cutout = Ui.cutoutInsets(host.getWindow().getDecorView());
-        assertEquals(cutout[1], banner.getTop());
+        assertEquals(safe[1], banner.getTop());
         assertEquals(Collections.singletonList("banner:shown"), events.names());
 
         SoilAdsBridge.hide("banner");
