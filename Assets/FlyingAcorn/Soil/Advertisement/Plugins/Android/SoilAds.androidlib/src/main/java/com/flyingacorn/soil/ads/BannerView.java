@@ -37,9 +37,10 @@ final class BannerView extends FrameLayout {
         setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (!attached || closed || ad.creative.clickUrl == null) return;
-                Ui.openUrl(getContext(), ad.creative.clickUrl);
+                if (!attached || closed) return;
+                // Reported even without a URL or an app to open it, as the SDK always did.
                 BannerView.this.listener.onClicked();
+                Ui.openUrl(getContext(), ad.creative.clickUrl);
             }
         });
         buildContent();

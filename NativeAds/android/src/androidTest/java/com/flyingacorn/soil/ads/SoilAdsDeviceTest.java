@@ -115,12 +115,11 @@ public class SoilAdsDeviceTest {
         return json.toString();
     }
 
-    private static String lockOptions(double imageLock, double videoFraction, double maxLock) throws Exception {
+    private static String lockOptions(double imageLock, double videoFraction) throws Exception {
         JSONObject json = new JSONObject();
         json.put("imageLockSeconds", imageLock);
         json.put("videoLockFraction", videoFraction);
         json.put("minVideoLockSeconds", 0);
-        json.put("maxLockSeconds", maxLock);
         json.put("startMuted", false);
         return json.toString();
     }
@@ -320,7 +319,7 @@ public class SoilAdsDeviceTest {
         load("interstitial", creative("imagePath", "image.png", "logoPath", "logo.png", "title", "Word Master",
                 "description", "بازی کنید", "callToAction", "Install"));
         // 5 s leaves room for a slow emulator to bring the Activity up while still locked.
-        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(5, 0.8, 60));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(5, 0.8));
         assertFalse(SoilAdsBridge.isReady("interstitial"));
         assertNotNull(find(ad, "soil_ad_media"));
         assertNotNull(find(ad, "soil_ad_cta"));
@@ -342,7 +341,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void rewardedVideoRewardsOnceBeforeClosed() throws Exception {
         load("rewarded", creative("videoPath", "video_3s.mp4"));
-        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0, 60));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0));
         assertNotNull(find(ad, "soil_ad_mute"));
         View close = find(ad, "soil_ad_close");
         assertFalse("\u2715".equals(text(close)));
@@ -359,7 +358,7 @@ public class SoilAdsDeviceTest {
         load("interstitial", creative("videoPath", "video_3s.mp4"));
         SoilAdActivity ad = showFullscreen("interstitial",
                 "{\"imageLockSeconds\":5,\"videoLockFraction\":0.8,\"minVideoLockSeconds\":5,"
-                        + "\"maxLockSeconds\":60,\"startMuted\":true}");
+                        + "\"startMuted\":true}");
         View mute = find(ad, "soil_ad_mute");
         String muted = text(mute);
         click(mute);
@@ -371,7 +370,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void hideWhileShowingClosesOnceWithoutReward() throws Exception {
         load("rewarded", creative("imagePath", "image.png"));
-        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0, 60));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0));
         SoilAdsBridge.hide("rewarded");
         SoilAdsBridge.hide("rewarded");
         events.await("rewarded", "closed");
@@ -383,7 +382,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void destroyWhileShowingClosesOnce() throws Exception {
         load("interstitial", creative("videoPath", "video_3s.mp4"));
-        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0, 60));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
         SoilAdsBridge.destroy("interstitial");
         events.await("interstitial", "closed");
         awaitGone(ad);
@@ -395,7 +394,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void backClosesOnlyWhenUnlocked() throws Exception {
         load("rewarded", creative("imagePath", "image.png"));
-        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(8, 1.0, 60));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(8, 1.0));
         instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
         SystemClock.sleep(300);
         assertFalse(ad.isFinishing());
@@ -415,7 +414,7 @@ public class SoilAdsDeviceTest {
                 new Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null), true);
         try {
             load("interstitial", creative("imagePath", "image.png", "callToAction", "Install", "clickUrl", CLICK_URL));
-            SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0, 60));
+            SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
             click(find(ad, "soil_ad_cta"));
             click(find(ad, "soil_ad_media"));
             assertEquals(2, browser.getHits());
@@ -427,14 +426,23 @@ public class SoilAdsDeviceTest {
     }
 
     @Test
+    public void clickWithoutUrlStillReportsClicked() throws Exception {
+        load("interstitial", creative("imagePath", "image.png", "callToAction", "Install"));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
+        click(find(ad, "soil_ad_cta"));
+        assertFalse("nothing to open, the ad stays", ad.isFinishing());
+        assertEquals(Arrays.asList("interstitial:shown", "interstitial:clicked"), events.names());
+    }
+
+    @Test
     public void onlyOneFullscreenAndNotLoaded() throws Exception {
         events.clear();
         SoilAdsBridge.show("rewarded", null);
         assertEquals("not_loaded", events.await("rewarded", "showFailed").getString("error"));
         load("interstitial", creative("imagePath", "image.png"));
         load("rewarded", creative("imagePath", "image.png"));
-        showFullscreen("interstitial", lockOptions(20, 1.0, 60));
-        SoilAdsBridge.show("rewarded", lockOptions(20, 1.0, 60));
+        showFullscreen("interstitial", lockOptions(20, 1.0));
+        SoilAdsBridge.show("rewarded", lockOptions(20, 1.0));
         assertEquals("already_showing", events.await("rewarded", "showFailed").getString("error"));
         assertTrue(SoilAdsBridge.isReady("rewarded"));
     }
@@ -442,7 +450,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void loadDuringShowRefillsSlot() throws Exception {
         load("interstitial", creative("imagePath", "image.png"));
-        showFullscreen("interstitial", lockOptions(20, 1.0, 60));
+        showFullscreen("interstitial", lockOptions(20, 1.0));
         SoilAdsBridge.load("interstitial", creative("videoPath", "video_3s.mp4"));
         events.await("interstitial", "loaded");
         assertTrue(SoilAdsBridge.isReady("interstitial"));
@@ -452,7 +460,7 @@ public class SoilAdsDeviceTest {
     public void rapidShowHideEndsWithOneTerminalEvent() throws Exception {
         for (int i = 0; i < 3; i++) {
             load("interstitial", creative("imagePath", "image.png"));
-            SoilAdsBridge.show("interstitial", lockOptions(20, 1.0, 60));
+            SoilAdsBridge.show("interstitial", lockOptions(20, 1.0));
             SoilAdsBridge.hide("interstitial");
             events.awaitAny("interstitial", "closed", "showFailed");
             SystemClock.sleep(1500);
@@ -466,7 +474,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void backgroundTimeDoesNotCount() throws Exception {
         load("interstitial", creative("imagePath", "image.png"));
-        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(30, 1.0, 60));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(30, 1.0));
         Instrumentation.ActivityMonitor coverMonitor =
                 instrumentation.addMonitor(CoverActivity.class.getName(), null, false);
         instrumentation.runOnMainSync(() -> ad.startActivity(new Intent(ad, CoverActivity.class)));
@@ -532,7 +540,7 @@ public class SoilAdsDeviceTest {
     @Test
     public void recreatedActivityKeepsTheShow() throws Exception {
         load("rewarded", creative("imagePath", "image.png"));
-        SoilAdActivity first = showFullscreen("rewarded", lockOptions(2, 1.0, 60));
+        SoilAdActivity first = showFullscreen("rewarded", lockOptions(2, 1.0));
         instrumentation.runOnMainSync(first::recreate);
         Activity second = awaitResumedAdOtherThan(first);
         events.await("rewarded", "rewarded");

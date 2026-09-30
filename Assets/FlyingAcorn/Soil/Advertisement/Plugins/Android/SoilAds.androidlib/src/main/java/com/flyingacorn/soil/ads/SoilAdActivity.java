@@ -340,9 +340,10 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     }
 
     private void onAdClicked() {
-        if (session == null || session.isEnded() || session.ad.creative.clickUrl == null) return;
-        Ui.openUrl(this, session.ad.creative.clickUrl);
+        if (session == null || session.isEnded()) return;
+        // Reported even without a URL or an app to open it, as the SDK always did.
         session.reportClicked();
+        Ui.openUrl(this, session.ad.creative.clickUrl);
     }
 
     // ---- Video ------------------------------------------------------------------------------------
