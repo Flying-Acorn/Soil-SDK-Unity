@@ -47,7 +47,7 @@ final class BannerView extends FrameLayout {
         setOnApplyWindowInsetsListener(new OnApplyWindowInsetsListener() {
             @Override
             public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
-                int[] insetsNow = Ui.bannerInsets(insets);
+                int[] insetsNow = Ui.safeInsets(insets);
                 if (!Arrays.equals(insetsNow, safeInsets)) {
                     safeInsets = insetsNow;
                     post(new Runnable() {
@@ -74,7 +74,7 @@ final class BannerView extends FrameLayout {
 
     void show(String position) {
         this.position = position;
-        safeInsets = Ui.bannerInsets(activity.getWindow().getDecorView());
+        safeInsets = Ui.safeInsets(activity.getWindow().getDecorView());
         activity.addContentView(this, layoutParams());
         ad.retain();
         attached = true;
@@ -82,7 +82,7 @@ final class BannerView extends FrameLayout {
 
     void move(String position) {
         this.position = position;
-        safeInsets = Ui.bannerInsets(activity.getWindow().getDecorView());
+        safeInsets = Ui.safeInsets(activity.getWindow().getDecorView());
         setLayoutParams(layoutParams());
     }
 

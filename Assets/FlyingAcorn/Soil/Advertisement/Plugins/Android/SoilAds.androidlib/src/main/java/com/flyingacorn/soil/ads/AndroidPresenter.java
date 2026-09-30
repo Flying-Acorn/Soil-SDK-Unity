@@ -30,7 +30,9 @@ final class AndroidPresenter implements SoilAdsManager.Presenter {
     public String showBanner(LoadedAd ad, String position, SoilAdsManager.PresentationListener listener) {
         Activity host = usableHost();
         if (host == null) return AdFormats.ERROR_NO_HOST;
-        BannerView view = new BannerView(host, ad, listener);
+        Forgetting tracked = new Forgetting(listener);
+        BannerView view = new BannerView(host, ad, tracked);
+        tracked.owner = view;
         try {
             view.show(position);
         } catch (RuntimeException e) {
@@ -39,7 +41,7 @@ final class AndroidPresenter implements SoilAdsManager.Presenter {
             return AdFormats.ERROR_INTERNAL;
         }
         banner = view;
-        listener.onShown();
+        tracked.onShown();
         return null;
     }
 
@@ -60,8 +62,10 @@ final class AndroidPresenter implements SoilAdsManager.Presenter {
                                     SoilAdsManager.PresentationListener listener) {
         Activity host = usableHost();
         if (host == null) return AdFormats.ERROR_NO_HOST;
-        FullscreenSession session = FullscreenSession.start(host, main, format, ad, options, listener);
+        Forgetting tracked = new Forgetting(listener);
+        FullscreenSession session = FullscreenSession.start(host, main, format, ad, options, tracked);
         if (session == null) return AdFormats.ERROR_NO_HOST;
+        tracked.owner = session;
         fullscreen = session;
         return null;
     }
@@ -71,5 +75,41 @@ final class AndroidPresenter implements SoilAdsManager.Presenter {
         FullscreenSession session = fullscreen;
         fullscreen = null;
         if (session != null) session.end();
+    }
+
+    /**
+     * Drops the presenter's reference when an ad closes on its own (close button, back, the host
+     * Activity going away), so a finished banner or show is never moved, removed or kept alive
+     * later. Hide and destroy clear the reference first and then end the ad, which lands here too.
+     */
+    private final class Forgetting implements SoilAdsManager.PresentationListener {
+        private final SoilAdsManager.PresentationListener inner;
+        Object owner;
+
+        Forgetting(SoilAdsManager.PresentationListener inner) {
+            this.inner = inner;
+        }
+
+        @Override
+        public void onShown() {
+            inner.onShown();
+        }
+
+        @Override
+        public void onClicked() {
+            inner.onClicked();
+        }
+
+        @Override
+        public void onUnlocked() {
+            inner.onUnlocked();
+        }
+
+        @Override
+        public void onClosed() {
+            if (owner != null && banner == owner) banner = null;
+            if (owner != null && fullscreen == owner) fullscreen = null;
+            inner.onClosed();
+        }
     }
 }

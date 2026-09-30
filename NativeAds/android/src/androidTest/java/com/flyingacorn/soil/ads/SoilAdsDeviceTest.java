@@ -12,12 +12,18 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.media.MediaPlayer;
+import android.os.Build;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.test.core.app.ActivityScenario;
@@ -60,7 +66,8 @@ public class SoilAdsDeviceTest {
         Context context = instrumentation.getTargetContext();
         media = new File(context.getCacheDir(), "soil-ads-test");
         media.mkdirs();
-        for (String name : new String[]{"video_3s.mp4", "audio_only.mp4", "image.png", "logo.png", "large.jpg"}) {
+        for (String name : new String[]{"video_3s.mp4", "video_10s.mp4", "audio_only.mp4", "image.png", "logo.png",
+                "large.jpg"}) {
             copyAsset(name);
         }
         write("broken.mp4", "this is not a video");
@@ -406,20 +413,84 @@ public class SoilAdsDeviceTest {
         assertEquals(Arrays.asList("rewarded:shown", "rewarded:rewarded", "rewarded:closed"), events.names());
     }
 
+    /** Catches every link the player opens (API 26+), without starting anything. */
+    private static final class LinkMonitor extends Instrumentation.ActivityMonitor {
+        final List<Intent> opened = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public Instrumentation.ActivityResult onStartActivity(Intent intent) {
+            if (!Intent.ACTION_VIEW.equals(intent.getAction())) return null;
+            opened.add(new Intent(intent));
+            return new Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null);
+        }
+    }
+
+    private LinkMonitor addLinkMonitor() {
+        LinkMonitor monitor = new LinkMonitor();
+        instrumentation.addMonitor(monitor);
+        return monitor;
+    }
+
     @Test
     public void clickOpensUrlAndReportsClicked() throws Exception {
-        IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
-        filter.addDataScheme("https");
-        Instrumentation.ActivityMonitor browser = instrumentation.addMonitor(filter,
-                new Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null), true);
+        LinkMonitor browser = addLinkMonitor();
         try {
             load("interstitial", creative("imagePath", "image.png", "callToAction", "Install", "clickUrl", CLICK_URL));
             SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
             click(find(ad, "soil_ad_cta"));
             click(find(ad, "soil_ad_media"));
-            assertEquals(2, browser.getHits());
+            assertEquals(2, browser.opened.size());
+            for (Intent intent : browser.opened) {
+                assertEquals(CLICK_URL, intent.getDataString());
+                // Only activities that accept links from a browser may handle an ad click.
+                assertTrue(intent.hasCategory(Intent.CATEGORY_BROWSABLE));
+            }
             assertEquals(Arrays.asList("interstitial:shown", "interstitial:clicked", "interstitial:clicked"),
                     events.names());
+        } finally {
+            instrumentation.removeMonitor(browser);
+        }
+    }
+
+    @Test
+    public void linksThatActOnTheDeviceAreNotOpenedButEveryClickIsReported() throws Exception {
+        LinkMonitor browser = addLinkMonitor();
+        try {
+            String[] refused = {
+                    "intent:#Intent;component=com.flyingacorn.soil.ads.test/com.flyingacorn.soil.ads.CoverActivity;end",
+                    "file:///sdcard/secret.txt",
+                    "content://com.example.provider/secret",
+                    "javascript:alert(1)",
+            };
+            for (String url : refused) {
+                load("banner", creative("title", "Word Master", "clickUrl", url));
+                SoilAdsBridge.show("banner", null);
+                events.await("banner", "shown");
+                instrumentation.waitForIdleSync();
+                click(find(host, "soil_ad_banner"));
+                events.await("banner", "clicked");
+                SoilAdsBridge.hide("banner");
+                events.await("banner", "closed");
+            }
+            assertTrue("opened " + browser.opened, browser.opened.isEmpty());
+
+            // Store and app deep links open, as browsable links.
+            String[] opened = {"market://details?id=com.example.game", "storeapp://details?id=com.example.game"};
+            for (String url : opened) {
+                load("banner", creative("title", "Word Master", "clickUrl", " " + url + " "));
+                SoilAdsBridge.show("banner", null);
+                events.await("banner", "shown");
+                instrumentation.waitForIdleSync();
+                click(find(host, "soil_ad_banner"));
+                events.await("banner", "clicked");
+                SoilAdsBridge.hide("banner");
+                events.await("banner", "closed");
+            }
+            assertEquals(opened.length, browser.opened.size());
+            for (int i = 0; i < opened.length; i++) {
+                assertEquals(opened[i], browser.opened.get(i).getDataString());
+                assertTrue(browser.opened.get(i).hasCategory(Intent.CATEGORY_BROWSABLE));
+            }
         } finally {
             instrumentation.removeMonitor(browser);
         }
@@ -589,6 +660,255 @@ public class SoilAdsDeviceTest {
         assertTrue(events.names().isEmpty());
     }
 
+    /** Reads a private field on the main thread. */
+    private Object field(Object target, String name) throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        final Object[] value = new Object[1];
+        instrumentation.runOnMainSync(() -> {
+            try {
+                value[0] = field.get(target);
+            } catch (IllegalAccessException e) {
+                throw new AssertionError(e);
+            }
+        });
+        return value[0];
+    }
+
+    private FullscreenSession session(Activity ad) throws Exception {
+        return (FullscreenSession) field(ad, "session");
+    }
+
+    private int savedPositionMs(Activity ad) throws Exception {
+        final FullscreenSession session = session(ad);
+        final int[] value = new int[1];
+        instrumentation.runOnMainSync(() -> value[0] = session.videoPositionMs);
+        return value[0];
+    }
+
+    private AndroidPresenter presenter() throws Exception {
+        java.lang.reflect.Field managerField = SoilAdsBridge.class.getDeclaredField("manager");
+        managerField.setAccessible(true);
+        return (AndroidPresenter) field(managerField.get(null), "presenter");
+    }
+
+    private static void awaitTrue(String what, java.util.concurrent.Callable<Boolean> condition) throws Exception {
+        long deadline = SystemClock.uptimeMillis() + TIMEOUT_MS;
+        while (!condition.call()) {
+            if (SystemClock.uptimeMillis() > deadline) fail(what);
+            SystemClock.sleep(50);
+        }
+    }
+
+    @Test
+    public void resumeContinuesWhereTheVideoWasLeft() throws Exception {
+        // One key frame at 0 s: a resume that seeks to the previous key frame would start over.
+        load("interstitial", creative("videoPath", "video_10s.mp4"));
+        SoilAdActivity first = showFullscreen("interstitial", lockOptions(30, 1.0));
+        awaitTrue("the video did not play 2 s", () -> savedPositionMs(first) >= 2000);
+        instrumentation.runOnMainSync(first::recreate); // a new player on a new surface
+        SoilAdActivity second = (SoilAdActivity) awaitResumedAdOtherThan(first);
+        int saved = savedPositionMs(second);
+        assertTrue("saved " + saved, saved >= 2000);
+
+        List<Integer> positions = new ArrayList<>();
+        long until = SystemClock.uptimeMillis() + 3000;
+        while (SystemClock.uptimeMillis() < until) {
+            final int[] position = {-1};
+            final MediaPlayer player = (MediaPlayer) field(second, "player");
+            final boolean prepared = (Boolean) field(second, "prepared");
+            if (player != null && prepared) {
+                instrumentation.runOnMainSync(() -> position[0] = player.getCurrentPosition());
+                positions.add(position[0]);
+            }
+            assertTrue("saved position moved back", savedPositionMs(second) >= saved);
+            SystemClock.sleep(50);
+        }
+        assertFalse("the video never resumed", positions.isEmpty());
+        for (int position : positions) {
+            assertTrue("resumed at " + position + " ms after leaving at " + saved + " ms: " + positions,
+                    position >= saved - 300);
+        }
+    }
+
+    @Test
+    public void endedVideoIsNotReopenedAndKeepsItsLastFrame() throws Exception {
+        load("rewarded", creative("videoPath", "video_3s.mp4"));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0));
+        events.await("rewarded", "rewarded"); // at the end of the video
+        awaitTrue("the player was not released after the video ended", () -> field(ad, "player") == null);
+        Bitmap frame = session(ad).lastFrame;
+        assertNotNull("no last frame kept", frame);
+        // The copy is the video frame itself, at the video's aspect ratio, not the letterboxed view.
+        assertEquals(320f / 240f, (float) frame.getWidth() / frame.getHeight(), 0.05f);
+        assertTrue(colourfulRow(frame, 1) > 0.5f);
+        assertTrue(colourfulRow(frame, frame.getHeight() - 2) > 0.5f);
+        assertStillShows(ad, frame);
+
+        // Leaving and coming back destroys and recreates the TextureView's surface: nothing reopens.
+        Instrumentation.ActivityMonitor coverMonitor =
+                instrumentation.addMonitor(CoverActivity.class.getName(), null, false);
+        instrumentation.runOnMainSync(() -> ad.startActivity(new Intent(ad, CoverActivity.class)));
+        Activity cover = coverMonitor.waitForActivityWithTimeout(TIMEOUT_MS);
+        instrumentation.removeMonitor(coverMonitor);
+        assertNotNull(cover);
+        awaitStage(ad, Stage.STOPPED);
+        instrumentation.runOnMainSync(cover::finish);
+        awaitStage(ad, Stage.RESUMED);
+        SystemClock.sleep(1000);
+        assertNull(field(ad, "player"));
+        assertStillShows(ad, frame);
+
+        instrumentation.runOnMainSync(ad::recreate);
+        SoilAdActivity second = (SoilAdActivity) awaitResumedAdOtherThan(ad);
+        SystemClock.sleep(1000);
+        assertNull(field(second, "player"));
+        assertNull("no video view for an ended video", field(second, "textureView"));
+        assertStillShows(second, frame);
+
+        click(find(second, "soil_ad_close"));
+        events.await("rewarded", "closed");
+        awaitGone(second);
+        assertTrue("the kept frame is released with the show", frame.isRecycled());
+        assertEquals(Arrays.asList("rewarded:shown", "rewarded:rewarded", "rewarded:closed"), events.names());
+    }
+
+    private void assertStillShows(Activity ad, Bitmap expected) throws Exception {
+        ImageView image = (ImageView) field(ad, "imageView");
+        final Drawable[] drawable = new Drawable[1];
+        final int[] visibility = new int[1];
+        instrumentation.runOnMainSync(() -> {
+            drawable[0] = image.getDrawable();
+            visibility[0] = image.getVisibility();
+        });
+        assertEquals(View.VISIBLE, visibility[0]);
+        assertTrue(drawable[0] instanceof BitmapDrawable);
+        assertTrue(((BitmapDrawable) drawable[0]).getBitmap() == expected);
+    }
+
+    /** Share of a row's pixels that are neither black nor transparent. */
+    private static float colourfulRow(Bitmap bitmap, int y) {
+        int colourful = 0;
+        for (int x = 0; x < bitmap.getWidth(); x++) {
+            int pixel = bitmap.getPixel(x, y);
+            if (Color.alpha(pixel) > 200 && Color.red(pixel) + Color.green(pixel) + Color.blue(pixel) > 60) colourful++;
+        }
+        return (float) colourful / bitmap.getWidth();
+    }
+
+    @Test
+    public void fullscreenControlsStayClearOfVisibleSystemBars() throws Exception {
+        org.junit.Assume.assumeTrue("WindowInsets.Builder.setInsets needs API 30", Build.VERSION.SDK_INT >= 30);
+        load("interstitial", creative("imagePath", "image.png", "title", "Word Master", "callToAction", "Install"));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
+        View close = find(ad, "soil_ad_close");
+        View content = (View) close.getParent();
+        View root = (View) content.getParent();
+        int density = Math.round(ad.getResources().getDisplayMetrics().density);
+        // What split screen, a freeform window or a revealed bar hands the ad: bars that show.
+        final WindowInsets visibleBars = new WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.statusBars(), android.graphics.Insets.of(0, 30 * density, 0, 0))
+                .setInsets(WindowInsets.Type.navigationBars(), android.graphics.Insets.of(0, 0, 20 * density, 48 * density))
+                .build();
+        settleWindowInsets();
+        instrumentation.runOnMainSync(() -> root.dispatchApplyWindowInsets(visibleBars));
+        instrumentation.waitForIdleSync();
+
+        int[] cta = windowRect(find(ad, "soil_ad_cta"));
+        int[] closeRect = windowRect(close);
+        assertEquals(48 * density, content.getPaddingBottom());
+        assertTrue("cta bottom " + cta[3], cta[3] <= root.getHeight() - 48 * density);
+        assertTrue("close top " + closeRect[1], closeRect[1] >= 30 * density);
+        assertTrue("close right " + closeRect[2], closeRect[2] <= root.getWidth() - 20 * density);
+
+        // Hidden (immersive) bars take no room.
+        final WindowInsets hiddenBars = new WindowInsets.Builder()
+                .setInsetsIgnoringVisibility(WindowInsets.Type.systemBars(), android.graphics.Insets.of(0, 30, 0, 48))
+                .setVisible(WindowInsets.Type.systemBars(), false)
+                .build();
+        settleWindowInsets();
+        instrumentation.runOnMainSync(() -> root.dispatchApplyWindowInsets(hiddenBars));
+        instrumentation.waitForIdleSync();
+        assertEquals(0, content.getPaddingBottom());
+        assertEquals(0, content.getPaddingTop());
+    }
+
+    /** Lets the window's own inset updates (immersive mode settling) land before a test sends its own. */
+    private void settleWindowInsets() {
+        instrumentation.waitForIdleSync();
+        android.os.SystemClock.sleep(1000);
+        instrumentation.waitForIdleSync();
+    }
+
+    private int[] windowRect(View view) {
+        final int[] rect = new int[4];
+        instrumentation.runOnMainSync(() -> {
+            int[] location = new int[2];
+            view.getLocationInWindow(location);
+            rect[0] = location[0];
+            rect[1] = location[1];
+            rect[2] = location[0] + view.getWidth();
+            rect[3] = location[1] + view.getHeight();
+        });
+        return rect;
+    }
+
+    @Test
+    public void relaunchingTheGameClosesTheAd() throws Exception {
+        // A launcher tap on a singleTask game clears the task down to the game's Activity.
+        load("rewarded", creative("imagePath", "image.png"));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0));
+        instrumentation.runOnMainSync(() -> host.startActivity(new Intent(host, HostActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
+        events.await("rewarded", "closed");
+        awaitGone(ad);
+        SystemClock.sleep(300);
+        assertEquals(Arrays.asList("rewarded:shown", "rewarded:closed"), events.names());
+        assertNull(field(presenter(), "fullscreen"));
+        assertFalse(SoilAdsBridge.isReady("rewarded"));
+    }
+
+    @Test
+    public void presenterForgetsAdsThatCloseOnTheirOwn() throws Exception {
+        load("interstitial", creative("imagePath", "image.png"));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(1, 1.0));
+        assertNotNull(field(presenter(), "fullscreen"));
+        View close = find(ad, "soil_ad_close");
+        awaitText(close, "✕");
+        click(close);
+        events.await("interstitial", "closed");
+        assertNull(field(presenter(), "fullscreen"));
+
+        load("banner", creative("title", "Word Master"));
+        SoilAdsBridge.show("banner", null);
+        events.await("banner", "shown");
+        instrumentation.waitForIdleSync();
+        assertNotNull(field(presenter(), "banner"));
+        View banner = find(host, "soil_ad_banner");
+        // The game's view hierarchy drops the banner (e.g. Unity's Activity is torn down).
+        instrumentation.runOnMainSync(() -> ((ViewGroup) banner.getParent()).removeView(banner));
+        events.await("banner", "closed");
+        assertNull(field(presenter(), "banner"));
+        // The slot is untouched: the banner can be shown again.
+        SoilAdsBridge.show("banner", null);
+        instrumentation.waitForIdleSync();
+        assertEquals(2, java.util.Collections.frequency(events.names(), "banner:shown"));
+        assertNotNull(find(host, "soil_ad_banner"));
+    }
+
+    @Test
+    public void imagesAreDecodedInFullColour() {
+        // Ad creatives keep their gradients: no 16-bit decoding, even for a JPEG.
+        Bitmap jpeg = MediaLoader.decodeImage(path("large.jpg"), 1080, 1080L * 1920 * 2);
+        assertNotNull(jpeg);
+        assertEquals(Bitmap.Config.ARGB_8888, jpeg.getConfig());
+        jpeg.recycle();
+        Bitmap png = MediaLoader.decodeImage(path("image.png"), 1080, 1080L * 1920 * 2);
+        assertNotNull(png);
+        assertEquals(Bitmap.Config.ARGB_8888, png.getConfig());
+        png.recycle();
+    }
+
     // ---- banner
 
     @Test
@@ -604,7 +924,7 @@ public class SoilAdsDeviceTest {
         int expectedHeight = Math.round(50 * host.getResources().getDisplayMetrics().density);
         assertEquals(expectedHeight, banner.getHeight());
         // Above a visible navigation bar (and any cutout), flush with the edge when there is none.
-        int[] safe = Ui.bannerInsets(host.getWindow().getDecorView());
+        int[] safe = Ui.safeInsets(host.getWindow().getDecorView());
         assertEquals(game.getHeight() - safe[3], banner.getBottom());
         assertTrue(SoilAdsBridge.isReady("banner"));
 
@@ -637,10 +957,7 @@ public class SoilAdsDeviceTest {
 
     @Test
     public void textBannerClicks() throws Exception {
-        IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
-        filter.addDataScheme("https");
-        Instrumentation.ActivityMonitor browser = instrumentation.addMonitor(filter,
-                new Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null), true);
+        LinkMonitor browser = addLinkMonitor();
         try {
             load("banner", creative("logoPath", "logo.png", "title", "بازی",
                     "description", "Train your brain", "callToAction", "Install", "clickUrl", CLICK_URL));
@@ -651,7 +968,7 @@ public class SoilAdsDeviceTest {
             assertNotNull(find(host, "soil_ad_cta"));
             click(banner);
             events.await("banner", "clicked");
-            assertEquals(1, browser.getHits());
+            assertEquals(1, browser.opened.size());
             // Touches outside the banner still reach the game.
             assertTrue(((ViewGroup) banner.getParent()).getHeight() > banner.getHeight());
         } finally {

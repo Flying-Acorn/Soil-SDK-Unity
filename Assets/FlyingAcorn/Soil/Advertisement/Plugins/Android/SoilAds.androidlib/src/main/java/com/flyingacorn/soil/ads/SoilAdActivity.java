@@ -1,6 +1,7 @@
 package com.flyingacorn.soil.ads;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
@@ -105,7 +106,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
             resumed = false;
             handler.removeCallbacks(ticker);
             if (player != null && prepared) {
-                session.videoPositionMs = safePosition();
+                session.recordVideoPosition(safePosition());
                 if (player.isPlaying()) player.pause();
             }
         }
@@ -167,10 +168,13 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         backCallback = null;
     }
 
+    /**
+     * No {@code SYSTEM_UI_FLAG_LAYOUT_STABLE}: before API 30 it would report the bars' insets even
+     * while they are hidden, and the content is padded by the bars that are actually visible.
+     */
     @SuppressWarnings("deprecation")
     private void enterImmersive() {
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -187,7 +191,9 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override
             public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
-                int[] safe = Ui.cutoutInsets(insets);
+                // Cutout plus visible bars: immersive hides them, but split screen, freeform
+                // windows or a transient reveal can leave them over the ad's controls.
+                int[] safe = Ui.safeInsets(insets);
                 content.setPadding(safe[0], safe[1], safe[2], safe[3]);
                 return insets;
             }
@@ -249,7 +255,8 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                 onAdClicked();
             }
         });
-        if (session.ad.isVideo() && !session.videoFailed) {
+        // An ended video is never reopened: its last frame (or the image) stays on screen.
+        if (session.ad.isVideo() && !session.videoFailed && !session.videoEnded) {
             textureView = new TextureView(this);
             textureView.setSurfaceTextureListener(this);
             textureView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
@@ -262,7 +269,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         }
         imageView = new ImageView(this);
         imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        if (session.ad.image != null) imageView.setImageBitmap(session.ad.image);
+        if (stillImage() != null) imageView.setImageBitmap(stillImage());
         media.addView(imageView, new FrameLayout.LayoutParams(-1, -1));
         updateImageVisibility();
         return media;
@@ -324,7 +331,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
 
     private void tick() {
         if (session == null || session.isEnded()) return;
-        if (player != null && prepared && !session.videoEnded) session.videoPositionMs = safePosition();
+        if (player != null && prepared && !session.videoEnded) session.recordVideoPosition(safePosition());
         double visibleSeconds = (session.visibleMs
                 + (resumed ? SystemClock.elapsedRealtime() - resumedAtMs : 0)) / 1000.0;
         boolean justUnlocked = session.lock.update(visibleSeconds, session.videoPositionMs / 1000.0,
@@ -362,7 +369,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
         if (player != null && prepared && session != null && !session.videoEnded) {
-            session.videoPositionMs = safePosition();
+            session.recordVideoPosition(safePosition());
         }
         releasePlayer();
         if (surface != null) {
@@ -381,7 +388,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     }
 
     private void openPlayer() {
-        if (session == null || session.videoFailed || surface == null || player != null) return;
+        if (session == null || session.videoFailed || session.videoEnded || surface == null || player != null) return;
         MediaPlayer mediaPlayer = new MediaPlayer();
         player = mediaPlayer;
         prepared = false;
@@ -394,7 +401,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                     if (mp != player) return;
                     prepared = true;
                     applyVolume();
-                    if (session.videoPositionMs > 0) mp.seekTo(session.videoPositionMs);
+                    if (session.videoPositionMs > 0) seekTo(mp, session.videoPositionMs);
                     startPlaybackIfReady();
                 }
             });
@@ -411,7 +418,9 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                 public void onCompletion(MediaPlayer mp) {
                     if (mp != player || session == null) return;
                     session.videoEnded = true;
+                    keepLastFrame();
                     updateImageVisibility();
+                    releasePlayer(); // frees the decoder; the ended video is not played again
                     tick();
                 }
             });
@@ -437,10 +446,17 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         }
     }
 
+    /** Resumes where the viewer left off, not at the key frame before it (API 26+). */
+    private static void seekTo(MediaPlayer mp, int positionMs) {
+        if (Build.VERSION.SDK_INT >= 26) mp.seekTo(positionMs, MediaPlayer.SEEK_CLOSEST);
+        else mp.seekTo(positionMs);
+    }
+
     /** Continues under the image rule, with the image if there is one, else the last frame. */
     private void onVideoFailed(String reason) {
         Log.w(SoilAdsBridge.TAG, "Video playback failed: " + reason);
         if (session != null) session.videoFailed = true;
+        keepLastFrame();
         releasePlayer();
         if (muteButton != null) muteButton.setVisibility(View.GONE);
         updateImageVisibility();
@@ -474,11 +490,41 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         if (muteButton != null) muteButton.setText(session.muted ? SOUND_OFF : SOUND_ON);
     }
 
+    /** What the image view shows: the creative's image, else the captured last video frame. */
+    private Bitmap stillImage() {
+        if (session == null) return null;
+        return session.ad.image != null ? session.ad.image : session.lastFrame;
+    }
+
+    /**
+     * Copies the frame on screen into the session when there is no image to stand in for the
+     * video, so it survives the player being released and the TextureView losing its surface
+     * (backgrounding, recreation). The copy is taken at the video's aspect-fit size: a TextureView
+     * bitmap is the raw frame stretched to the requested size, without the view's transform.
+     */
+    private void keepLastFrame() {
+        if (session == null || session.ad.image != null || session.lastFrame != null) return;
+        if (textureView == null || !firstFrameRendered || !textureView.isAvailable()) return;
+        int width = textureView.getWidth();
+        int height = textureView.getHeight();
+        if (width == 0 || height == 0 || videoWidth == 0 || videoHeight == 0) return;
+        float scale = Math.min(1f, Math.min((float) width / videoWidth, (float) height / videoHeight));
+        try {
+            Bitmap frame = textureView.getBitmap(Math.max(1, Math.round(videoWidth * scale)),
+                    Math.max(1, Math.round(videoHeight * scale)));
+            if (frame == null) return;
+            session.lastFrame = frame;
+            if (imageView != null) imageView.setImageBitmap(frame);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            Log.w(SoilAdsBridge.TAG, "Could not keep the video's last frame: " + e);
+        }
+    }
+
     private void updateImageVisibility() {
         if (imageView == null || session == null) return;
         boolean videoOnScreen = session.ad.isVideo() && !session.videoFailed && !session.videoEnded
                 && firstFrameRendered;
-        boolean show = session.ad.image != null && (!session.ad.isVideo() || !videoOnScreen);
+        boolean show = stillImage() != null && (!session.ad.isVideo() || !videoOnScreen);
         imageView.setVisibility(show ? View.VISIBLE : View.GONE);
         // Once the image stands in for an ended or failed video, the last video frame must not
         // show around it (an aspect-fit image rarely covers the whole area).

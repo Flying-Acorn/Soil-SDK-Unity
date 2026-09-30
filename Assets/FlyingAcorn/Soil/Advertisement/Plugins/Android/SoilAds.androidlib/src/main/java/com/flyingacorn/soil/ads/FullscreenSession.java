@@ -2,6 +2,7 @@ package com.flyingacorn.soil.ads;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.util.Log;
 
@@ -30,10 +31,13 @@ final class FullscreenSession {
 
     // Playback state kept across Activity instances.
     long visibleMs;
+    /** Furthest playback position seen; only moves forward (see {@link #recordVideoPosition}). */
     int videoPositionMs;
     boolean videoEnded;
     boolean videoFailed;
     boolean muted;
+    /** The video's last frame, captured when it ended and there is no image to stand in for it. */
+    Bitmap lastFrame;
 
     private SoilAdActivity activity;
     private boolean attachedOnce;
@@ -49,7 +53,8 @@ final class FullscreenSession {
         }
     };
 
-    private FullscreenSession(String format, LoadedAd ad, ShowOptions options,
+    /** Package-private for tests; the game goes through {@link #start}. */
+    FullscreenSession(String format, LoadedAd ad, ShowOptions options,
                               SoilAdsManager.PresentationListener listener, Handler handler) {
         this.id = nextId++;
         this.format = format;
@@ -107,6 +112,15 @@ final class FullscreenSession {
         if (!ended) listener.onUnlocked();
     }
 
+    /**
+     * Records a playback position read from the player. A player that is still seeking, or that
+     * resumed from the key frame before the saved position, may report less than was already
+     * watched; that must neither rewind the next resume nor take progress back from the lock.
+     */
+    void recordVideoPosition(int positionMs) {
+        if (positionMs > videoPositionMs) videoPositionMs = positionMs;
+    }
+
     boolean isEnded() {
         return ended;
     }
@@ -126,6 +140,10 @@ final class FullscreenSession {
     private void releaseAd() {
         if (adReleased) return;
         adReleased = true;
+        if (lastFrame != null) {
+            lastFrame.recycle();
+            lastFrame = null;
+        }
         ad.release();
     }
 }

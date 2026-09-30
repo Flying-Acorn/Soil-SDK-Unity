@@ -4,11 +4,14 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
+import android.os.Build;
 import android.os.Handler;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -16,31 +19,44 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Validates and decodes creatives on a background thread ("Validation on load" in PROTOCOL.md)
- * and delivers the result on the main thread.
+ * Validates and decodes creatives on background threads ("Validation on load" in PROTOCOL.md)
+ * and delivers the result on the main thread. Each format has its own thread, so a slow video
+ * check for a fullscreen ad never holds up a banner.
  */
 final class MediaLoader implements SoilAdsManager.Loader {
     private static final int LOGO_MAX_SIDE = 256;
+    /** Size of the frame grabbed to prove a video decodes; small is enough (API 27+). */
+    private static final int PROBE_FRAME_SIDE = 64;
 
     private final Handler main;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "SoilAdsLoader");
-            thread.setDaemon(true);
-            return thread;
-        }
-    });
+    private final Map<String, ExecutorService> executors = new HashMap<>();
 
     MediaLoader(Handler main) {
         this.main = main;
+    }
+
+    /** Main thread only, like {@link #load}. */
+    private ExecutorService executor(final String format) {
+        ExecutorService executor = executors.get(format);
+        if (executor == null) {
+            executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable runnable) {
+                    Thread thread = new Thread(runnable, "SoilAdsLoader-" + format);
+                    thread.setDaemon(true);
+                    return thread;
+                }
+            });
+            executors.put(format, executor);
+        }
+        return executor;
     }
 
     @Override
     public SoilAdsManager.Cancellable load(final String format, final AdCreative creative,
                                            final SoilAdsManager.LoadCallback callback) {
         final AtomicBoolean cancelled = new AtomicBoolean();
-        final Future<?> task = executor.submit(new Runnable() {
+        final Future<?> task = executor(format).submit(new Runnable() {
             @Override
             public void run() {
                 if (cancelled.get()) return;
@@ -132,7 +148,10 @@ final class MediaLoader implements SoilAdsManager.Loader {
             String duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             long durationMs = duration == null ? 0 : Long.parseLong(duration.trim());
             if (durationMs <= 0) return 0;
-            Bitmap frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+            Bitmap frame = Build.VERSION.SDK_INT >= 27
+                    ? retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                    PROBE_FRAME_SIDE, PROBE_FRAME_SIDE)
+                    : retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
             if (frame == null) return 0;
             frame.recycle();
             return durationMs;

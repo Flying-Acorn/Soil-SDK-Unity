@@ -25,6 +25,10 @@ Test media in `src/androidTest/assets` was made with ffmpeg:
 ```sh
 ffmpeg -f lavfi -i testsrc=size=320x240:rate=15:duration=3 -f lavfi -i sine=frequency=440:duration=3 \
   -c:v libx264 -profile:v baseline -pix_fmt yuv420p -b:v 60k -c:a aac -b:a 32k -shortest video_3s.mp4
+# One key frame only, so a resume that seeks to the previous key frame would start over
+ffmpeg -f lavfi -i testsrc=size=320x240:rate=15:duration=10 -f lavfi -i sine=frequency=440:duration=10 \
+  -c:v libx264 -profile:v baseline -pix_fmt yuv420p -b:v 60k -x264-params keyint=300:scenecut=0 \
+  -c:a aac -b:a 32k -shortest video_10s.mp4
 ffmpeg -f lavfi -i sine=frequency=440:duration=2 -c:a aac audio_only.mp4
 ffmpeg -f lavfi -i testsrc=size=320x480:rate=1 -frames:v 1 image.png
 ffmpeg -f lavfi -i color=c=orange:size=128x128 -frames:v 1 logo.png
