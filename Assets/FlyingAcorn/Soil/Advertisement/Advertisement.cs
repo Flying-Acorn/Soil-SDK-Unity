@@ -68,6 +68,13 @@ namespace FlyingAcorn.Soil.Advertisement
         // plain content plus the click handlers attached to the game's own views while it is on
         // screen.
         private static NativeAdContent _nativeAdContent;
+
+        // The ad a show has already been counted for. One loaded ad is ONE impression however
+        // many places render it - the native banner and every leaderboard row are one ad seen
+        // once, not five. Keyed by ad id rather than a flag, because LoadNativeAd rebuilds from
+        // the same asset cache deterministically: the same creative coming back round must not
+        // be counted again.
+        private static string _shownNativeAdId;
         // One native ad can be rendered in several places at once (the native banner, a
         // leaderboard row). Click handlers are tracked PER registered view set, so showing the ad
         // in a second place does not unbind the first place's taps, and hiding one place does not
@@ -93,6 +100,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _deferredPlayerEvents.Clear();
             _slotAds.Clear();
             _nativeAdContent = null;
+            _shownNativeAdId = null;
             _nativeAdClickHandlers.Clear();
             _lastRewardedAdShownTime = DateTime.MinValue;
         }
@@ -949,8 +957,18 @@ namespace FlyingAcorn.Soil.Advertisement
             RegisterNativeAdClickTargets(references);
 
             var content = _nativeAdContent;
+
+            // Raised every time, because it is how a caller gets the creative to render - each
+            // place showing the ad needs it.
             Events.InvokeOnNativeAdContentReady(content);
-            Events.InvokeOnNativeAdShown(new AdEventData(AdFormat.native));
+
+            // Raised once per ad, because it is the impression.
+            if (_shownNativeAdId != content.AdId)
+            {
+                _shownNativeAdId = content.AdId;
+                Events.InvokeOnNativeAdShown(new AdEventData(AdFormat.native));
+            }
+
             return content;
         }
 
@@ -978,7 +996,12 @@ namespace FlyingAcorn.Soil.Advertisement
                 if (!target.TryGetComponent(out SoilNativeAdClickHandler handler))
                     handler = target.AddComponent<SoilNativeAdClickHandler>();
 
-                handler.Bind(OnNativeAdClicked);
+                // Capture the ad this view is rendering rather than reading the current one at
+                // click time. The two can differ - a surface can still be showing an earlier
+                // creative after the ad was replaced - and a tap must always open the advertiser
+                // the player is actually looking at.
+                var clicked = _nativeAdContent;
+                handler.Bind(() => OnNativeAdClicked(clicked));
                 handlers.Add(handler);
             }
 
@@ -1013,9 +1036,9 @@ namespace FlyingAcorn.Soil.Advertisement
                 ClearNativeAdClickTargets(references);
         }
 
-        private static void OnNativeAdClicked()
+        private static void OnNativeAdClicked(NativeAdContent content)
         {
-            var clickUrl = _nativeAdContent?.ClickUrl;
+            var clickUrl = content?.ClickUrl;
             Events.InvokeOnNativeAdClicked(new AdEventData(AdFormat.native));
 
             if (string.IsNullOrEmpty(clickUrl))
@@ -1064,6 +1087,7 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             ClearAllNativeAdClickTargets();
             _nativeAdContent = null;
+            _shownNativeAdId = null;
         }
 
         #endregion
