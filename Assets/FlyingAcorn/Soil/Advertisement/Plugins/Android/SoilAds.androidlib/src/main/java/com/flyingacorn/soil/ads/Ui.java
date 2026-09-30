@@ -80,6 +80,8 @@ final class Ui {
         view.setTypeface(Typeface.DEFAULT_BOLD);
         view.setMaxLines(1);
         view.setEllipsize(TextUtils.TruncateAt.END);
+        // A long call to action must not squeeze the title and description away.
+        view.setMaxWidth(dp(context, 160));
         view.setGravity(Gravity.CENTER);
         view.setBackground(rounded(CTA_COLOR, dp(context, 20)));
         view.setPadding(dp(context, 14), dp(context, 8), dp(context, 14), dp(context, 8));

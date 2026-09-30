@@ -98,5 +98,7 @@ UIButton *SoilAdsMakeCallToActionButton(NSString *title, CGFloat fontSize)
     [button setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [button setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 1
                                             forAxis:UILayoutConstraintAxisHorizontal];
+    // A long call to action must not squeeze the title and description away.
+    [button.widthAnchor constraintLessThanOrEqualToConstant:160].active = YES;
     return button;
 }

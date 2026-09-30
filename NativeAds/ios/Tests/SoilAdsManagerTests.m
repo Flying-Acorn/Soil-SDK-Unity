@@ -26,6 +26,16 @@ static const NSTimeInterval Timeout = 10;
 @property (nonatomic, strong) SoilAdsManager *manager;
 @end
 
+static UILabel *FindLabel(UIView *view, NSString *text)
+{
+    if ([view isKindOfClass:[UILabel class]] && [((UILabel *)view).text isEqualToString:text]) return (UILabel *)view;
+    for (UIView *child in view.subviews) {
+        UILabel *found = FindLabel(child, text);
+        if (found) return found;
+    }
+    return nil;
+}
+
 @implementation SoilAdsManagerTests
 
 - (void)setUp
@@ -271,6 +281,21 @@ static const NSTimeInterval Timeout = 10;
 }
 
 #pragma mark - Fullscreen
+
+- (void)testLongCallToActionLeavesRoomForTheTitle
+{
+    NSMutableDictionary *fields = [[self imageAd] mutableCopy];
+    fields[@"callToAction"] = @"دانلود و نصب رایگان همین حالا با تخفیف ویژه امروز";
+    [self load:@"interstitial" fields:fields];
+    [self showFullscreen:@"interstitial" options:[self fullscreenOptions:5 fraction:0.8 minVideo:5]];
+    SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
+    [vc.view layoutIfNeeded];
+
+    XCTAssertLessThanOrEqual(vc.callToActionButton.frame.size.width, 160.5);
+    UILabel *title = FindLabel(vc.view, @"Word Master");
+    XCTAssertNotNil(title);
+    XCTAssertGreaterThan(title.frame.size.width, 80, @"the title keeps readable room");
+}
 
 - (void)testMediaFillsTheScreenAndTheBottomBarHugsItsContent
 {

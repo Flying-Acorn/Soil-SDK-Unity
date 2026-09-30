@@ -426,6 +426,33 @@ public class SoilAdsDeviceTest {
     }
 
     @Test
+    public void longCallToActionLeavesRoomForTheTitle() throws Exception {
+        load("interstitial", creative("imagePath", "image.png", "title", "Word Master",
+                "callToAction", "دانلود و نصب رایگان همین حالا با تخفیف ویژه امروز"));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
+        View cta = find(ad, "soil_ad_cta");
+        instrumentation.waitForIdleSync();
+        float density = ad.getResources().getDisplayMetrics().density;
+        assertTrue("cta " + cta.getWidth() + "px", cta.getWidth() <= Math.ceil(160 * density));
+        View title = findText(ad.getWindow().getDecorView(), "Word Master");
+        assertNotNull(title);
+        assertTrue("title " + title.getWidth() + "px", title.getWidth() > 80 * density);
+    }
+
+    private static View findText(View view, String text) {
+        if (view instanceof android.widget.TextView && text.contentEquals(((android.widget.TextView) view).getText()))
+            return view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = findText(group.getChildAt(i), text);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    @Test
     public void clickWithoutUrlStillReportsClicked() throws Exception {
         load("interstitial", creative("imagePath", "image.png", "callToAction", "Install"));
         SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
