@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.flyingacorn.soil.ads">
+
+    <application>
+        <!-- Fullscreen interstitial / rewarded player. Handles its own configuration changes so a
+             rotation never restarts the ad. -->
+        <activity
+            android:name="com.flyingacorn.soil.ads.SoilAdActivity"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="behind"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+    </application>
+</manifest>

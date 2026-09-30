@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Stand-in for Unity's activity. -->
+        <activity
+            android:name="com.flyingacorn.soil.ads.HostActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+        <!-- Covers the ad to simulate the app leaving the foreground. -->
+        <activity
+            android:name="com.flyingacorn.soil.ads.CoverActivity"
+            android:exported="false" />
+    </application>
+</manifest>
