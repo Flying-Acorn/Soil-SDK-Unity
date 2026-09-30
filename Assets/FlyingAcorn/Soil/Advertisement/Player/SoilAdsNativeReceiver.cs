@@ -7,7 +7,8 @@ namespace FlyingAcorn.Soil.Advertisement.Player
     /// <summary>
     /// The hidden, scene-independent object the native players send their events to
     /// (UnitySendMessage), and the frame tick of the ad runtime. Its name is part of the
-    /// contract with the players, so it must stay unique.
+    /// contract with the players, so it must stay unique. It has no OnGUI: IMGUI costs every
+    /// frame, so only the Editor's simulated player adds one (<see cref="EditorAdPlayerView"/>).
     /// </summary>
     [AddComponentMenu("")]
     internal sealed class SoilAdsNativeReceiver : MonoBehaviour
@@ -17,7 +18,6 @@ namespace FlyingAcorn.Soil.Advertisement.Player
 
         internal event Action<string> MessageReceived;
         internal event Action Ticked;
-        internal event Action Gui;
 
         private static SoilAdsNativeReceiver _instance;
 
@@ -41,11 +41,6 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         private void Update()
         {
             Ticked?.Invoke();
-        }
-
-        private void OnGUI()
-        {
-            Gui?.Invoke();
         }
 
         private void OnDestroy()

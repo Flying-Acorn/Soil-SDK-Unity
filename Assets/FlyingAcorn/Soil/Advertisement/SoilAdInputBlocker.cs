@@ -1,3 +1,6 @@
+using System;
+using UnityEngine;
+
 namespace FlyingAcorn.Soil.Advertisement
 {
     /// <summary>
@@ -15,7 +18,35 @@ namespace FlyingAcorn.Soil.Advertisement
     /// </remarks>
     public static class SoilAdInputBlocker
     {
+        private const string Automatic =
+            "Input blocking is automatic now: fullscreen ads are drawn natively over a paused game. " +
+            "This call does nothing; read IsBlocked or use the ad events.";
+
         /// <summary>True while an interstitial or rewarded ad is on screen.</summary>
         public static bool IsBlocked => Advertisement.IsFullscreenAdShowing;
+
+        /// <summary>Does nothing: blocking follows the ad on screen.</summary>
+        [Obsolete(Automatic)]
+        public static void Block(Canvas adCanvas = null)
+        {
+        }
+
+        /// <summary>Does nothing: blocking follows the ad on screen.</summary>
+        [Obsolete(Automatic)]
+        public static void Unblock()
+        {
+        }
+
+        /// <summary>Does nothing: blocking follows the ad on screen.</summary>
+        [Obsolete(Automatic)]
+        public static void ForceUnblock()
+        {
+        }
+
+        /// <summary>Does nothing: the SDK has its own watchdog for an ad that never answers.</summary>
+        [Obsolete(Automatic)]
+        public static void FailsafeTick()
+        {
+        }
     }
 }

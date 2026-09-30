@@ -52,6 +52,9 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
 
         /// <summary>Unity side: the ad server or the asset downloads could not be reached.</summary>
         public const string Network = "network";
+
+        /// <summary>Unity side: the player never answered a load or a fullscreen show.</summary>
+        public const string Timeout = "timeout";
     }
 
     /// <summary>One message from a native player.</summary>

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
 using FlyingAcorn.Analytics;
+using FlyingAcorn.Soil.Advertisement.Logic;
 using FlyingAcorn.Soil.Advertisement.Models;
 using FlyingAcorn.Soil.Core.User;
 using FlyingAcorn.Soil.Core.Data; // DataUtils
@@ -49,7 +50,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         // Every asset, videos included, is a downloaded file. Entries from older SDK versions that
-        // stored a video's streaming URL here are invalid and get downloaded again.
+        // stored a video's streaming URL here are invalid: they are dropped when the cache loads,
+        // and the next caching round of that format downloads the file (only the missing ones,
+        // see AssetCache.CacheAssetsForAdGroupAsync).
         public bool IsValid => !string.IsNullOrEmpty(LocalPath) && File.Exists(LocalPath);
 
         public string DisplayName => $"{AdFormat}_{AssetType}_{Id}";
@@ -67,19 +70,69 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         private static readonly object _lockObject = new();
         private static string CacheDirectory => Path.Combine(Application.persistentDataPath, "SoilAssets");
 
-        static AssetCache()
+        private const string PartialFileSuffix = ".part";
+
+        // Downloads give up when no byte arrives for this long (unscaled, foreground time), or when
+        // they take longer than the cap altogether; failed downloads are retried with a backoff.
+        private const float DownloadInactivitySeconds = 30f;
+        private const float VideoDownloadCapSeconds = 600f;
+        private const float ImageDownloadCapSeconds = 120f;
+        private static readonly float[] DownloadRetryDelaysSeconds = { 2f, 6f };
+
+        // A frame longer than this (the app was in the background, or paused under a fullscreen
+        // ad) counts only this much towards a download's timeouts.
+        private const float MaxCountedFrameSeconds = 0.5f;
+
+        private static bool _directoryExcludedFromBackup;
+
+        private static void EnsureCacheDirectory()
         {
-            // Ensure cache directory exists
-            if (!Directory.Exists(CacheDirectory))
+            var directory = CacheDirectory;
+            if (!Directory.Exists(directory))
             {
-                Directory.CreateDirectory(CacheDirectory);
+                Directory.CreateDirectory(directory);
+                _directoryExcludedFromBackup = false;
             }
+
+            // Once per session, so directories (and files) of older SDK versions are covered too:
+            // excluding a directory excludes everything in it.
+            if (_directoryExcludedFromBackup) return;
+            ExcludeFromBackup(directory);
+            _directoryExcludedFromBackup = true;
+        }
+
+        /// <summary>
+        /// Ad files can be downloaded again at any time, so they must not take the player's iCloud
+        /// backup space (Apple's iOS Data Storage Guidelines).
+        /// </summary>
+        private static void ExcludeFromBackup(string path)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            try { UnityEngine.iOS.Device.SetNoBackupFlag(path); }
+            catch (Exception ex) { MyDebug.LogWarning($"[Advertisement] Could not exclude {path} from backup: {ex.Message}"); }
+#endif
+        }
+
+        /// <summary>Forgets the in-memory index; for a new play session without a domain reload.</summary>
+        internal static void ResetStatics()
+        {
+            lock (_lockObject)
+            {
+                _cachedAssets.Clear();
+                _currentlyDownloading.Clear();
+            }
+            _directoryExcludedFromBackup = false;
         }
 
         /// <summary>
         /// Caches assets for a specific ad format from multiple ads within the same ad group to ensure comprehensive asset coverage.
         /// This approach ensures that video ads have image fallbacks by caching from both video and image ads in the same group.
         /// The ad group itself is expected to already be selected (server-side, weighted) for this format.
+        ///
+        /// Caching is incremental: ads whose files are already cached for the format are preferred,
+        /// files already on disk are kept, only the missing ones are downloaded (e.g. a video an
+        /// older SDK kept as a streaming URL), and cached files of the format the plan no longer
+        /// uses are deleted. With everything on disk this finishes without touching the network.
         /// </summary>
         public static async UniTask CacheAssetsForAdGroupAsync(AdGroup adGroup, AdFormat adFormat, Action<AdFormat> onFormatReady = null)
         {
@@ -92,8 +145,6 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return;
             }
 
-            var random = new System.Random();
-
             // Get all ads in this group with the requested format
             var eligibleAds = GetEligibleAdsForFormat(adGroup, adFormat);
 
@@ -104,105 +155,35 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return;
             }
 
+            var plan = PlanFormatAssets(eligibleAds, adFormat);
+
+            // Files of ads the plan no longer uses would otherwise be picked up by the creative
+            // builder next to the planned ones.
+            HashSet<string> plannedKeys = new(plan.Select(p => p.cacheKey));
+            List<string> cachedKeys;
+            lock (_lockObject)
+            {
+                cachedKeys = _cachedAssets.Where(kvp => kvp.Value.AdFormat == adFormat).Select(kvp => kvp.Key).ToList();
+            }
+            foreach (var staleKey in AssetCachePlan.Stale(cachedKeys, plannedKeys))
+                RemoveEntry(staleKey);
+
+            var missing = AssetCachePlan.Missing(plan.Select(p => p.cacheKey), IsCachedAndValid);
             var cachingTasks = new List<UniTask>();
-
-            // Native ads are cached whole, from a single randomly chosen ad. The video/image
-            // fallback pairing below exists so a video ad can borrow another ad's image; native
-            // ads have no video and are rendered by the game as one creative, so mixing assets
-            // across ads here would put one advertiser's icon next to another's headline.
-            if (adFormat == AdFormat.native)
+            foreach (var (cacheKey, asset, assetType, ad) in plan)
             {
-                var nativeAd = eligibleAds[random.Next(eligibleAds.Count)];
-                MyDebug.Verbose($"Caching native assets from ad: {nativeAd.id}");
-                foreach (var (asset, assetType) in GetAssetsToCache(nativeAd, adFormat))
-                {
-                    if (!string.IsNullOrEmpty(asset?.url))
-                    {
-                        var nativeCacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                        cachingTasks.Add(CacheAssetAsync(nativeCacheKey, asset, assetType, adFormat, adGroup.click_url, nativeAd));
-                    }
-                }
-
-                if (cachingTasks.Count > 0)
-                    await UniTask.WhenAll(cachingTasks);
-                else
-                    MyDebug.LogWarning($"No assets found to cache for {adFormat} format");
-
-                PersistCachedAssets();
-                onFormatReady?.Invoke(adFormat);
-                return;
-            }
-
-            // NEW APPROACH: Cache assets from multiple ads in the same ad group to ensure we have both video and image fallbacks
-            // This ensures that even if one ad only has video, another ad in the same group provides the image fallback
-
-            // Separate ads by their primary asset type
-            var videoAds = eligibleAds.Where(ad => ad.main_video?.url != null).ToList();
-            var imageAds = eligibleAds.Where(ad => ad.main_image?.url != null).ToList();
-
-            MyDebug.Verbose($"Ad group breakdown - Video ads: {videoAds.Count}, Image ads: {imageAds.Count}");
-
-            // Cache from video ad (if available) to get video + any accompanying assets
-            Ad videoAd = null;
-            HashSet<AssetType> videoAdAssetTypes = new();
-            if (videoAds.Any())
-            {
-                videoAd = videoAds[random.Next(videoAds.Count)];
-                MyDebug.Verbose($"Caching assets from video ad: {videoAd.id}");
-                var videoAssetsToCache = GetAssetsToCache(videoAd, adFormat);
-                videoAdAssetTypes = videoAssetsToCache.Select(x => x.assetType).ToHashSet();
-
-                foreach (var (asset, assetType) in videoAssetsToCache)
-                {
-                    if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
-                    {
-                        var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                        cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, videoAd));
-                    }
-                }
-            }
-
-            // Cache from image ad (if available and different from video ad) to ensure image fallback
-            if (imageAds.Any())
-            {
-                var imageAd = imageAds[random.Next(imageAds.Count)];
-
-                // Only cache if it's different from the video ad (avoid duplicates) or if no video ad was processed
-                if (videoAd == null || videoAd.id != imageAd.id)
-                {
-                    MyDebug.Verbose($"Caching assets from image ad: {imageAd.id}");
-                    var imageAssetsToCache = GetAssetsToCache(imageAd, adFormat);
-
-                    // Track which asset types the actually-cached video ad already covers (must match
-                    // the same videoAd instance used above, not just any video ad in the group, otherwise
-                    // this can either skip caching a needed fallback image or cache a second, mismatched
-                    // image alongside the video's own image).
-                    var existingAssetTypes = videoAdAssetTypes;
-
-                    foreach (var (asset, assetType) in imageAssetsToCache)
-                    {
-                        if (asset?.url != null && !string.IsNullOrEmpty(asset.url))
-                        {
-                            // Only cache if we don't already have this asset type from video ad
-                            if (!existingAssetTypes.Contains(assetType))
-                            {
-                                var cacheKey = GenerateCacheKey(adFormat, assetType, asset.id);
-                                cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, imageAd));
-                                MyDebug.Verbose($"Adding {assetType} asset from image ad to ensure fallback coverage");
-                            }
-                            else
-                            {
-                                MyDebug.Verbose($"Skipping {assetType} asset - already covered by video ad");
-                            }
-                        }
-                    }
-                }
+                if (!missing.Contains(cacheKey)) continue;
+                cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
             }
 
             if (cachingTasks.Count > 0)
             {
+                MyDebug.Verbose($"Downloading {cachingTasks.Count} of {plan.Count} {adFormat} assets");
                 await UniTask.WhenAll(cachingTasks);
-                MyDebug.Verbose($"Successfully cached assets for {adFormat} format");
+            }
+            else if (plan.Count > 0)
+            {
+                MyDebug.Verbose($"All {plan.Count} {adFormat} assets already cached");
             }
             else
             {
@@ -214,6 +195,192 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
             // Invoke callback to signal this format is ready
             onFormatReady?.Invoke(adFormat);
+        }
+
+        /// <summary>
+        /// Which files the format needs: native ads come whole from one ad; the other formats take
+        /// a video ad's files plus, from an image ad of the same group, whatever kinds of asset the
+        /// video ad lacks (so a video has an image fallback). Ads already cached are preferred.
+        /// </summary>
+        private static List<(string cacheKey, Asset asset, AssetType assetType, Ad ad)> PlanFormatAssets(
+            List<Ad> eligibleAds, AdFormat adFormat)
+        {
+            var random = new System.Random();
+            var plan = new List<(string, Asset, AssetType, Ad)>();
+
+            // How much of each ad is already cached for this format; a cached video counts most,
+            // since it is by far the largest file.
+            var cachedFiles = new Dictionary<string, int>();
+            var cachedVideos = new HashSet<string>();
+            lock (_lockObject)
+            {
+                foreach (var entry in _cachedAssets.Values)
+                {
+                    if (entry.AdFormat != adFormat || string.IsNullOrEmpty(entry.AdId)) continue;
+                    cachedFiles[entry.AdId] = cachedFiles.TryGetValue(entry.AdId, out var n) ? n + 1 : 1;
+                    if (entry.AssetType == AssetType.video) cachedVideos.Add(entry.AdId);
+                }
+            }
+
+            int CachedScore(string adId) =>
+                (cachedFiles.TryGetValue(adId, out var n) ? n : 0) + (cachedVideos.Contains(adId) ? 1000 : 0);
+
+            Ad Pick(List<Ad> ads, Func<string, int> score)
+            {
+                var index = AssetCachePlan.PickCandidate(ads.Select(a => a.id).ToList(), score, random.Next);
+                return index < 0 ? null : ads[index];
+            }
+
+            void Add(Ad ad, (Asset asset, AssetType assetType) item)
+            {
+                if (string.IsNullOrEmpty(item.asset?.url)) return;
+                var key = GenerateCacheKey(adFormat, item.assetType, item.asset.id);
+                if (plan.Any(p => p.Item1 == key)) return;
+                plan.Add((key, item.asset, item.assetType, ad));
+            }
+
+            // Native ads are cached whole, from a single chosen ad. The video/image fallback
+            // pairing below exists so a video ad can borrow another ad's image; native ads have no
+            // video and are rendered by the game as one creative, so mixing assets across ads here
+            // would put one advertiser's icon next to another's headline.
+            if (adFormat == AdFormat.native)
+            {
+                var nativeAd = Pick(eligibleAds, CachedScore);
+                MyDebug.Verbose($"Caching native assets from ad: {nativeAd.id}");
+                foreach (var item in GetAssetsToCache(nativeAd, adFormat))
+                    Add(nativeAd, item);
+                return plan;
+            }
+
+            // Separate ads by their primary asset type
+            var videoAds = eligibleAds.Where(ad => ad.main_video?.url != null).ToList();
+            var imageAds = eligibleAds.Where(ad => ad.main_image?.url != null).ToList();
+            MyDebug.Verbose($"Ad group breakdown - Video ads: {videoAds.Count}, Image ads: {imageAds.Count}");
+
+            // The video ad's files, if the group has a video ad.
+            Ad videoAd = null;
+            HashSet<AssetType> videoAdAssetTypes = new();
+            if (videoAds.Any())
+            {
+                videoAd = Pick(videoAds, CachedScore);
+                MyDebug.Verbose($"Caching assets from video ad: {videoAd.id}");
+                var videoAssetsToCache = GetAssetsToCache(videoAd, adFormat);
+                videoAdAssetTypes = videoAssetsToCache.Select(x => x.assetType).ToHashSet();
+                foreach (var item in videoAssetsToCache)
+                    Add(videoAd, item);
+            }
+
+            // The image ad's files the video ad does not cover, so a video has an image fallback.
+            if (imageAds.Any())
+            {
+                // Prefers the image ad cached last time; the video ad itself does not count here.
+                var imageAd = Pick(imageAds, id => videoAd != null && id == videoAd.id ? 0 : CachedScore(id));
+
+                // Only if it's different from the video ad (avoid duplicates) or if there is no video ad.
+                if (videoAd == null || videoAd.id != imageAd.id)
+                {
+                    MyDebug.Verbose($"Caching assets from image ad: {imageAd.id}");
+                    // Must be compared against the same videoAd instance used above, not just any
+                    // video ad in the group, otherwise this can either skip a needed fallback image
+                    // or cache a second, mismatched image alongside the video's own image.
+                    foreach (var item in GetAssetsToCache(imageAd, adFormat))
+                    {
+                        if (videoAdAssetTypes.Contains(item.assetType))
+                        {
+                            MyDebug.Verbose($"Skipping {item.assetType} asset - already covered by video ad");
+                            continue;
+                        }
+                        Add(imageAd, item);
+                    }
+                }
+            }
+
+            return plan;
+        }
+
+        private static bool IsCachedAndValid(string cacheKey)
+        {
+            AssetCacheEntry entry;
+            lock (_lockObject)
+            {
+                _cachedAssets.TryGetValue(cacheKey, out entry);
+            }
+            return entry != null && entry.IsValid;
+        }
+
+        /// <summary>Drops one entry from the index and deletes its file.</summary>
+        private static void RemoveEntry(string cacheKey)
+        {
+            AssetCacheEntry entry;
+            lock (_lockObject)
+            {
+                if (!_cachedAssets.TryGetValue(cacheKey, out entry)) return;
+                _cachedAssets.Remove(cacheKey);
+            }
+
+            DeleteFileQuietly(entry.LocalPath);
+            MyDebug.Verbose($"Removed cached asset {cacheKey}");
+        }
+
+        private static void DeleteFileQuietly(string path)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(path) && IsInsideCacheDirectory(path) && File.Exists(path))
+                    File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"Failed to delete cached file {path}: {ex.Message}");
+            }
+        }
+
+        private static bool IsInsideCacheDirectory(string path)
+        {
+            try
+            {
+                var directory = Path.GetFullPath(CacheDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                return Path.GetFullPath(path).StartsWith(directory, StringComparison.Ordinal);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Removes the entry of one format's asset (and its file), leaving the same asset of other
+        /// formats alone.
+        /// </summary>
+        internal static bool RemoveCachedAsset(AdFormat adFormat, string assetId)
+        {
+            List<string> keys;
+            lock (_lockObject)
+            {
+                keys = _cachedAssets.Where(kvp => kvp.Value.AdFormat == adFormat && kvp.Value.Id == assetId)
+                    .Select(kvp => kvp.Key).ToList();
+            }
+
+            foreach (var key in keys)
+                RemoveEntry(key);
+            if (keys.Count > 0) PersistCachedAssets();
+            return keys.Count > 0;
+        }
+
+        /// <summary>Drops the entries of a format whose files are gone; returns how many.</summary>
+        internal static int RemoveMissingFiles(AdFormat adFormat)
+        {
+            List<string> keys;
+            lock (_lockObject)
+            {
+                keys = _cachedAssets.Where(kvp => kvp.Value.AdFormat == adFormat && !kvp.Value.IsValid)
+                    .Select(kvp => kvp.Key).ToList();
+                foreach (var key in keys)
+                    _cachedAssets.Remove(key);
+            }
+
+            if (keys.Count > 0) PersistCachedAssets();
+            return keys.Count;
         }
 
         /// <summary>
@@ -435,12 +602,20 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             try
             {
                 // Thread-safe check for already cached or currently downloading
+                AssetCacheEntry unusable = null;
                 lock (_lockObject)
                 {
-                    if (_cachedAssets.ContainsKey(cacheKey))
+                    if (_cachedAssets.TryGetValue(cacheKey, out var existing))
                     {
-                        MyDebug.Verbose($"Asset already cached: {cacheKey}");
-                        return;
+                        if (existing.IsValid)
+                        {
+                            MyDebug.Verbose($"Asset already cached: {cacheKey}");
+                            return;
+                        }
+
+                        // Its file is gone (or it is an older SDK's streaming-URL entry): download again.
+                        _cachedAssets.Remove(cacheKey);
+                        unusable = existing;
                     }
 
                     if (_currentlyDownloading.Contains(cacheKey))
@@ -452,6 +627,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     _currentlyDownloading.Add(cacheKey);
                 }
 
+                if (unusable != null) DeleteFileQuietly(unusable.LocalPath);
+                EnsureCacheDirectory();
+
                 // Resolve URL (handle relative URLs)
                 var resolvedUrl = ResolveAssetUrl(asset.url);
                 Analytics.MyDebug.Verbose($"Processing asset {cacheKey} ({assetType}) from URL: {resolvedUrl}");
@@ -459,25 +637,27 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 // Every file - videos included - is on disk before its ad counts as ready: the
                 // native players only play local files, so a slow network delays an ad instead of
                 // stalling it on screen. Downloads stream straight to disk.
+                // File names never take a server string as is: the id is reduced to [A-Za-z0-9_-]
+                // (or hashed) and the extension to a plain one, so nothing can escape SoilAssets.
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-                var extension = Path.GetExtension(new Uri(resolvedUrl).AbsolutePath);
-                var fileName = $"{cacheKey}_{timestamp}{extension}";
+                var extension = AssetCachePlan.SafeExtension(Path.GetExtension(new Uri(resolvedUrl).AbsolutePath));
+                var baseName = $"{adFormat}_{assetType}_{AssetCachePlan.SafeFileId(asset.id)}";
+                var fileName = $"{baseName}_{timestamp}{extension}";
                 var filePath = Path.Combine(CacheDirectory, fileName);
 
                 // Ensure the file doesn't exist (additional safety check)
                 var counter = 0;
                 while (File.Exists(filePath) && counter < 100)
                 {
-                    fileName = $"{cacheKey}_{timestamp}_{counter}{extension}";
+                    fileName = $"{baseName}_{timestamp}_{counter}{extension}";
                     filePath = Path.Combine(CacheDirectory, fileName);
                     counter++;
                 }
 
-                // Videos are megabytes where images are kilobytes; give them time on slow networks.
-                var timeoutSeconds = assetType == AssetType.video
-                    ? Math.Max(60, UserPlayerPrefs.RequestTimeout * 6)
-                    : (int)(UserPlayerPrefs.RequestTimeout * 1.5f);
-                await DownloadToFileAsync(resolvedUrl, filePath, timeoutSeconds);
+                // Videos are megabytes where images are kilobytes: both give up only when the
+                // download stalls, but a video may take much longer overall on a slow network.
+                var capSeconds = assetType == AssetType.video ? VideoDownloadCapSeconds : ImageDownloadCapSeconds;
+                await DownloadToFileAsync(resolvedUrl, filePath, capSeconds);
 
                 var cachedAsset = new AssetCacheEntry
                 {
@@ -524,30 +704,96 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
         /// <summary>
         /// Downloads a URL to a file, through a temporary file so a failed or partial download
-        /// never leaves something that looks cached.
+        /// never leaves something that looks cached. A download that stalls (no bytes for
+        /// <see cref="DownloadInactivitySeconds"/>) or outlasts <paramref name="capSeconds"/> is
+        /// aborted; transient failures are retried with a backoff. Timeouts count unscaled
+        /// foreground time, so a paused game (timeScale 0) does not stop them.
         /// </summary>
-        private static async UniTask DownloadToFileAsync(string url, string filePath, int timeoutSeconds)
+        private static async UniTask DownloadToFileAsync(string url, string filePath, float capSeconds)
         {
-            var partialPath = filePath + ".part";
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    await DownloadOnceAsync(url, filePath, capSeconds);
+                    ExcludeFromBackup(filePath);
+                    return;
+                }
+                catch (DownloadException ex) when (ex.Retryable && attempt < DownloadRetryDelaysSeconds.Length)
+                {
+                    var delay = DownloadRetryDelaysSeconds[attempt];
+                    MyDebug.Verbose($"[Advertisement] Download failed ({ex.Message}); retrying in {delay} s");
+                    await UniTask.Delay(TimeSpan.FromSeconds(delay), DelayType.Realtime);
+                }
+            }
+        }
+
+        private sealed class DownloadException : Exception
+        {
+            public readonly bool Retryable;
+
+            public DownloadException(string message, bool retryable) : base(message)
+            {
+                Retryable = retryable;
+            }
+        }
+
+        private static async UniTask DownloadOnceAsync(string url, string filePath, float capSeconds)
+        {
+            var partialPath = filePath + PartialFileSuffix;
             using var request = UnityWebRequest.Get(url);
             request.downloadHandler = new DownloadHandlerFile(partialPath) { removeFileOnAbort = true };
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, timeoutSeconds);
+                var operation = request.SendWebRequest();
+                var elapsed = 0f;
+                var idle = 0f;
+                ulong lastBytes = 0;
+                while (!operation.isDone)
+                {
+                    await UniTask.Yield();
+                    if (operation.isDone) break;
 
-                if (request.result != UnityWebRequest.Result.Success
-                    || request.responseCode < 200 || request.responseCode >= 300)
-                    throw new Exception($"Failed to download asset from {url}: {request.responseCode} {request.error}");
+                    var frame = Mathf.Min(Time.unscaledDeltaTime, MaxCountedFrameSeconds);
+                    elapsed += frame;
+                    var bytes = request.downloadedBytes;
+                    if (bytes != lastBytes)
+                    {
+                        lastBytes = bytes;
+                        idle = 0f;
+                    }
+                    else
+                    {
+                        idle += frame;
+                    }
+
+                    if (idle >= DownloadInactivitySeconds)
+                    {
+                        request.Abort();
+                        throw new DownloadException($"no data for {DownloadInactivitySeconds} s from {url}", true);
+                    }
+
+                    if (elapsed >= capSeconds)
+                    {
+                        request.Abort();
+                        throw new DownloadException($"took longer than {capSeconds} s: {url}", false);
+                    }
+                }
+
+                var code = request.responseCode;
+                if (request.result != UnityWebRequest.Result.Success || code < 200 || code >= 300)
+                {
+                    // No response, a server error or throttling may pass; a 4xx will not.
+                    var retryable = request.result == UnityWebRequest.Result.ConnectionError
+                                    || code == 0 || code == 408 || code == 429 || code >= 500;
+                    throw new DownloadException($"Failed to download asset from {url}: {code} {request.error}", retryable);
+                }
 
                 if (!File.Exists(partialPath) || new FileInfo(partialPath).Length == 0)
-                    throw new Exception($"Failed to download asset from {url}: No data received");
+                    throw new DownloadException($"Failed to download asset from {url}: No data received", true);
 
                 if (File.Exists(filePath)) File.Delete(filePath);
                 File.Move(partialPath, filePath);
-            }
-            catch (SoilException sx)
-            {
-                throw new Exception($"Failed to download asset from {url}: {sx.Message}");
             }
             finally
             {
@@ -748,6 +994,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
             });
 
+            // The directory was recreated: exclude it from backups again.
+            _directoryExcludedFromBackup = false;
+            if (Directory.Exists(cacheDirectoryPath)) EnsureCacheDirectory();
+
             // Log results back on the main thread
             if (clearException != null)
             {
@@ -946,13 +1196,19 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Loads cached assets from PlayerPrefs asynchronously to avoid blocking the main thread
+        /// Loads cached assets from PlayerPrefs asynchronously to avoid blocking the main thread.
+        /// Entries whose file moved with the app's data container (iOS moves it on app updates)
+        /// are pointed at the file's new place; entries without a file are dropped. Then, unless a
+        /// download is running, files in SoilAssets that no entry references (leftovers of
+        /// interrupted downloads and of dropped entries) are deleted.
         /// </summary>
         public static async UniTask LoadCachedAssetsAsync()
         {
             List<AssetCacheEntry> persistedAssets = null;
             Exception loadException = null;
             int loadedCount = 0;
+            int relocatedCount = 0;
+            int deletedCount = 0;
 
             // First, get the persisted assets on the main thread (PlayerPrefs access)
             try
@@ -965,27 +1221,48 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return;
             }
 
+            // Application paths may only be read on the main thread.
+            string cacheDirectory;
+            try
+            {
+                EnsureCacheDirectory();
+                cacheDirectory = CacheDirectory;
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"[Advertisement] Asset cache directory unavailable: {ex.Message}");
+                cacheDirectory = null;
+            }
+
             // Then process them on a background thread
             await UniTask.RunOnThreadPool(() =>
             {
                 try
                 {
-                    if (persistedAssets != null && persistedAssets.Count > 0)
+                    lock (_lockObject)
                     {
-                        lock (_lockObject)
+                        if (persistedAssets != null && persistedAssets.Count > 0)
                         {
                             // Clear current cache
                             _cachedAssets.Clear();
 
-                            // Load valid assets
-                            foreach (var asset in persistedAssets.Where(a => a.IsValid))
+                            foreach (var asset in persistedAssets)
                             {
+                                if (asset == null) continue;
+                                if (!asset.IsValid && cacheDirectory != null && Relocate(asset, cacheDirectory))
+                                    relocatedCount++;
+                                if (!asset.IsValid) continue;
+
                                 var cacheKey = GenerateCacheKey(asset.AdFormat, asset.AssetType, asset.Id);
                                 _cachedAssets[cacheKey] = asset;
                             }
 
                             loadedCount = _cachedAssets.Count;
                         }
+
+                        // Only while nothing is being written into the directory.
+                        if (cacheDirectory != null && _currentlyDownloading.Count == 0)
+                            deletedCount = DeleteOrphanedFiles(cacheDirectory);
                     }
                 }
                 catch (Exception ex)
@@ -994,15 +1271,86 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
             });
 
+            if (relocatedCount > 0) PersistCachedAssets();
+
             // Finally, log the results back on the main thread
             if (loadException != null)
             {
                 AnalyticsManager.ErrorEvent(Analytics.Constants.ErrorSeverity.FlyingAcornErrorSeverity.WarningSeverity, "AssetCache_FailedToProcessAssets");
             }
-            else if (loadedCount > 0)
+            else
             {
-                MyDebug.Verbose($"Loaded {loadedCount} cached assets from PlayerPrefs");
+                if (loadedCount > 0)
+                    MyDebug.Verbose($"Loaded {loadedCount} cached assets from PlayerPrefs ({relocatedCount} relocated)");
+                if (deletedCount > 0)
+                    MyDebug.Verbose($"Deleted {deletedCount} orphaned files from the asset cache");
             }
+        }
+
+        /// <summary>
+        /// Points an entry at its file in the current cache directory when the file is there under
+        /// the same name (the data container moved). Callers hold the lock.
+        /// </summary>
+        private static bool Relocate(AssetCacheEntry asset, string cacheDirectory)
+        {
+            if (string.IsNullOrEmpty(asset.LocalPath)) return false;
+            if (asset.LocalPath.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || asset.LocalPath.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string moved;
+            try
+            {
+                moved = Path.Combine(cacheDirectory, Path.GetFileName(asset.LocalPath));
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+
+            if (moved == asset.LocalPath || !File.Exists(moved)) return false;
+            asset.LocalPath = moved;
+            return true;
+        }
+
+        /// <summary>
+        /// Deletes the files directly in the cache directory that no entry references, and every
+        /// partial download. Sub-directories are left alone. Callers hold the lock.
+        /// </summary>
+        private static int DeleteOrphanedFiles(string cacheDirectory)
+        {
+            if (!Directory.Exists(cacheDirectory)) return 0;
+
+            var referenced = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in _cachedAssets.Values)
+            {
+                if (string.IsNullOrEmpty(entry.LocalPath)) continue;
+                try { referenced.Add(Path.GetFullPath(entry.LocalPath)); }
+                catch { /* not a path */ }
+            }
+
+            var deleted = 0;
+            foreach (var file in Directory.GetFiles(cacheDirectory))
+            {
+                string fullPath;
+                try { fullPath = Path.GetFullPath(file); }
+                catch { continue; }
+
+                var isPartial = fullPath.EndsWith(PartialFileSuffix, StringComparison.OrdinalIgnoreCase);
+                if (!isPartial && referenced.Contains(fullPath)) continue;
+
+                try
+                {
+                    File.Delete(fullPath);
+                    deleted++;
+                }
+                catch (Exception)
+                {
+                    // In use or protected; tried again next launch.
+                }
+            }
+
+            return deleted;
         }
     }
 }

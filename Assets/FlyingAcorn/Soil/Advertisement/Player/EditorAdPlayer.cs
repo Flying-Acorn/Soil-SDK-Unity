@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,7 +9,7 @@ using UnityEngine;
 namespace FlyingAcorn.Soil.Advertisement.Player
 {
     /// <summary>
-    /// Stands in for the native players in the Editor (and on platforms without one). It follows
+    /// Stands in for the native players in the Editor. It follows
     /// the same protocol - asynchronous loads, slots, the lock policy, one fullscreen ad at a
     /// time - and draws a plain placeholder with IMGUI, so game flows can be exercised without a
     /// device. Videos are not played; a video ad is simulated for <see cref="SimulatedVideoSeconds"/>.
@@ -45,7 +46,9 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         {
             _report = report;
             receiver.Ticked += Tick;
-            receiver.Gui += Draw;
+            if (!receiver.TryGetComponent(out EditorAdPlayerView view))
+                view = receiver.gameObject.AddComponent<EditorAdPlayerView>();
+            view.Gui += Draw;
         }
 
         public void Load(string format, string creativeJson)
@@ -68,6 +71,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
 
             if (creative == null)
             {
+                EmptySlot(format);
                 Send(format, NativeAdEventType.LoadFailed, error: NativeAdErrors.InvalidCreative);
                 return;
             }
@@ -80,12 +84,16 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             if (!loaded.IsVideo && loaded.Image == null && !loaded.IsText)
             {
                 var anyMedia = !string.IsNullOrEmpty(creative.ImagePath) || !string.IsNullOrEmpty(creative.VideoPath);
+                // As on the devices, a failed load leaves the slot empty.
+                EmptySlot(format);
                 Send(format, NativeAdEventType.LoadFailed,
                     error: anyMedia ? NativeAdErrors.MediaUnreadable : NativeAdErrors.InvalidCreative);
                 return;
             }
 
+            _slots.TryGetValue(format, out var replaced);
             _slots[format] = loaded;
+            Release(replaced);
             var media = loaded.IsVideo ? "video" : loaded.IsText ? "text" : "image";
             Send(format, NativeAdEventType.Loaded, media: media,
                 durationMs: loaded.IsVideo ? (long)(SimulatedVideoSeconds * 1000) : 0);
@@ -105,7 +113,9 @@ namespace FlyingAcorn.Soil.Advertisement.Player
                 _bannerPosition = ReadPosition(optionsJson);
                 if (_banner != null)
                 {
+                    var previous = _banner;
                     _banner = ad;
+                    Release(previous);
                     return;
                 }
 
@@ -137,7 +147,9 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             if (format == AdFormats.Banner)
             {
                 if (_banner == null) return;
+                var hidden = _banner;
                 _banner = null;
+                Release(hidden);
                 Send(format, NativeAdEventType.Closed);
                 return;
             }
@@ -149,7 +161,23 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         public void Destroy(string format)
         {
             Hide(format);
-            _slots.Remove(format ?? "");
+            EmptySlot(format);
+        }
+
+        private void EmptySlot(string format)
+        {
+            if (!_slots.TryGetValue(format ?? "", out var emptied)) return;
+            _slots.Remove(format);
+            Release(emptied);
+        }
+
+        /// <summary>Destroys an ad's decoded image once nothing holds the ad any more.</summary>
+        private void Release(Loaded ad)
+        {
+            if (ad?.Image == null) return;
+            if (_banner == ad || _fullscreen?.Ad == ad || _slots.ContainsValue(ad)) return;
+            UnityEngine.Object.Destroy(ad.Image);
+            ad.Image = null;
         }
 
         private void Tick()
@@ -177,7 +205,9 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         private void CloseFullscreen()
         {
             var format = _fullscreen.Format;
+            var closed = _fullscreen.Ad;
             _fullscreen = null;
+            Release(closed);
             SetGameInputBlocked(false);
             Send(format, NativeAdEventType.Closed);
         }
@@ -250,9 +280,15 @@ namespace FlyingAcorn.Soil.Advertisement.Player
 
         #region Drawing
 
-        private GUIStyle _text, _title, _button, _badge;
+        private const string VideoLabel = "▶ Video ad (simulated 6 s in the Editor)";
+
+        // Built once per Game view size, never per GUI call.
+        private GUIStyle _text, _title, _button, _badge, _textRtl, _titleLine, _titleLineRtl, _videoTitle;
         private float _styledFor;
         private readonly Dictionary<string, string> _shaped = new();
+        private readonly Dictionary<string, GUIContent> _badgeContents = new();
+        private int _countdownShown = -1;
+        private string _countdownText;
 
         private void Draw()
         {
@@ -274,6 +310,11 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             _button = new GUIStyle(GUI.skin.button) { fontSize = Mathf.RoundToInt(size * 1.1f), fontStyle = FontStyle.Bold };
             _badge = new GUIStyle(GUI.skin.box) { fontSize = Mathf.RoundToInt(size * 0.8f), normal = { textColor = Color.black } };
             _badge.normal.background = Texture2D.whiteTexture;
+            _text.alignment = TextAnchor.UpperLeft;
+            _textRtl = new GUIStyle(_text) { alignment = TextAnchor.UpperRight };
+            _titleLine = new GUIStyle(_title) { alignment = TextAnchor.UpperLeft, wordWrap = false };
+            _titleLineRtl = new GUIStyle(_title) { alignment = TextAnchor.UpperRight, wordWrap = false };
+            _videoTitle = new GUIStyle(_title) { alignment = TextAnchor.MiddleCenter };
         }
 
         private void DrawBanner()
@@ -310,9 +351,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             if (p.Ad.Image != null)
                 GUI.DrawTexture(media, p.Ad.Image, ScaleMode.ScaleToFit);
             if (p.Ad.IsVideo)
-                GUI.Label(new Rect(media.x, media.center.y - Unit * 3, media.width, Unit * 2),
-                    $"▶ Video ad (simulated {SimulatedVideoSeconds:0} s in the Editor)",
-                    new GUIStyle(_title) { alignment = TextAnchor.MiddleCenter });
+                GUI.Label(new Rect(media.x, media.center.y - Unit * 3, media.width, Unit * 2), VideoLabel, _videoTitle);
             if (GUI.Button(media, GUIContent.none, GUIStyle.none))
                 PressCallToAction();
 
@@ -336,15 +375,21 @@ namespace FlyingAcorn.Soil.Advertisement.Player
                 var visible = Time.realtimeSinceStartup - p.StartedAt;
                 var remaining = FullscreenLockPolicy.SecondsRemaining(p.Options, p.Ad.IsVideo, SimulatedVideoSeconds,
                     visible, Mathf.Min(visible, SimulatedVideoSeconds), visible >= SimulatedVideoSeconds, false);
-                GUI.Box(close, Mathf.Max(1, remaining).ToString(), _button);
+                remaining = Mathf.Max(1, remaining);
+                if (remaining != _countdownShown)
+                {
+                    _countdownShown = remaining;
+                    _countdownText = remaining.ToString();
+                }
+                GUI.Box(close, _countdownText, _button);
             }
         }
 
         private void DrawTexts(Rect area, AdCreative creative, int descriptionLines)
         {
             var rtl = IsRightToLeft(creative.Title) || IsRightToLeft(creative.Description);
-            var title = new GUIStyle(_title) { alignment = rtl ? TextAnchor.UpperRight : TextAnchor.UpperLeft, wordWrap = false };
-            var text = new GUIStyle(_text) { alignment = rtl ? TextAnchor.UpperRight : TextAnchor.UpperLeft };
+            var title = rtl ? _titleLineRtl : _titleLine;
+            var text = rtl ? _textRtl : _text;
             var titleHeight = title.fontSize * 1.4f;
             GUI.Label(new Rect(area.x, area.y, area.width, titleHeight), Shape(creative.Title), title);
             GUI.Label(new Rect(area.x, area.y + titleHeight, area.width, text.fontSize * 1.35f * descriptionLines),
@@ -353,7 +398,8 @@ namespace FlyingAcorn.Soil.Advertisement.Player
 
         private void Badge(Vector2 at, string label = "Ad")
         {
-            var content = new GUIContent(label);
+            if (!_badgeContents.TryGetValue(label, out var content))
+                _badgeContents[label] = content = new GUIContent(label);
             var size = _badge.CalcSize(content);
             GUI.color = new Color(1f, 0.8f, 0.2f);
             GUI.Box(new Rect(at, size), content, _badge);
@@ -432,3 +478,4 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         }
     }
 }
+#endif

@@ -123,7 +123,8 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
                 Title = icon.TitleText,
                 Description = icon.DescriptionText,
                 CallToAction = icon.CallToActionText,
-                ClickUrl = !string.IsNullOrEmpty(icon.ClickUrl) ? icon.ClickUrl : mainImage?.ClickUrl,
+                // Only web and store links survive (AdLinkPolicy); a refused link is no link.
+                ClickUrl = AdLinkPolicy.Sanitize(icon.ClickUrl) ?? AdLinkPolicy.Sanitize(mainImage?.ClickUrl),
                 IconAssetId = icon.Id,
                 MainImageAssetId = mainImage?.Id
             };

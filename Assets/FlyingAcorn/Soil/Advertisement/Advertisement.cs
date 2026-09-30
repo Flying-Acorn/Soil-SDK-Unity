@@ -86,6 +86,22 @@ namespace FlyingAcorn.Soil.Advertisement
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
         private static readonly float RewardedAdCooldownSeconds = 10f;
 
+        // The clock of the slot watchdogs: unscaled time while the game runs. A long frame (the
+        // app was in the background, or paused under a fullscreen ad) counts only this much, so an
+        // ad on screen is never mistaken for a player that stopped answering.
+        private const float MaxCountedFrameSeconds = 0.25f;
+        private static double _runtimeClock;
+
+        // Repairs of formats whose cached files turned out missing or unreadable, run on the next
+        // frame (never from inside the slot that reported the failure).
+        private const int MaxCacheRepairsPerFormat = 2;
+        private static readonly Dictionary<AdFormat, string> _pendingRepairs = new();
+        private static readonly HashSet<AdFormat> _pendingRebuilds = new();
+        private static readonly Dictionary<AdFormat, int> _repairAttempts = new();
+        private static readonly HashSet<AdFormat> _cachingFormats = new();
+        // The creative each format last built from the cache; only those are repaired.
+        private static readonly Dictionary<AdFormat, AdCreative> _cacheCreatives = new();
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
@@ -94,6 +110,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _selectedAdGroups.Clear();
             _campaignSelectionSucceeded = false;
             _requestedFormats = null;
+            _cachedAssetsTask = default;
             _slots = null;
             _player = null;
             _receiver = null;
@@ -103,6 +120,17 @@ namespace FlyingAcorn.Soil.Advertisement
             _shownNativeAdId = null;
             _nativeAdClickHandlers.Clear();
             _lastRewardedAdShownTime = DateTime.MinValue;
+            BannerPosition = AdPosition.BottomCenter;
+            FullscreenOptionsOverride = null;
+            _runtimeClock = 0;
+            _pendingRepairs.Clear();
+            _pendingRebuilds.Clear();
+            _repairAttempts.Clear();
+            _cachingFormats.Clear();
+            _cacheCreatives.Clear();
+            AssetCache.ResetStatics();
+            AdLinkPolicy.ResetStatics();
+            Events.ResetSubscribers();
         }
 
         /// <summary>
@@ -278,11 +306,15 @@ namespace FlyingAcorn.Soil.Advertisement
             _player = new AndroidAdPlayer(SoilAdsNativeReceiver.ObjectName, SoilAdsNativeReceiver.MethodName, Defer);
 #elif UNITY_IOS && !UNITY_EDITOR
             _player = new IosAdPlayer(SoilAdsNativeReceiver.ObjectName, SoilAdsNativeReceiver.MethodName, Defer);
-#else
+#elif UNITY_EDITOR
             _player = new EditorAdPlayer(_receiver, OnPlayerEvent);
+#else
+            // Desktop, WebGL, consoles: no player, so banner, interstitial and rewarded ads have
+            // no fill. Native ads are drawn by the game and still work.
+            _player = new NullAdPlayer(Defer);
 #endif
 
-            _slots = new AdSlots(_player, IsRewardedAdInCooldown);
+            _slots = new AdSlots(_player, IsRewardedAdInCooldown, () => _runtimeClock, Debug.LogException);
             foreach (var slot in _slots.All)
             {
                 var format = ToAdFormat(slot.Format);
@@ -290,11 +322,19 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
+        private static bool HasAdPlayer => !(_player is NullAdPlayer);
+
         private static void TickPlayerRuntime()
         {
+            _runtimeClock += Math.Min(Time.unscaledDeltaTime, MaxCountedFrameSeconds);
+
             var count = _deferredPlayerEvents.Count;
             for (var i = 0; i < count; i++)
                 OnPlayerEvent(_deferredPlayerEvents.Dequeue());
+
+            if (_pendingRepairs.Count > 0 || _pendingRebuilds.Count > 0)
+                RunCacheRepairs();
+
             _slots?.Tick();
         }
 
@@ -330,12 +370,18 @@ namespace FlyingAcorn.Soil.Advertisement
             switch (notice)
             {
                 case AdSlotNotice.Loaded:
+                    _repairAttempts.Remove(format);
                     InvokeFormatEvent(format, Events.InvokeOnBannerAdLoaded, Events.InvokeOnInterstitialAdLoaded,
                         Events.InvokeOnRewardedAdLoaded, data);
                     break;
                 case AdSlotNotice.LoadFailed:
                 case AdSlotNotice.ShowFailed:
                     MyDebug.Verbose($"[Advertisement] {format} {notice}: {error}");
+                    // The player could not use the cached files (deleted, or broken on disk):
+                    // retrying the same creative would fail forever, so the cache is repaired.
+                    if (notice == AdSlotNotice.LoadFailed
+                        && (error == NativeAdErrors.MediaUnreadable || error == NativeAdErrors.InvalidCreative))
+                        _pendingRepairs[format] = error;
                     InvokeAdErrorEvent(format, data);
                     break;
                 case AdSlotNotice.Shown:
@@ -379,6 +425,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 NativeAdErrors.AlreadyShowing => AdError.InvalidRequest,
                 NativeAdErrors.InvalidFormat => AdError.InvalidRequest,
                 NativeAdErrors.Network => AdError.NetworkError,
+                NativeAdErrors.Timeout => AdError.Timeout,
                 NativeAdErrors.MediaUnreadable => AdError.InternalError,
                 NativeAdErrors.NoHost => AdError.InternalError,
                 NativeAdErrors.Internal => AdError.InternalError,
@@ -398,6 +445,92 @@ namespace FlyingAcorn.Soil.Advertisement
 
         #endregion
 
+        #region Cache repairs
+
+        private static void RunCacheRepairs()
+        {
+            foreach (var (format, error) in _pendingRepairs.ToList())
+            {
+                _pendingRepairs.Remove(format);
+                RepairFormat(format, error);
+            }
+
+            foreach (var format in _pendingRebuilds.ToList())
+            {
+                _pendingRebuilds.Remove(format);
+                if (!_cachingFormats.Contains(format))
+                    PrepareFormat(format);
+            }
+        }
+
+        /// <summary>
+        /// A load failed because the creative's files are gone or unreadable. Missing files are
+        /// dropped from the cache, files that exist but could not be decoded are deleted as
+        /// corrupt, and the format is cached again (downloading only what is now missing) - or,
+        /// with no ad group to download from, rebuilt from what is left. Bounded per format, so a
+        /// creative that is broken on the server is not downloaded over and over.
+        /// </summary>
+        private static void RepairFormat(AdFormat format, string error)
+        {
+            var slot = SlotFor(format);
+            var creative = slot?.Creative;
+            if (creative == null || !IsFromCache(format, creative) || slot.IsCaching || _cachingFormats.Contains(format))
+                return;
+
+            var attempts = _repairAttempts.TryGetValue(format, out var n) ? n : 0;
+            if (attempts >= MaxCacheRepairsPerFormat)
+            {
+                MyDebug.LogWarning($"[Advertisement] {format} ad still unusable after {attempts} cache repairs ({error}).");
+                return;
+            }
+            _repairAttempts[format] = attempts + 1;
+
+            AssetCache.RemoveMissingFiles(format);
+            if (error == NativeAdErrors.MediaUnreadable)
+            {
+                if (FileExists(creative.VideoPath) && !string.IsNullOrEmpty(creative.VideoAssetId))
+                    AssetCache.RemoveCachedAsset(format, creative.VideoAssetId);
+                if (FileExists(creative.ImagePath) && !string.IsNullOrEmpty(creative.ImageAssetId))
+                    AssetCache.RemoveCachedAsset(format, creative.ImageAssetId);
+            }
+
+            MyDebug.Verbose($"[Advertisement] Repairing the {format} cache after {error}");
+            if (_selectedAdGroups.TryGetValue(format, out var adGroup) && adGroup != null)
+            {
+                slot.BeginCaching();
+                CacheFormatAssetsAsync(adGroup, format, clearFirst: false).Forget();
+            }
+            else
+            {
+                PrepareFormat(format);
+            }
+        }
+
+        /// <summary>
+        /// The game removed cached files: slots whose creative used one are rebuilt from what is
+        /// left (next frame). Nothing is downloaded again until the next caching round.
+        /// </summary>
+        private static void RebuildCreativesMissingFiles()
+        {
+            if (_slots == null) return;
+            foreach (var slot in _slots.All)
+            {
+                var creative = slot.Creative;
+                if (creative == null || !IsFromCache(ToAdFormat(slot.Format), creative)) continue;
+                if (IsGone(creative.VideoPath) || IsGone(creative.ImagePath) || IsGone(creative.LogoPath))
+                    _pendingRebuilds.Add(ToAdFormat(slot.Format));
+            }
+        }
+
+        private static bool IsFromCache(AdFormat format, AdCreative creative) =>
+            _cacheCreatives.TryGetValue(format, out var built) && ReferenceEquals(built, creative);
+
+        private static bool FileExists(string path) => !string.IsNullOrEmpty(path) && System.IO.File.Exists(path);
+
+        private static bool IsGone(string path) => !string.IsNullOrEmpty(path) && !System.IO.File.Exists(path);
+
+        #endregion
+
         #region Testing hooks (device end-to-end tests in NativeAds/unity-e2e)
 
         /// <summary>Replaces the fullscreen lock defaults, e.g. to keep device tests short.</summary>
@@ -410,6 +543,7 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             EnsurePlayerRuntime();
             _slotAds.Remove(format);
+            _cacheCreatives.Remove(format);
             SetSlotCreative(format, creative, creative == null ? null : new Ad { id = creative.AdId, format = format.ToString() });
         }
 
@@ -425,23 +559,21 @@ namespace FlyingAcorn.Soil.Advertisement
 
             foreach (var (adFormat, adGroup) in _selectedAdGroups)
             {
-                // Only re-cache if the ad group selected for this format actually changed, AND we still
-                // have cached assets for it (they may have been evicted by ClearOldAssetsAsync/RemoveCachedAsset
-                // even though the AdGroup pointer itself didn't change) - otherwise the player would
-                // be handed an empty creative.
-                bool isSameAdGroupStillCached = cachedAdGroups.TryGetValue(adFormat, out var previousAdGroup)
-                    && previousAdGroup?.id == adGroup.id
-                    && AssetCache.GetCachedAssets(adFormat).Any(a => a.IsValid);
+                // Without a player (desktop, WebGL) banner, interstitial and rewarded ads can never
+                // show, so their files are not downloaded; LoadAd answers no fill.
+                if (!HasAdPlayer && adFormat != AdFormat.native)
+                {
+                    SetSlotCreative(adFormat, null, null);
+                    continue;
+                }
 
-                if (!isSameAdGroupStillCached)
-                {
-                    cachingTasks.Add(CacheFormatAssetsAsync(adGroup, adFormat));
-                }
-                else
-                {
-                    // Assets already cached from a previous session; just prepare the format.
-                    OnFormatAssetsReady(adFormat);
-                }
+                // The same ad group as last time keeps its files: caching then only downloads what
+                // is missing or unusable (e.g. a video an older SDK kept as a streaming URL, or a
+                // file deleted since) and finishes at once when nothing is. A different ad group
+                // starts from an empty format cache.
+                var isSameAdGroup = cachedAdGroups.TryGetValue(adFormat, out var previousAdGroup)
+                                    && previousAdGroup?.id == adGroup.id;
+                cachingTasks.Add(CacheFormatAssetsAsync(adGroup, adFormat, clearFirst: !isSameAdGroup));
 
                 updatedCachedAdGroups[adFormat] = adGroup;
             }
@@ -462,19 +594,26 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Caches assets for a specific ad format and marks them ready when done
+        /// Caches assets for a specific ad format and marks them ready when done. One caching run
+        /// per format at a time.
         /// </summary>
-        private static async UniTask CacheFormatAssetsAsync(AdGroup adGroup, AdFormat adFormat)
+        private static async UniTask CacheFormatAssetsAsync(AdGroup adGroup, AdFormat adFormat, bool clearFirst)
         {
+            if (!_cachingFormats.Add(adFormat)) return;
             try
             {
-                await AssetCache.ClearFormatCacheAsync(adFormat);
+                if (clearFirst)
+                    await AssetCache.ClearFormatCacheAsync(adFormat);
                 await AssetCache.CacheAssetsForAdGroupAsync(adGroup, adFormat, OnFormatAssetsReady);
             }
             catch (Exception ex)
             {
                 MyDebug.LogWarning($"[Advertisement] Caching {adFormat} failed: {ex.Message}");
                 SlotFor(adFormat)?.CachingFailed(NativeAdErrors.Network);
+            }
+            finally
+            {
+                _cachingFormats.Remove(adFormat);
             }
         }
 
@@ -524,6 +663,7 @@ namespace FlyingAcorn.Soil.Advertisement
             var creative = AdCreativeBuilder.Build(adFormat.ToString(), infos, out var error);
             if (creative == null)
                 MyDebug.Verbose($"[Advertisement] No {adFormat} ad to prepare: {error}");
+            _cacheCreatives[adFormat] = creative;
 
             SetSlotCreative(adFormat, creative, creative == null ? null : ToAd(adFormat, creative));
         }
@@ -587,7 +727,8 @@ namespace FlyingAcorn.Soil.Advertisement
 
             try
             {
-                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2);
+                // Unscaled: a game paused with timeScale 0 must not hold the request forever.
+                await DataUtils.ExecuteUnityWebRequestWithTimeout(request, UserPlayerPrefs.RequestTimeout * 2, true);
             }
             catch (SoilException)
             {
@@ -1139,7 +1280,13 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <returns>True if the asset was removed, false if not found</returns>
         public static bool RemoveCachedAsset(string uuid)
         {
-            return AssetCache.RemoveCachedAsset(uuid);
+            var removed = AssetCache.RemoveCachedAsset(uuid);
+            if (removed)
+            {
+                AssetCache.PersistCachedAssets();
+                RebuildCreativesMissingFiles();
+            }
+            return removed;
         }
 
         /// <summary>
@@ -1149,6 +1296,7 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             await AssetCache.ClearCacheAsync();
             AdvertisementPlayerPrefs.CachedAssets = new List<AssetCacheEntry>();
+            RebuildCreativesMissingFiles();
         }
 
         /// <summary>
@@ -1161,6 +1309,7 @@ namespace FlyingAcorn.Soil.Advertisement
             // Update persisted cache
             var remainingAssets = AssetCache.GetAllCachedAssets();
             AdvertisementPlayerPrefs.CachedAssets = remainingAssets;
+            RebuildCreativesMissingFiles();
         }
 
         /// <summary>
@@ -1171,6 +1320,96 @@ namespace FlyingAcorn.Soil.Advertisement
         public static Texture2D LoadTexture(string uuid)
         {
             return AssetCache.LoadTexture(uuid);
+        }
+
+        /// <summary>
+        /// The file:// URL of a cached video, or null. Videos are always downloaded now (never
+        /// streamed) and played by the native players.
+        /// </summary>
+        [Obsolete("Ad videos are played by the native players. Use GetAssetPath for the local file.")]
+        public static string LoadVideoUrl(string uuid)
+        {
+            var asset = FindCachedVideo(uuid);
+            return asset == null ? null : "file://" + asset.LocalPath.Replace('\\', '/');
+        }
+
+        /// <summary>Whether a video with this asset id is cached on disk.</summary>
+        [Obsolete("Ad videos are cached with their ad. Use GetCachedAssets or IsFormatReady.")]
+        public static UniTask<bool> IsVideoCachedAsync(string id)
+        {
+            return UniTask.FromResult(FindCachedVideo(id) != null);
+        }
+
+        /// <summary>
+        /// Reports the local path of a video: the ad cache's copy when it has one, otherwise the
+        /// video is downloaded to its own file (as older SDK versions did). Null on failure.
+        /// </summary>
+        [Obsolete("Ad videos are downloaded with their ad; there is no need to download them yourself.")]
+        public static System.Collections.IEnumerator DownloadAndCacheVideoAsync(string id, string url, Action<string> onComplete)
+        {
+            var cached = FindCachedVideo(id);
+            if (cached != null)
+            {
+                onComplete?.Invoke(cached.LocalPath);
+                yield break;
+            }
+
+            var cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+            string filePath;
+            try
+            {
+                if (!System.IO.Directory.Exists(cacheDir))
+                    System.IO.Directory.CreateDirectory(cacheDir);
+                filePath = System.IO.Path.Combine(cacheDir, AssetCachePlan.SafeFileId(id) + ".mp4");
+            }
+            catch (Exception ex)
+            {
+                MyDebug.LogWarning($"[Advertisement] Video cache unavailable: {ex.Message}");
+                onComplete?.Invoke(null);
+                yield break;
+            }
+
+            if (System.IO.File.Exists(filePath) && new System.IO.FileInfo(filePath).Length > 0)
+            {
+                onComplete?.Invoke(filePath);
+                yield break;
+            }
+
+            var partialPath = filePath + ".part";
+            using (var request = UnityWebRequest.Get(url))
+            {
+                request.downloadHandler = new DownloadHandlerFile(partialPath) { removeFileOnAbort = true };
+                yield return request.SendWebRequest();
+
+                string result = null;
+                try
+                {
+                    if (request.result == UnityWebRequest.Result.Success && System.IO.File.Exists(partialPath)
+                        && new System.IO.FileInfo(partialPath).Length > 0)
+                    {
+                        if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath);
+                        System.IO.File.Move(partialPath, filePath);
+                        result = filePath;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MyDebug.LogWarning($"[Advertisement] Video download failed: {ex.Message}");
+                }
+                finally
+                {
+                    try { if (System.IO.File.Exists(partialPath)) System.IO.File.Delete(partialPath); }
+                    catch { /* best effort */ }
+                }
+
+                onComplete?.Invoke(result);
+            }
+        }
+
+        private static AssetCacheEntry FindCachedVideo(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            return AssetCache.GetAllCachedAssets().FirstOrDefault(a => a.Id == id && a.AssetType == AssetType.video && a.IsValid);
         }
 
         /// <summary>

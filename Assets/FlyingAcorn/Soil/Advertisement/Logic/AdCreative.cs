@@ -122,7 +122,9 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
                 Title = title,
                 Description = NullIfEmpty(textSource?.DescriptionText),
                 CallToAction = NullIfEmpty(textSource?.CallToActionText),
-                ClickUrl = NullIfEmpty(main?.ClickUrl) ?? usable.Select(a => NullIfEmpty(a.ClickUrl)).FirstOrDefault(u => u != null)
+                // Only web and store links survive (AdLinkPolicy); a refused link is no link.
+                ClickUrl = AdLinkPolicy.Sanitize(main?.ClickUrl)
+                           ?? usable.Select(a => AdLinkPolicy.Sanitize(a.ClickUrl)).FirstOrDefault(u => u != null)
             };
         }
 
