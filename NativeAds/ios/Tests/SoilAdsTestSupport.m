@@ -22,7 +22,7 @@ NSString *SoilAdsResource(NSString *name)
     NSBundle *bundle = [NSBundle bundleForClass:[SoilAdsFakeHost class]];
     NSString *path = [bundle pathForResource:[name stringByDeletingPathExtension] ofType:[name pathExtension]];
     NSCAssert(path != nil, @"missing test resource %@", name);
-    return path ?: @"";
+    return path ? path : @"";
 }
 
 NSString *SoilAdsJSON(NSDictionary *object)
@@ -51,6 +51,7 @@ NSArray<UIView *> *SoilAdsFindViews(UIView *view, NSString *identifier)
     if ((self = [super init])) {
         _pauseCalls = [NSMutableArray array];
         _openedURLs = [NSMutableArray array];
+        _appActive = YES;
     }
     return self;
 }
@@ -58,6 +59,8 @@ NSArray<UIView *> *SoilAdsFindViews(UIView *view, NSString *identifier)
 - (UIViewController *)soilAdsRootViewController { return self.root; }
 
 - (void)soilAdsSetGamePaused:(BOOL)paused { [self.pauseCalls addObject:@(paused)]; }
+
+- (BOOL)soilAdsAppIsActive { return self.appActive; }
 
 - (void)soilAdsOpenURL:(NSURL *)url completion:(void (^)(BOOL))completion
 {

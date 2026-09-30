@@ -138,6 +138,32 @@
     XCTAssertEqual(SoilAdsStubMuteCalls().count, 1u, @"mute state restored after unpausing");
 }
 
+- (void)testAlreadyPausedGameIsLeftPaused
+{
+    NSString *json = SoilAdsJSON(@{@"adId": @"i1", @"imagePath": SoilAdsResource(@"image.png")});
+    SoilAds_Load("interstitial", json.UTF8String);
+    [self waitForEventCount:1];
+    SoilAdsStubSetPaused(1); // paused by the game or the trampoline, not by the ad
+    SoilAds_Show("interstitial", NULL);
+    XCTAssertEqualObjects([self waitForEventCount:2][@"event"], @"shown");
+    SoilAds_Hide("interstitial");
+    XCTAssertEqualObjects([self waitForEventCount:3][@"event"], @"closed");
+    XCTAssertEqual(SoilAdsStubPauseCalls().count, 0u, @"neither paused nor resumed by the ad");
+    XCTAssertEqual(UnityIsPaused(), 1);
+
+    // The next ad, with the game running again, pauses and resumes it.
+    SoilAdsStubSetPaused(0);
+    SoilAds_Load("interstitial", json.UTF8String);
+    [self waitForEventCount:4];
+    SoilAds_Show("interstitial", NULL);
+    XCTAssertEqualObjects([self waitForEventCount:5][@"event"], @"shown");
+    XCTAssertEqual(UnityIsPaused(), 1);
+    SoilAds_Hide("interstitial");
+    XCTAssertEqualObjects([self waitForEventCount:6][@"event"], @"closed");
+    XCTAssertEqualObjects(SoilAdsStubPauseCalls(), (@[@1, @0]));
+    XCTAssertEqual(UnityIsPaused(), 0);
+}
+
 - (void)testEventsWithoutReceiverAreDropped
 {
     SoilAds_Initialize("", "");

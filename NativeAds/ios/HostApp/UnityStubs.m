@@ -6,6 +6,7 @@
 static NSMutableArray<NSArray<NSString *> *> *SoilAdsStubMessageLog;
 static NSMutableArray<NSNumber *> *SoilAdsStubPauseLog;
 static NSMutableArray<NSNumber *> *SoilAdsStubMuteLog;
+static int SoilAdsStubPaused;
 
 static void SoilAdsStubEnsure(void)
 {
@@ -37,6 +38,21 @@ void UnityPause(int pause)
     @synchronized ([UIApplication class]) {
         SoilAdsStubEnsure();
         [SoilAdsStubPauseLog addObject:@(pause)];
+        SoilAdsStubPaused = pause;
+    }
+}
+
+int UnityIsPaused(void)
+{
+    @synchronized ([UIApplication class]) {
+        return SoilAdsStubPaused;
+    }
+}
+
+void SoilAdsStubSetPaused(int paused)
+{
+    @synchronized ([UIApplication class]) {
+        SoilAdsStubPaused = paused;
     }
 }
 
@@ -79,5 +95,6 @@ void SoilAdsStubReset(void)
         [SoilAdsStubMessageLog removeAllObjects];
         [SoilAdsStubPauseLog removeAllObjects];
         [SoilAdsStubMuteLog removeAllObjects];
+        SoilAdsStubPaused = 0;
     }
 }

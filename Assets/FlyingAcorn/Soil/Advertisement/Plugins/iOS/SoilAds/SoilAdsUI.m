@@ -59,6 +59,12 @@ void SoilAdsSetDirectionalText(UILabel *label, NSString *text)
     label.hidden = text.length == 0;
 }
 
+NSString *SoilAdsAccessibilityLabel(NSString *title)
+{
+    if (![title isKindOfClass:[NSString class]] || title.length == 0) return @"Ad";
+    return [NSString stringWithFormat:@"Ad, %@", title];
+}
+
 UILabel *SoilAdsMakeBadge(CGFloat fontSize)
 {
     UILabel *badge = [[UILabel alloc] init];

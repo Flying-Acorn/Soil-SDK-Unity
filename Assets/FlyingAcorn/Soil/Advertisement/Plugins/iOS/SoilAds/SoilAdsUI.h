@@ -16,6 +16,9 @@ FOUNDATION_EXPORT BOOL SoilAdsTextIsRightToLeft(NSString *_Nullable text);
 /// Sets `text` on `label` aligned (and with base direction) following its first strong character.
 FOUNDATION_EXPORT void SoilAdsSetDirectionalText(UILabel *label, NSString *_Nullable text);
 
+/// "Ad", or "Ad, <title>": what VoiceOver reads for the clickable ad (banner, fullscreen media).
+FOUNDATION_EXPORT NSString *SoilAdsAccessibilityLabel(NSString *_Nullable title);
+
 /// The small rounded "Ad" badge.
 FOUNDATION_EXPORT UILabel *SoilAdsMakeBadge(CGFloat fontSize);
 

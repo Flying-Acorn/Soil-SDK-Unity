@@ -4,11 +4,19 @@
 
 @implementation SoilAdsBannerView {
     NSLayoutConstraint *_positionConstraint;
+    BOOL _built;
 }
 
 + (CGFloat)heightForScreenSize:(CGSize)screenSize
 {
     return fmin(screenSize.width, screenSize.height) >= 600 ? 90 : 50;
+}
+
++ (CGFloat)heightForHostView:(UIView *)hostView
+{
+    CGSize size = hostView.window ? hostView.window.bounds.size : hostView.bounds.size;
+    if (size.width <= 0 || size.height <= 0) size = [UIScreen mainScreen].bounds.size;
+    return [self heightForScreenSize:size];
 }
 
 - (instancetype)initWithContent:(SoilAdsLoadedMedia *)content
@@ -21,16 +29,15 @@
         self.isAccessibilityElement = YES;
         self.accessibilityIdentifier = SoilAdsIdBanner;
         self.accessibilityTraits = UIAccessibilityTraitButton;
-        self.accessibilityLabel = content.creative.title.length > 0 ? content.creative.title : @"Ad";
+        self.accessibilityLabel = SoilAdsAccessibilityLabel(content.creative.title);
         [self addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(tapped)]];
-        [self buildContent];
     }
     return self;
 }
 
-- (void)buildContent
+/// Built on first attach, when the host (and so the banner's size class) is known.
+- (void)buildContent:(BOOL)tall
 {
-    BOOL tall = [SoilAdsBannerView heightForScreenSize:[UIScreen mainScreen].bounds.size] > 50;
     if (_content.image) {
         UIImageView *imageView = [[UIImageView alloc] initWithImage:_content.image];
         imageView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -115,9 +122,13 @@
 {
     [self removeFromSuperview];
     _positionConstraint = nil;
+    CGFloat height = [SoilAdsBannerView heightForHostView:hostView];
+    if (!_built) {
+        _built = YES;
+        [self buildContent:height > 50];
+    }
     [hostView addSubview:self];
     UILayoutGuide *safe = hostView.safeAreaLayoutGuide;
-    CGFloat height = [SoilAdsBannerView heightForScreenSize:[UIScreen mainScreen].bounds.size];
     [NSLayoutConstraint activateConstraints:@[
         [self.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
         [self.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],

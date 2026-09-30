@@ -4,7 +4,7 @@ Not shipped. Builds the plugin sources from
 `Assets/FlyingAcorn/Soil/Advertisement/Plugins/iOS/SoilAds/` (referenced in place) into a tiny host
 app together with `HostApp/UnityStubs.m`, which stands in for the Unity trampoline functions the
 bridge links against (`UnitySendMessage`, `UnityGetGLViewController`, `UnityPause`,
-`UnityUpdateMuteState`). The hosted XCTest bundle then drives:
+`UnityIsPaused`, `UnityUpdateMuteState`). The hosted XCTest bundle then drives:
 
 - `SoilAdsLockPolicyTests` – the lock formula from `NativeAds/PROTOCOL.md`, table by table.
 - `SoilAdsCreativeTests` – creative / show options JSON parsing, format names, text direction.

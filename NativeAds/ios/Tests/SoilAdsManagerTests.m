@@ -18,6 +18,31 @@ static const NSTimeInterval Timeout = 10;
 - (void)tapped;
 @end
 
+/// A root view controller whose dismissals UIKit "loses", like one that collides with another transition.
+@interface SoilAdsStubbornViewController : UIViewController
+@property (nonatomic) NSInteger ignoredDismissals;
+/// The `animated` flag of every dismissal request.
+@property (nonatomic, readonly) NSMutableArray<NSNumber *> *dismissCalls;
+@end
+
+@implementation SoilAdsStubbornViewController
+@synthesize dismissCalls = _dismissCalls;
+- (NSMutableArray<NSNumber *> *)dismissCalls
+{
+    if (!_dismissCalls) _dismissCalls = [NSMutableArray array];
+    return _dismissCalls;
+}
+- (void)dismissViewControllerAnimated:(BOOL)animated completion:(void (^)(void))completion
+{
+    [self.dismissCalls addObject:@(animated)];
+    if (self.ignoredDismissals > 0) {
+        self.ignoredDismissals--;
+        return;
+    }
+    [super dismissViewControllerAnimated:animated completion:completion];
+}
+@end
+
 @interface SoilAdsManagerTests : XCTestCase
 @property (nonatomic, strong) UIWindow *window;
 @property (nonatomic, strong) UIViewController *root;
@@ -564,7 +589,7 @@ static UILabel *FindLabel(UIView *view, NSString *text)
 
     UIEdgeInsets insets = self.root.view.safeAreaInsets;
     CGRect bounds = self.root.view.bounds;
-    CGFloat expectedHeight = [SoilAdsBannerView heightForScreenSize:[UIScreen mainScreen].bounds.size];
+    CGFloat expectedHeight = [SoilAdsBannerView heightForHostView:self.root.view];
     CGRect frame = [self bannerFrame];
     XCTAssertEqualWithAccuracy(frame.size.height, expectedHeight, 0.5);
     XCTAssertEqualWithAccuracy(frame.size.width, bounds.size.width - insets.left - insets.right, 0.5);
@@ -614,6 +639,40 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     XCTAssertNotEqual([self.root.view hitTest:outside withEvent:nil], banner);
 }
 
+- (void)testBannerRemovedBySomeoneElseStillGetsClosed
+{
+    [self load:@"banner" fields:[self imageAd]];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    SoilAdsBannerView *first = self.manager.bannerView;
+    [first removeFromSuperview];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"banner"], @"loaded,shown,closed,shown");
+    XCTAssertNotEqual(self.manager.bannerView, first);
+    XCTAssertEqual(self.manager.bannerView.superview, self.root.view);
+    [self.manager hideFormat:@"banner"];
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"banner"], @"loaded,shown,closed,shown,closed");
+}
+
+- (void)testBannerHeightFollowsTheHostWindow
+{
+    UIView *wide = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 800, 700)];
+    XCTAssertEqual([SoilAdsBannerView heightForHostView:wide], 90);
+    UIView *narrow = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 320, 1000)];
+    XCTAssertEqual([SoilAdsBannerView heightForHostView:narrow], 50);
+    XCTAssertEqual([SoilAdsBannerView heightForHostView:[[UIView alloc] init]],
+                   [SoilAdsBannerView heightForScreenSize:[UIScreen mainScreen].bounds.size], @"no size: the screen");
+    XCTAssertEqual([SoilAdsBannerView heightForHostView:nil],
+                   [SoilAdsBannerView heightForScreenSize:[UIScreen mainScreen].bounds.size]);
+
+    // The window, not the screen: e.g. an app sharing an iPad screen, or here a window larger than a phone.
+    self.window.frame = CGRectMake(0, 0, 800, 1000);
+    [self.window layoutIfNeeded];
+    XCTAssertEqual([SoilAdsBannerView heightForHostView:self.root.view], 90);
+    [self load:@"banner" fields:@{@"title": @"Word Master", @"callToAction": @"Install"}];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    XCTAssertEqualWithAccuracy([self bannerFrame].size.height, 90, 0.5);
+}
+
 - (void)testBannerAndFullscreenTogether
 {
     [self load:@"banner" fields:[self imageAd]];
@@ -624,6 +683,193 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"closed"] == 1; }));
     XCTAssertNotNil(self.manager.bannerView.superview, @"hiding the fullscreen ad leaves the banner");
     XCTAssertEqualObjects([self.recorder sequenceForFormat:@"banner"], @"loaded,shown");
+}
+
+#pragma mark - Presentation edge cases
+
+- (void)useStubbornRoot:(NSInteger)ignoredDismissals
+{
+    SoilAdsStubbornViewController *root = [[SoilAdsStubbornViewController alloc] init];
+    root.ignoredDismissals = ignoredDismissals;
+    self.window.rootViewController = root;
+    self.root = root;
+    self.host.root = root;
+    [root.view layoutIfNeeded];
+}
+
+- (void)testIgnoredDismissalIsRetriedBeforeTheGameResumes
+{
+    [self useStubbornRoot:1];
+    SoilAdsStubbornViewController *root = (SoilAdsStubbornViewController *)self.root;
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:nil];
+    SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
+    [self.manager hideFormat:@"interstitial"];
+    SoilAdsSpin(2.5);
+    XCTAssertEqual([self.recorder countOf:@"closed"], 0u);
+    XCTAssertEqual(root.presentedViewController, vc, @"UIKit lost the dismissal");
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES], @"the game stays paused under the ad");
+
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"closed"] == 1; }));
+    XCTAssertNil(root.presentedViewController, @"closed only once the ad is off screen");
+    XCTAssertNil(vc.presentingViewController);
+    XCTAssertEqualObjects(root.dismissCalls, (@[@YES, @NO]), @"retried without animation");
+    XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"interstitial"], @"loaded,shown,closed");
+}
+
+- (void)testDismissalThatNeverCompletesGivesUpAfterTheRetries
+{
+    [self useStubbornRoot:1000];
+    SoilAdsStubbornViewController *root = (SoilAdsStubbornViewController *)self.root;
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:nil];
+    [self.manager hideFormat:@"interstitial"];
+    [self waitForClosed:1];
+    XCTAssertEqual(root.dismissCalls.count, 4u, @"one dismissal and three retries");
+    XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
+    XCTAssertNil(self.manager.fullscreenController);
+    root.ignoredDismissals = 0;
+    [root dismissViewControllerAnimated:NO completion:nil];
+}
+
+- (void)testShowWhileInactiveWaitsUntilTheAppIsActive
+{
+    [self load:@"rewarded" fields:[self imageAd]];
+    self.host.appActive = NO;
+    [self.manager showFormat:@"rewarded" optionsJSON:nil];
+    SoilAdsSpin(0.5);
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"rewarded"], @"loaded", @"no event while waiting");
+    XCTAssertNil(self.root.presentedViewController);
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"the game is paused only when the ad is presented");
+    XCTAssertFalse([self.manager isReady:@"rewarded"], @"the show took the ad");
+    [self.manager showFormat:@"interstitial" optionsJSON:nil];
+    XCTAssertEqualObjects(self.recorder.last[@"error"], @"already_showing");
+
+    [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
+    SoilAdsSpin(0.3);
+    XCTAssertNil(self.root.presentedViewController, @"still inactive");
+
+    self.host.appActive = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"shown"] == 1; }));
+    XCTAssertEqual(self.root.presentedViewController, self.manager.fullscreenController);
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES]);
+    [self.manager hideFormat:@"rewarded"];
+    [self waitForClosed:1];
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"rewarded"], @"loaded,shown,closed");
+    XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
+}
+
+- (void)testShowThatNeverReachesTheScreenFailsAndKeepsTheAd
+{
+    [self load:@"interstitial" fields:[self imageAd]];
+    self.host.appActive = NO;
+    [self.manager showFormat:@"interstitial" optionsJSON:nil];
+    [self.manager hideFormat:@"interstitial"];
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"interstitial"], @"loaded,showFailed");
+    XCTAssertEqualObjects(self.recorder.last[@"error"], @"internal");
+    XCTAssertTrue([self.manager isReady:@"interstitial"], @"nothing was shown: the slot keeps its ad");
+    XCTAssertNil(self.manager.fullscreenController);
+    XCTAssertEqual(self.host.pauseCalls.count, 0u);
+
+    // Destroyed while waiting: fails too, and the slot ends up empty.
+    [self.manager showFormat:@"interstitial" optionsJSON:nil];
+    [self.manager destroyFormat:@"interstitial"];
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"interstitial"], @"loaded,showFailed,showFailed");
+    XCTAssertFalse([self.manager isReady:@"interstitial"]);
+
+    self.host.appActive = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
+    SoilAdsSpin(0.5);
+    XCTAssertNil(self.root.presentedViewController, @"a cancelled show stays cancelled");
+    XCTAssertEqual(self.recorder.events.count, 3u);
+}
+
+- (void)testShowDuringAPresentationWaitsForTheTransition
+{
+    [self load:@"interstitial" fields:[self imageAd]];
+    UIViewController *other = [[UIViewController alloc] init];
+    [self.root presentViewController:other animated:YES completion:nil];
+    XCTAssertNotNil(other.transitionCoordinator);
+    [self.manager showFormat:@"interstitial" optionsJSON:nil];
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"shown"] == 1; }),
+                  @"%@", self.recorder.events);
+    XCTAssertEqual(self.manager.fullscreenController.presentingViewController, other);
+    [self.manager hideFormat:@"interstitial"];
+    [self waitForClosed:1];
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"interstitial"], @"loaded,shown,closed");
+    [self.root dismissViewControllerAnimated:NO completion:nil];
+}
+
+#pragma mark - Clicks
+
+- (void)testClickURLSchemes
+{
+    for (NSString *text in @[@"", @"   ", @"javascript:alert(1)", @"tel:+100", @"file:///etc/hosts", @"sms:1",
+                             @"data:text/html,hi", @"customapp://open", @"example.com/no-scheme", @"//example.com"]) {
+        XCTAssertNil([SoilAdsManager clickURLFromString:text], @"%@", text);
+    }
+    XCTAssertNil([SoilAdsManager clickURLFromString:nil]);
+    for (NSString *text in @[@"https://example.com/a", @"HTTP://example.com", @"itms-apps://apps.example.com/app/id1",
+                             @"ITMS-APPSS://apps.example.com/app/id1"]) {
+        XCTAssertEqualObjects([SoilAdsManager clickURLFromString:text].absoluteString, text);
+    }
+    XCTAssertEqualObjects([SoilAdsManager clickURLFromString:@" https://example.com/x \n"].absoluteString,
+                          @"https://example.com/x");
+    XCTAssertEqualObjects([SoilAdsManager clickURLFromString:@"https://example.com/a b?q=ü#top"].absoluteString,
+                          @"https://example.com/a%20b?q=%C3%BC#top", @"spaces and non-ASCII are escaped");
+    XCTAssertEqualObjects([SoilAdsManager clickURLFromString:@"https://example.com/a%20b"].absoluteString,
+                          @"https://example.com/a%20b", @"existing escapes are kept");
+}
+
+- (void)testDisallowedClickSchemeReportsClickedButOpensNothing
+{
+    [self load:@"banner" fields:@{@"title": @"Word Master", @"clickUrl": @"javascript:alert(1)"}];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    [self.manager.bannerView tapped];
+    SoilAdsSpin(0.3);
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"banner"], @"loaded,shown,clicked");
+    XCTAssertEqual(self.host.openedURLs.count, 0u);
+}
+
+#pragma mark - Accessibility
+
+- (void)testAccessibility
+{
+    XCTAssertEqualObjects(SoilAdsAccessibilityLabel(nil), @"Ad");
+    XCTAssertEqualObjects(SoilAdsAccessibilityLabel(@""), @"Ad");
+    XCTAssertEqualObjects(SoilAdsAccessibilityLabel(@"Word Master"), @"Ad, Word Master");
+
+    [self load:@"banner" fields:[self imageAd]];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    XCTAssertEqualObjects(self.manager.bannerView.accessibilityLabel, @"Ad, Word Master");
+
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:[self fullscreenOptions:1 fraction:1 minVideo:0]];
+    SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
+    [vc.view layoutIfNeeded];
+    XCTAssertEqualObjects(vc.mediaView.accessibilityLabel, @"Ad, Word Master");
+    UIButton *close = vc.closeButton;
+    XCTAssertGreaterThanOrEqual(close.bounds.size.width, 44);
+    XCTAssertGreaterThanOrEqual(close.bounds.size.height, 44);
+    XCTAssertEqualObjects(close.accessibilityLabel, @"Close");
+    XCTAssertEqualObjects(close.accessibilityValue, [close titleForState:UIControlStateNormal], @"the countdown");
+    XCTAssertTrue(close.accessibilityTraits & UIAccessibilityTraitNotEnabled, @"locked reads as dimmed");
+    XCTAssertTrue(close.accessibilityTraits & UIAccessibilityTraitButton);
+
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return vc.lockPolicy.unlocked; }));
+    SoilAdsSpin(0.3);
+    XCTAssertNil(close.accessibilityValue);
+    XCTAssertEqual(close.accessibilityTraits, UIAccessibilityTraitButton);
+    XCTAssertEqualObjects(close.accessibilityIdentifier, @"soil_ad_close");
+}
+
+- (void)testMediaWithoutTitleIsJustAnAd
+{
+    [self load:@"interstitial" fields:@{@"imagePath": SoilAdsResource(@"image.png")}];
+    [self showFullscreen:@"interstitial" options:nil];
+    XCTAssertEqualObjects(self.manager.fullscreenController.mediaView.accessibilityLabel, @"Ad");
 }
 
 @end

@@ -5,14 +5,24 @@
 #import "SoilAdsBannerView.h"
 
 #define SoilAdsFormatCount (SoilAdsFormatRewarded + 1)
-/// Last resort if UIKit never reports the end of a dismissal.
+/// If UIKit has not reported the end of a dismissal by then, check whether the ad is still up.
 static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
+/// While it is, dismiss it again (unanimated) this many times, this far apart, then give up.
+static const NSInteger SoilAdsDismissRetries = 3;
+static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
 
-/// One fullscreen show, from `show` to `closed`.
+/// One fullscreen show, from `show` to `closed` (or to `showFailed` if it never reached the screen).
 @interface SoilAdsSession : NSObject
 @property (nonatomic) SoilAdsFormat format;
 @property (nonatomic, strong) SoilAdsFullscreenViewController *controller;
+/// What the show took out of the slot, and the slot generation then: put back if nothing is shown.
+@property (nonatomic, strong) SoilAdsLoadedMedia *content;
+@property (nonatomic) NSUInteger generation;
+/// Observes UIApplicationDidBecomeActiveNotification while a show waits for the app to be active.
+@property (nonatomic, strong, nullable) id activeObserver;
+@property (nonatomic) BOOL presenting;
 @property (nonatomic) BOOL presented;
+@property (nonatomic) BOOL gamePaused;
 @property (nonatomic) BOOL closeRequested;
 @property (nonatomic) BOOL dismissing;
 @property (nonatomic) BOOL finished;
@@ -158,11 +168,30 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
 
 #pragma mark - Clicks
 
++ (NSURL *)clickURLFromString:(NSString *)text
+{
+    if (![text isKindOfClass:[NSString class]]) return nil;
+    text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (text.length == 0) return nil;
+    NSURL *url = [NSURL URLWithString:text];
+    if (!url) {
+        // Before iOS 17 spaces and non-ASCII characters make URLWithString: fail; escape them
+        // (keeping '#' and existing escapes) and try once more.
+        NSMutableCharacterSet *allowed = [[NSCharacterSet URLFragmentAllowedCharacterSet] mutableCopy];
+        [allowed addCharactersInString:@"#%"];
+        NSString *escaped = [text stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+        url = escaped ? [NSURL URLWithString:escaped] : nil;
+    }
+    NSString *scheme = url.scheme.lowercaseString;
+    if (!scheme || ![@[@"http", @"https", @"itms-apps", @"itms-appss"] containsObject:scheme]) return nil;
+    return url;
+}
+
 - (void)openClickURL:(NSString *)clickUrl completion:(void (^)(BOOL opened))completion
 {
-    NSURL *url = clickUrl.length > 0 ? [NSURL URLWithString:clickUrl] : nil;
-    if (!url || url.scheme.length == 0) {
-        SoilAdsLog(@"click URL missing or invalid");
+    NSURL *url = [SoilAdsManager clickURLFromString:clickUrl];
+    if (!url) {
+        SoilAdsLog(@"click URL missing, invalid or not http(s)/itms-apps(s)");
         if (completion) completion(NO);
         return;
     }
@@ -186,7 +215,7 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
         [_banner moveToPosition:options.position];
         return;
     }
-    _banner = nil;
+    if (_banner) [self hideBanner]; // removed by someone else: its `shown` still gets its `closed`
     SoilAdsLoadedMedia *content = _content[SoilAdsFormatBanner];
     if (!content) {
         [self emitFormat:name failure:@"showFailed" error:SoilAdsErrorNotLoaded message:@"no banner loaded"];
@@ -242,9 +271,6 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
         [self emitFormat:name failure:@"showFailed" error:SoilAdsErrorNoHost message:@"no root view controller on screen"];
         return;
     }
-    UIViewController *presenter = root;
-    while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed)
-        presenter = presenter.presentedViewController;
 
     SoilAdsFullscreenViewController *controller =
         [[SoilAdsFullscreenViewController alloc] initWithContent:content
@@ -254,26 +280,79 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
     SoilAdsSession *session = [[SoilAdsSession alloc] init];
     session.format = format;
     session.controller = controller;
+    session.content = content;
+    session.generation = _generation[format];
 
-    NSUInteger generation = _generation[format];
     [self setContent:nil format:format]; // fullscreen show consumes the slot
     _session = session;
-    [_host soilAdsSetGamePaused:YES];
+    [self presentSession:session];
+}
 
+- (BOOL)appIsActive
+{
+    if ([_host respondsToSelector:@selector(soilAdsAppIsActive)]) return [_host soilAdsAppIsActive];
+    return [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+}
+
+/// Presents as soon as UIKit can: once the app is active and no transition is running.
+- (void)presentSession:(SoilAdsSession *)session
+{
+    if (session != _session || session.finished || session.presenting) return;
     __weak __typeof__(self) weakSelf = self;
+
+    if (![self appIsActive]) {
+        // Presenting from the background (or under a system alert) is unreliable, and pausing
+        // Unity now would be undone by the trampoline when the app comes back.
+        if (!session.activeObserver) {
+            SoilAdsLog(@"app not active: the ad is shown when it becomes active");
+            __weak SoilAdsSession *weakSession = session; // the session holds the observer
+            session.activeObserver = [[NSNotificationCenter defaultCenter]
+                addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:[NSOperationQueue mainQueue]
+                        usingBlock:^(NSNotification *note) {
+                SoilAdsSession *waiting = weakSession;
+                if (waiting) [weakSelf presentSession:waiting];
+            }];
+        }
+        return;
+    }
+    [self stopWaitingForActive:session];
+
+    UIViewController *root = [_host soilAdsRootViewController];
+    if (!root || !root.view.window) {
+        [self finishSession:session error:SoilAdsErrorNoHost message:@"no root view controller on screen"];
+        return;
+    }
+    UIViewController *presenter = root;
+    while (presenter.presentedViewController && !presenter.presentedViewController.isBeingDismissed)
+        presenter = presenter.presentedViewController;
+
+    // UIKit refuses to present from a controller that is being presented or dismissed: wait for it.
+    id<UIViewControllerTransitionCoordinator> transition = presenter.transitionCoordinator;
+    if (transition && [transition animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+            [weakSelf presentSession:session];
+        }]) {
+        return;
+    }
+
+    session.presenting = YES;
+    session.gamePaused = YES;
+    [_host soilAdsSetGamePaused:YES];
+    SoilAdsFullscreenViewController *controller = session.controller;
     [presenter presentViewController:controller animated:YES completion:^{
         [weakSelf sessionPresented:session];
     }];
 
     if (!controller.presentingViewController) {
         SoilAdsLog(@"presentation refused by UIKit");
-        session.finished = YES;
-        [controller teardown];
-        _session = nil;
-        [_host soilAdsSetGamePaused:NO];
-        if (_generation[format] == generation && !_content[format]) [self setContent:content format:format];
-        [self emitFormat:name failure:@"showFailed" error:SoilAdsErrorInternal message:@"presentation failed"];
+        [self finishSession:session error:SoilAdsErrorInternal message:@"presentation failed"];
     }
+}
+
+- (void)stopWaitingForActive:(SoilAdsSession *)session
+{
+    if (!session.activeObserver) return;
+    [[NSNotificationCenter defaultCenter] removeObserver:session.activeObserver];
+    session.activeObserver = nil;
 }
 
 - (void)sessionPresented:(SoilAdsSession *)session
@@ -301,7 +380,12 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
 {
     if (session.finished || session.dismissing) return;
     if (!session.presented) {
-        session.closeRequested = YES; // dismissed as soon as the presentation completes
+        if (session.presenting) {
+            session.closeRequested = YES; // dismissed as soon as the presentation completes
+        } else {
+            // Still waiting to be presented: nothing is on screen, so the show fails.
+            [self finishSession:session error:SoilAdsErrorInternal message:@"hidden before it was shown"];
+        }
         return;
     }
     session.dismissing = YES;
@@ -318,19 +402,62 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
     }];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SoilAdsDismissTimeout * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        if (!session.finished) SoilAdsLog(@"dismissal did not complete in time");
+        [weakSelf checkDismissal:session attempt:0];
+    });
+}
+
+/// The game resumes only once the ad is really off screen (a dismissal UIKit ignored, e.g. one that
+/// collided with another transition, is retried); after the last retry it resumes anyway.
+- (void)checkDismissal:(SoilAdsSession *)session attempt:(NSInteger)attempt
+{
+    if (session.finished) return;
+    UIViewController *presenting = session.controller.presentingViewController;
+    if (!presenting) {
+        [self finishSession:session];
+        return;
+    }
+    if (attempt >= SoilAdsDismissRetries) {
+        SoilAdsLog(@"dismissal never completed: closing the session with the ad still on screen");
+        [self finishSession:session];
+        return;
+    }
+    SoilAdsLog(@"dismissal did not complete in time, retrying");
+    __weak __typeof__(self) weakSelf = self;
+    [presenting dismissViewControllerAnimated:NO completion:^{
         [weakSelf finishSession:session];
+    }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SoilAdsDismissRetryInterval * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [weakSelf checkDismissal:session attempt:attempt + 1];
     });
 }
 
 - (void)finishSession:(SoilAdsSession *)session
 {
+    [self finishSession:session error:SoilAdsErrorInternal message:@"left the screen before it was shown"];
+}
+
+/// Ends a session: `closed` if it was shown, else `showFailed` (error, message) and the slot gets
+/// its ad back unless it was reloaded or destroyed meanwhile.
+- (void)finishSession:(SoilAdsSession *)session error:(NSString *)error message:(NSString *)message
+{
     if (session.finished) return;
     session.finished = YES;
+    [self stopWaitingForActive:session];
     [session.controller teardown];
     if (_session == session) _session = nil;
-    [_host soilAdsSetGamePaused:NO];
-    if (session.presented) [self emitFormat:SoilAdsFormatName(session.format) event:@"closed" extra:nil];
+    if (session.gamePaused) {
+        session.gamePaused = NO;
+        [_host soilAdsSetGamePaused:NO];
+    }
+    NSString *name = SoilAdsFormatName(session.format);
+    if (session.presented) {
+        [self emitFormat:name event:@"closed" extra:nil];
+        return;
+    }
+    SoilAdsFormat format = session.format;
+    if (_generation[format] == session.generation && !_content[format]) [self setContent:session.content format:format];
+    [self emitFormat:name failure:@"showFailed" error:error message:message];
 }
 
 - (SoilAdsSession *)sessionFor:(SoilAdsFullscreenViewController *)controller

@@ -27,6 +27,7 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     BOOL _videoEnded;
     BOOL _videoFailed;
     BOOL _tornDown;
+    BOOL _closeShownUnlocked;
     SoilAdsPlayerView *_playerView;
     UIImageView *_imageView;
     NSMutableArray<id> *_observers;
@@ -81,7 +82,7 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     _mediaView.isAccessibilityElement = YES;
     _mediaView.accessibilityIdentifier = SoilAdsIdMedia;
     _mediaView.accessibilityTraits = UIAccessibilityTraitButton;
-    _mediaView.accessibilityLabel = _content.creative.title.length > 0 ? _content.creative.title : @"Ad";
+    _mediaView.accessibilityLabel = SoilAdsAccessibilityLabel(_content.creative.title);
     [_mediaView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(clickTapped)]];
     [self.view addSubview:_mediaView];
 
@@ -138,7 +139,7 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
         [self refreshMuteButton];
     }
 
-    _closeButton = [self makeRoundButton:40];
+    _closeButton = [self makeRoundButton:44]; // the minimum touch target
     _closeButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     _closeButton.accessibilityIdentifier = SoilAdsIdClose;
     _closeButton.accessibilityLabel = @"Close";
@@ -419,10 +420,19 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
 - (void)refreshCloseButton
 {
     if (!_closeButton) return;
-    NSString *title = _lockPolicy.unlocked ? @"✕" : [NSString stringWithFormat:@"%ld", (long)_lockPolicy.secondsRemaining];
+    BOOL unlocked = _lockPolicy.unlocked;
+    NSString *title = unlocked ? @"✕" : [NSString stringWithFormat:@"%ld", (long)_lockPolicy.secondsRemaining];
     if (![[_closeButton titleForState:UIControlStateNormal] isEqualToString:title])
         [_closeButton setTitle:title forState:UIControlStateNormal];
-    _closeButton.accessibilityValue = _lockPolicy.unlocked ? @"unlocked" : title;
+    // Locked: a dimmed button whose value is the countdown. Unlocked: a plain "Close" button,
+    // and VoiceOver is moved to it.
+    _closeButton.accessibilityValue = unlocked ? nil : title;
+    _closeButton.accessibilityTraits = unlocked ? UIAccessibilityTraitButton
+                                                : UIAccessibilityTraitButton | UIAccessibilityTraitNotEnabled;
+    if (unlocked && !_closeShownUnlocked) {
+        _closeShownUnlocked = YES;
+        UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, _closeButton);
+    }
 }
 
 - (void)refreshMuteButton

@@ -9,6 +9,7 @@
 extern UIViewController *UnityGetGLViewController(void);
 extern void UnitySendMessage(const char *obj, const char *method, const char *msg);
 extern void UnityPause(int pause);
+extern int UnityIsPaused(void);
 extern void UnityUpdateMuteState(int mute);
 
 // Entry points called from C# (see NativeAds/PROTOCOL.md). `bool` is a 1-byte C bool:
@@ -23,20 +24,33 @@ bool SoilAds_IsReady(const char *format);
 @interface SoilAdsUnityHost : NSObject <SoilAdsHost>
 @end
 
-@implementation SoilAdsUnityHost
+@implementation SoilAdsUnityHost {
+    BOOL _pausedByAds;
+}
 
 - (UIViewController *)soilAdsRootViewController
 {
     return UnityGetGLViewController();
 }
 
+// Known limitation, on purpose: while an ad holds Unity paused, the trampoline finds the player
+// already paused when the app goes to the background (and leaves it paused when the app comes
+// back), so a background trip during an ad does not reach the game's OnApplicationPause.
+// We do not call Unity internals to fake it.
 - (void)soilAdsSetGamePaused:(BOOL)paused
 {
-    UnityPause(paused ? 1 : 0);
-    if (!paused) {
-        // Same expression the trampoline uses, so game audio follows the device volume again.
-        UnityUpdateMuteState([[AVAudioSession sharedInstance] outputVolume] < 0.01f ? 1 : 0);
+    if (paused) {
+        // Leave the game as we found it: only a pause we made is undone afterwards.
+        _pausedByAds = UnityIsPaused() == 0;
+        if (_pausedByAds) UnityPause(1);
+        return;
     }
+    if (_pausedByAds) {
+        _pausedByAds = NO;
+        UnityPause(0);
+    }
+    // Same expression the trampoline uses, so game audio follows the device volume again.
+    UnityUpdateMuteState([[AVAudioSession sharedInstance] outputVolume] < 0.01f ? 1 : 0);
 }
 
 @end

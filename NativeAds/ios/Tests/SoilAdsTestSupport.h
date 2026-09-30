@@ -20,6 +20,8 @@ NSArray<UIView *> *SoilAdsFindViews(UIView *view, NSString *identifier);
 @property (nonatomic, readonly) NSMutableArray<NSNumber *> *pauseCalls;
 @property (nonatomic, readonly) NSMutableArray<NSURL *> *openedURLs;
 @property (nonatomic) BOOL openResult;
+/// What soilAdsAppIsActive reports (YES by default).
+@property (nonatomic) BOOL appActive;
 @end
 
 @interface SoilAdsEventRecorder : NSObject
