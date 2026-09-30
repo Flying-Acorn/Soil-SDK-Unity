@@ -1,3 +1,6 @@
+// IL2CPP links [DllImport("__Internal")] statically on every platform, so these imports may only
+// exist in iOS player builds; anywhere else they would break the link (e.g. Android).
+#if UNITY_IOS && !UNITY_EDITOR
 using System;
 using System.Runtime.InteropServices;
 using FlyingAcorn.Analytics;
@@ -64,3 +67,4 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         }
     }
 }
+#endif
