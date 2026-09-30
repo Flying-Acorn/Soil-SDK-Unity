@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace FlyingAcorn.Soil.Advertisement.Player
 {
@@ -30,7 +31,8 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             return _instance;
         }
 
-        /// <summary>Called by the native players with one event JSON.</summary>
+        /// <summary>Called by the native players with one event JSON (by name, so kept from stripping).</summary>
+        [Preserve]
         public void OnNativeAdEvent(string json)
         {
             MessageReceived?.Invoke(json);

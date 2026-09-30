@@ -294,21 +294,57 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         }
 
         [Test]
-        public void Banner_StaysLoadedAcrossShowAndHide()
+        public void Banner_StaysReadyWhileOnScreen_AndIsPreparedAgainAfterClosing()
         {
             var slot = Prepared(AdFormats.Banner);
 
             _slots.Show(AdFormats.Banner, "{}");
             Native(AdFormats.Banner, NativeAdEventType.Shown);
+            Assert.IsTrue(slot.IsReady, "a banner on screen is still ready (showing it again moves it)");
+
+            _slots.Show(AdFormats.Banner, "{\"position\":\"top\"}");
+            Assert.AreEqual(2, _player.Count("show:banner"));
+
             slot.Hide();
             Native(AdFormats.Banner, NativeAdEventType.Closed);
 
-            Assert.IsTrue(slot.IsReady);
             Assert.AreEqual(1, _player.Count("hide:banner"));
-            Assert.AreEqual(1, _player.Count("load:banner"), "a banner is not consumed");
+            Assert.IsFalse(slot.IsReady, "a closed banner is used up, as it always was");
+            Assert.AreEqual(2, _player.Count("load:banner"), "and prepared again at once");
 
+            Native(AdFormats.Banner, NativeAdEventType.Loaded);
+            CollectionAssert.AreEqual(new[] { "banner:Shown", "banner:Closed", "banner:Loaded" }, _notices,
+                "a new Loaded tells the game it can show a banner again");
+        }
+
+        [Test]
+        public void Banner_LoadAdFromTheClosedHandler_IsAnsweredOnce()
+        {
+            var slot = Prepared(AdFormats.Banner);
             _slots.Show(AdFormats.Banner, "{}");
-            Assert.AreEqual(2, _player.Count("show:banner"));
+            slot.Notice += (notice, _) => { if (notice == AdSlotNotice.Closed) slot.RequestLoad(); };
+
+            Native(AdFormats.Banner, NativeAdEventType.Closed);
+            Native(AdFormats.Banner, NativeAdEventType.Loaded);
+
+            Assert.AreEqual(2, _player.Count("load:banner"));
+            Assert.AreEqual(1, _notices.Count(n => n == "banner:Loaded"));
+        }
+
+        [Test]
+        public void LoadAdFromTheClosedHandler_IsAnsweredOnce()
+        {
+            var slot = Prepared(AdFormats.Rewarded);
+            _slots.Show(AdFormats.Rewarded, "{}");
+            slot.Notice += (notice, _) => { if (notice == AdSlotNotice.Closed) slot.RequestLoad(); };
+
+            Native(AdFormats.Rewarded, NativeAdEventType.Shown);
+            Native(AdFormats.Rewarded, NativeAdEventType.Closed);
+            Native(AdFormats.Rewarded, NativeAdEventType.Loaded);
+            _slots.Tick();
+
+            Assert.AreEqual(2, _player.Count("load:rewarded"), "one reload, not two");
+            Assert.AreEqual(1, _notices.Count(n => n == "rewarded:Loaded"));
         }
 
         [Test]

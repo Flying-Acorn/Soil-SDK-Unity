@@ -25,7 +25,10 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
     ///   LoadFailed, possibly later (while assets are still caching or the player is decoding).
     /// - A gated slot (rewarded cooldown) is not ready, and its Loaded waits for the gate to open.
     /// - A fullscreen show consumes the prepared ad; the same creative is prepared again right
-    ///   after it closes, so the next LoadAd is answered at once. A banner can be shown again.
+    ///   after it closes, so the next LoadAd is answered at once.
+    /// - A banner stays ready while it is on screen (showing it again only moves it) and, as the
+    ///   SDK always did, is used up when it closes: it is prepared again and announced with a new
+    ///   Loaded, which is what games wait for before showing a banner again.
     /// </summary>
     public sealed class AdSlot
     {
@@ -202,6 +205,11 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
 
                 case NativeAdEventType.Closed:
                     IsShowing = false;
+                    if (!IsFullscreen)
+                    {
+                        IsPrepared = false;
+                        _announced = false;
+                    }
                     Raise(AdSlotNotice.Closed);
                     PrepareAgainIfConsumed();
                     Tick();
@@ -211,7 +219,7 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
 
         private void PrepareAgainIfConsumed()
         {
-            if (IsFullscreen && Creative != null && !IsPrepared && !IsPreparing)
+            if (Creative != null && !IsPrepared && !IsPreparing)
                 Prepare();
         }
 

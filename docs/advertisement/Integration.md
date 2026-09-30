@@ -519,7 +519,7 @@ Before shipping, thoroughly test the following on real Android and iOS devices:
 
 **Events fire multiple times**: Ensure you unsubscribe from events when scenes unload if you attach listeners on objects that are destroyed.
 
-**`OnXAdLoaded` fires without a `LoadAd` call**: The SDK announces each ad it prepares once (after initialization, and after a fullscreen ad closes). Treat Loaded as "ready to show", not as an answer to one specific call.
+**`OnXAdLoaded` fires without a `LoadAd` call**: The SDK announces each ad it prepares once: after initialization, and again after an ad closes (a closed ad is used up and prepared again, banners included). Treat Loaded as "ready to show", not as an answer to one specific call.
 
 ## Example Script
 
