@@ -49,8 +49,8 @@ private void OnAdsInitFailed(string error)
 
 Interstitial and rewarded ads are drawn natively **on top of Unity**:
 
-- **Android**: the ad opens in its own activity. Unity's activity pauses underneath, which pauses the game loop and the game's audio.
-- **iOS**: the ad is presented over Unity's view controller and Unity is paused (`UnityPause`) until it closes.
+- **Android**: the ad opens in its own activity. Unity's activity pauses underneath, which pauses the game loop and the game's audio. Your game gets `OnApplicationPause(true)` when the ad opens and `OnApplicationPause(false)` when it closes — make sure resume logic (app-open ads, session timers, "welcome back" screens) does not treat that as the player leaving the app.
+- **iOS**: the ad is presented over Unity's view controller and Unity is paused (`UnityPause`) until it closes. A game that was already paused stays paused. A show requested while the app is inactive waits until it is active again.
 
 So gameplay receives no input and makes no sound while a fullscreen ad is up, without any code in your game. Events raised while Unity is paused (`Shown`, `Rewarded`, `Clicked`) are delivered, in order, as soon as it resumes — right before `Closed`.
 
@@ -209,6 +209,10 @@ For production applications, implement robust retry logic to handle temporary fa
 - **Timeout**: Retry with backoff - server response delays
 - **InternalError**: Limited retries - may indicate configuration issues
 - **AdNotReady**: Retry immediately - ad failed to load but can be retried
+
+`Timeout` can also come from the SDK itself: a load that the ad player never answers fails after 60 seconds, and a fullscreen show that gets no answer at all fails after 30 seconds (time counts only while the game runs).
+
+An exception thrown by your own ad event handler is logged and no longer breaks the SDK's ad state: the other handlers still run and the ad is prepared again as usual.
 
 ## Ad Purchase Integration
 
@@ -517,9 +521,34 @@ Before shipping, thoroughly test the following on real Android and iOS devices:
 
 **Nothing shows on device but the Editor works**: Check the player log for `[Advertisement] Android ad player unavailable` / `iOS ad player unavailable`. It means the native player was stripped from the build — keep `Assets/FlyingAcorn/Soil/Advertisement/Plugins` in the project.
 
+**Links in ads**: Only web and store links open. On Android any app or store deep link opens too, except schemes that act on the device (`tel:`, `sms:`, `file:`, `intent:`, `javascript:`, …). A refused link counts as no link; the click is still reported. See *Click links* in [`NativeAds/PROTOCOL.md`](../../NativeAds/PROTOCOL.md).
+
 **Events fire multiple times**: Ensure you unsubscribe from events when scenes unload if you attach listeners on objects that are destroyed.
 
 **`OnXAdLoaded` fires without a `LoadAd` call**: The SDK announces each ad it prepares once: after initialization, and again after an ad closes (a closed ad is used up and prepared again, banners included). Treat Loaded as "ready to show", not as an answer to one specific call.
+
+## Ad Files on Disk
+
+Ad images and videos are downloaded ahead of time into `SoilAssets` under `Application.persistentDataPath`:
+
+- An ad group that is selected again reuses its files; only missing or broken files are downloaded.
+- Downloads time out after 30 seconds without new data (videos may take up to 10 minutes in total, images 2), and are retried twice.
+- Leftover partial downloads and files no ad refers to are deleted at startup.
+- On iOS the files are excluded from iCloud backup.
+- A creative whose files turn out to be broken is repaired (dropped and downloaded again) up to twice.
+- `ClearAssetCacheAsync`, `RemoveCachedAsset` and `ClearOldAssetsAsync` rebuild the affected ads from what is left.
+
+## Platforms Without a Native Player
+
+In the Editor, ads are drawn by a placeholder (clicks are only logged). On desktop, WebGL and consoles, banner, interstitial and rewarded ads always answer `NoFill` and their files are not downloaded; native ads (drawn by your own UI) still work.
+
+## Migrating From the Unity-Drawn Ads
+
+- `SoilAdInputBlocker.Block`, `Unblock`, `ForceUnblock` and `FailsafeTick` are obsolete no-ops: input is blocked automatically while a fullscreen ad is up.
+- `Advertisement.LoadVideoUrl`, `IsVideoCachedAsync` and `DownloadAndCacheVideoAsync` are obsolete; the SDK downloads videos itself.
+- `SoilAdManager.canvasReferences` is obsolete and always null.
+- `SoilAdManager.bannerAdPlacement`, `interstitialAdPlacement`, `rewardedAdPlacement` and the `Models.AdPlacements` types (the Unity ad prefabs and their components) are removed. Code that used them must switch to the `Advertisement` API.
+- On Android, fullscreen ads now pause Unity's activity (see *Game Pause, Input and Audio During Ads*).
 
 ## Example Script
 

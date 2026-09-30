@@ -58,13 +58,14 @@ iOS: `UnitySendMessage(receiverObject, receiverMethod, json)`.
 | `loaded` | `media` = `video` \| `image` \| `text`, `durationMs` (video only, else 0) | Creative decoded and ready; slot filled. `media` is what will actually play (a broken video with a usable image reports `image`). |
 | `loadFailed` | `error`, `message` | Slot left empty. |
 | `shown` | — | Ad is visible on screen (banner: view attached; fullscreen: presentation finished). |
-| `showFailed` | `error`, `message` | Nothing was shown. |
-| `clicked` | — | User tapped the call to action or media; the click URL was opened (or could not be). |
+| `showFailed` | `error`, `message` | Nothing was shown: the ad never reached the screen. The slot keeps its ad (fullscreen too), unless it was reloaded or destroyed meanwhile. |
+| `clicked` | — | User tapped the call to action or media. Sent whether or not a link was opened (see *Click links*). |
 | `rewarded` | — | Rewarded only. Sent once per show, always before `closed`. |
-| `closed` | — | Ad left the screen (user close, back button, `hide`, `destroy`). Sent exactly once per `shown`. |
+| `closed` | — | Ad left the screen (user close, back button, `hide`, `destroy`, or the system finishing the ad, e.g. Android relaunching a `singleTask` game from the launcher). Sent exactly once per `shown`. A reward granted at unlock stays granted; it is not persisted across process death, as with ordinary ad networks. |
 
 Error codes (`error`): `invalid_format`, `invalid_creative`, `media_unreadable`, `not_loaded`,
 `already_showing`, `no_host` (no Activity / no root view controller), `internal`.
+The Unity side adds `no_fill`, `network` and `timeout` (see *Unity-side watchdogs*).
 
 Events for one show are always ordered: `shown` → (`clicked`)* → (`rewarded`)? → `closed`.
 
@@ -75,12 +76,19 @@ Each format has one **slot** holding at most one loaded creative.
 - `load` replaces whatever is in the slot (the previous slot content is released; an ad that is
   on screen is not affected). A second `load` while a first one is still decoding cancels the
   first; only the last one reports `loaded`/`loadFailed`.
-- Fullscreen `show` **consumes** the slot: after `shown`, `isReady` is false until the next `load`.
+- Fullscreen `show` **consumes** the slot when the show is accepted: from then on `isReady` is false
+  until the next `load`. If the show ends in `showFailed` (it never reached the screen), the ad goes
+  back into the slot.
 - Banner `show` does **not** consume the slot: the banner can be hidden and shown again.
-  Showing a banner that is already visible moves it to the new position and sends nothing.
+  Showing a banner that is already visible moves it to the new position and sends nothing. If the
+  banner view was removed by something else, the next `show` first sends `closed` for it, then
+  `shown` for the new view.
 - `hide(banner)` removes the banner view (`closed`). `hide(interstitial|rewarded)` dismisses a
   fullscreen ad that is on screen (`closed`, no `rewarded` unless already granted).
 - `destroy` = `hide` + empty the slot.
+- A fullscreen `hide`/`destroy` that arrives before the presentation has started (iOS: waiting for
+  the app to become active) cancels it with `showFailed`/`internal`, and nothing appears. Once the
+  presentation has started, `hide` still gives `shown` then `closed`.
 - Only one fullscreen ad (interstitial or rewarded) can be on screen at a time; a second `show`
   gets `showFailed`/`already_showing`.
 
@@ -111,7 +119,8 @@ Validation on `load`:
 - else banner with a non-empty `title` → `media: text`.
 - else `loadFailed` / `invalid_creative` (no media) or `media_unreadable` (media given but broken).
 - `logoPath` is optional decoration; a broken logo is ignored, never a failure.
-- Images are decoded off the main thread and downsampled to the screen size.
+- Images are decoded off the main thread and downsampled to the screen size. Each format decodes
+  on its own background thread, so a slow video check never delays a banner.
 
 ## Show options JSON (`show`)
 
@@ -172,33 +181,89 @@ was first shown.
 - Android: a dedicated `SoilAdActivity` (declared in the androidlib manifest, framework theme
   `@android:style/Theme.Black.NoTitleBar.Fullscreen`, `configChanges` covering orientation/size so
   it is not recreated, `screenOrientation="behind"`). Unity's activity pauses underneath, which
-  pauses the game loop and game audio. Immersive sticky mode; content laid out inside display
-  cutout insets.
+  pauses the game loop and game audio, so the game gets `OnApplicationPause(true)` and then
+  `false`. Immersive sticky mode; content laid out inside the display cutout and any system bars
+  that are visible (split screen, freeform windows, revealed bars); hidden immersive bars take no
+  room.
 - iOS: a `UIViewController` presented `UIModalPresentationFullScreen` from Unity's root view
   controller, same supported orientations as Unity's, status bar and home indicator hidden, content
-  inside the safe area. `UnityPause(1)` on present, `UnityPause(0)` after dismissal.
+  inside the safe area. The ad is presented only while the app is active: a `show` made while it is
+  inactive (backgrounded, a system alert, Control Center) waits until it becomes active, with no
+  event until then. If a view controller transition is running, it presents when that transition
+  ends. `UnityPause(1)` right before presenting, only if `UnityIsPaused()` was 0; `UnityPause(0)`
+  after dismissal, only if the player paused Unity, so a game that was already paused stays
+  paused. If UIKit has not finished the dismissal after 3 s and the ad is still on screen, the
+  dismissal is retried without animation up to 3 times, 1 s apart; the game resumes and `closed` is
+  sent once the ad is off screen, or after the last retry. Known limitations: while the ad holds
+  Unity paused, backgrounding the app does not reach the game's `OnApplicationPause`; ad audio
+  follows the ringer/silent switch (Unity owns the audio session).
 - Black background; media aspect-fit and centered; tapping media = click.
-- Top-left: small "Ad" badge. Top-right: round close button showing the countdown number while
-  locked, `✕` when unlocked. Android back button closes only when unlocked.
+- Top-left: small "Ad" badge. Top-right: round close button (44 pt on iOS) showing the countdown
+  number while locked, `✕` when unlocked. Android back button closes only when unlocked.
 - Video ads: a mute toggle next to the badge; sound on unless `startMuted`. The video pauses
   when the app goes to background or after a click, and resumes when the ad is visible again.
-  When the video ends it stays on its last frame (or the image, if there is one).
+  When the video ends its player is released and never reopened; the ad keeps showing its image,
+  or a copy of the last frame if there is no image, also after backgrounding. A resumed video
+  continues from where it was left (Android API 26+ seeks to the exact position, not the previous
+  key frame); playback progress never moves backwards.
 - Bottom bar (when any of logo/title/description/callToAction exists): logo (rounded, square),
   title (bold, 1 line) and description (2 lines), then a call-to-action button. Text alignment is
   natural and follows the text's first strong character, so right-to-left text lines up right.
-- Click: open `clickUrl` with the system (Android `Intent.ACTION_VIEW` + `FLAG_ACTIVITY_NEW_TASK`,
-  catching `ActivityNotFoundException`; iOS `-[UIApplication openURL:options:completionHandler:]`).
-  `clicked` is sent even if no app can open it.
+- Click: open `clickUrl` with the system (Android `Intent.ACTION_VIEW` + `CATEGORY_BROWSABLE` +
+  `FLAG_ACTIVITY_NEW_TASK`, catching `ActivityNotFoundException`; iOS
+  `-[UIApplication openURL:options:completionHandler:]`). `clicked` is sent even if nothing opens.
+  See *Click links* for which links are opened.
 - Accessibility identifiers / content descriptions: `soil_ad_close`, `soil_ad_cta`,
   `soil_ad_media`, `soil_ad_mute`, `soil_ad_banner` (used by UI automation tests).
+- Accessibility (iOS): the banner and the fullscreen media read "Ad" or "Ad, <title>". While
+  locked, the close button is marked not enabled and its value is the countdown; when it unlocks
+  it becomes a plain "Close" button and screen-reader focus moves to it.
+
+## Click links
+
+Click URLs come from the ad server, so the player opens only links that cannot act on the device.
+The link is trimmed; a link with control characters, no valid RFC 3986 scheme, or nothing after the
+scheme is never opened.
+
+- iOS: only `http`, `https`, `itms-apps`, `itms-appss` (case-insensitive). A URL that
+  `+URLWithString:` rejects (spaces, non-ASCII on iOS 12-16) is percent-encoded and tried again.
+- Android: `http`, `https`, `market` and any other app or store scheme, except the ones that act on
+  the device: `javascript`, `vbscript`, `data`, `file`, `content`, `intent`, `android-app`,
+  `about`, `blob`, `tel`, `sms`, `smsto`, `mms`, `mmsto`, `mailto`, `wtai`. Opened as a browsable
+  link only.
+- C# applies the same rule before the creative reaches the player (`AdLinkPolicy`; app schemes are
+  allowed on Android builds only), and a refused link is treated as no link.
+
+`clicked` is sent for every tap, whether or not a link opened.
 
 ## Banner presentation
 
-- Full safe-area width, height 50 dp/pt on phones and 90 dp/pt when the smallest screen side is
-  at least 600 dp/pt (tablets). Placed at the bottom, top or vertical center of the safe area.
+- Full safe-area width, height 50 dp/pt on phones and 90 dp/pt when the smallest side of the app's
+  window is at least 600 dp/pt (tablets; on iOS the host window's bounds, so Split View counts,
+  with the screen only as a fallback). Placed at the bottom, top or vertical center of the safe area.
 - Android: `activity.addContentView(view, FrameLayout.LayoutParams(MATCH_PARENT, h, gravity))`,
-  top/bottom margins from display cutout insets (API 28+). iOS: subview of Unity's root view
+  top/bottom margins from the display cutout and visible system-bar insets. iOS: subview of Unity's root view
   controller view, Auto Layout against `safeAreaLayoutGuide`.
 - With an image: the image aspect-fit on a dark background. Without: logo, title/description and
   call-to-action laid out in a row. Small "Ad" badge in a corner. The whole banner is clickable.
 - The banner never steals touches outside its own rectangle.
+
+## Unity-side watchdogs
+
+C# never waits forever on a player. Only time while the game runs counts (unscaled, at most a
+fraction of a second per frame, so time paused under a fullscreen ad does not count).
+
+- `load`: no `loaded`/`loadFailed` within 60 s → the load fails with `timeout`, the native slot is
+  destroyed if nothing is on screen, and a late answer is ignored.
+- Fullscreen `show`: no answer at all (`shown`, `showFailed` or `closed`) within 30 s → `showFailed`
+  with `timeout`, the player is told to `hide`, and later events of that show are swallowed (a late
+  `shown` is hidden again). An ad that did appear is never timed out.
+- A `loadFailed` with `media_unreadable` or `invalid_creative` for a creative built from the cache
+  drops the broken files and re-caches them, at most twice per format until the next `loaded`.
+
+## Minification (Android)
+
+The SDK's Editor script (`Advertisement/Editor/SoilAdsProguardRules.cs`) adds
+`-keep class com.flyingacorn.soil.ads.** { *; }` to unityLibrary's `proguard-unity.txt`, which
+Unity uses as a consumer ProGuard file, so R8 keeps the bridge C# reaches by name. Games with a
+custom Gradle setup that does not use that file must add the rule themselves.
