@@ -31,7 +31,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) double imageLockSeconds;
 @property (nonatomic, readonly) double videoLockFraction;
 @property (nonatomic, readonly) double minVideoLockSeconds;
-@property (nonatomic, readonly) double maxLockSeconds;
 @property (nonatomic, readonly) BOOL startMuted;
 @property (nonatomic, readonly) SoilAdsLockSettings lockSettings;
 

@@ -265,7 +265,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             {
                 var visible = Time.realtimeSinceStartup - p.StartedAt;
                 var remaining = FullscreenLockPolicy.SecondsRemaining(p.Options, p.Ad.IsVideo, SimulatedVideoSeconds,
-                    visible, Mathf.Min(visible, SimulatedVideoSeconds), false);
+                    visible, Mathf.Min(visible, SimulatedVideoSeconds), visible >= SimulatedVideoSeconds, false);
                 GUI.Box(close, remaining.ToString());
             }
         }

@@ -87,7 +87,6 @@ static BOOL SoilAdsBool(NSDictionary *dictionary, NSString *key, BOOL fallback)
     SoilAdsShowOptions *options = [[self alloc] init];
     options->_format = format;
     options->_position = SoilAdsBannerPositionBottom;
-    options->_maxLockSeconds = 60;
     options->_startMuted = NO;
     if (format == SoilAdsFormatRewarded) {
         options->_imageLockSeconds = 20;
@@ -115,7 +114,6 @@ static BOOL SoilAdsBool(NSDictionary *dictionary, NSString *key, BOOL fallback)
     options->_imageLockSeconds = SoilAdsNumber(dictionary, @"imageLockSeconds", options->_imageLockSeconds);
     options->_videoLockFraction = SoilAdsNumber(dictionary, @"videoLockFraction", options->_videoLockFraction);
     options->_minVideoLockSeconds = SoilAdsNumber(dictionary, @"minVideoLockSeconds", options->_minVideoLockSeconds);
-    options->_maxLockSeconds = SoilAdsNumber(dictionary, @"maxLockSeconds", options->_maxLockSeconds);
     options->_startMuted = SoilAdsBool(dictionary, @"startMuted", options->_startMuted);
     return options;
 }
@@ -126,7 +124,6 @@ static BOOL SoilAdsBool(NSDictionary *dictionary, NSString *key, BOOL fallback)
     settings.imageLockSeconds = _imageLockSeconds;
     settings.videoLockFraction = _videoLockFraction;
     settings.minVideoLockSeconds = _minVideoLockSeconds;
-    settings.maxLockSeconds = _maxLockSeconds;
     return settings;
 }
 

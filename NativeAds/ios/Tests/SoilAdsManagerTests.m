@@ -73,7 +73,7 @@ static const NSTimeInterval Timeout = 10;
 - (NSString *)fullscreenOptions:(double)imageLock fraction:(double)fraction minVideo:(double)minVideo
 {
     return SoilAdsJSON(@{@"imageLockSeconds": @(imageLock), @"videoLockFraction": @(fraction),
-                         @"minVideoLockSeconds": @(minVideo), @"maxLockSeconds": @60, @"startMuted": @NO});
+                         @"minVideoLockSeconds": @(minVideo), @"startMuted": @NO});
 }
 
 - (void)showFullscreen:(NSString *)format options:(NSString *)options
@@ -492,7 +492,7 @@ static const NSTimeInterval Timeout = 10;
     [self load:@"rewarded" fields:@{@"videoPath": SoilAdsResource(@"video.mp4"), @"imagePath": SoilAdsResource(@"image.png")}];
     [self.manager showFormat:@"rewarded"
                  optionsJSON:SoilAdsJSON(@{@"imageLockSeconds": @20, @"videoLockFraction": @1.0, @"minVideoLockSeconds": @0,
-                                           @"maxLockSeconds": @60, @"startMuted": @YES})];
+                                           @"startMuted": @YES})];
     XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"shown"] == 1; }));
     SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
     XCTAssertTrue(vc.player.muted, @"startMuted");

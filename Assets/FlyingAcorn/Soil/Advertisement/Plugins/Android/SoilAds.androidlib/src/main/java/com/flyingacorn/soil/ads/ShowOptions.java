@@ -12,23 +12,21 @@ final class ShowOptions {
     final double imageLockSeconds;
     final double videoLockFraction;
     final double minVideoLockSeconds;
-    final double maxLockSeconds;
     final boolean startMuted;
 
     ShowOptions(double imageLockSeconds, double videoLockFraction, double minVideoLockSeconds,
-                double maxLockSeconds, boolean startMuted) {
+                boolean startMuted) {
         this.imageLockSeconds = imageLockSeconds;
         this.videoLockFraction = videoLockFraction;
         this.minVideoLockSeconds = minVideoLockSeconds;
-        this.maxLockSeconds = maxLockSeconds;
         this.startMuted = startMuted;
     }
 
     /** The values C# sends by default, used for any field that is missing or not a number. */
     static ShowOptions defaults(String format) {
         return AdFormats.REWARDED.equals(format)
-                ? new ShowOptions(20, 1.0, 0, 60, false)
-                : new ShowOptions(5, 0.8, 5, 60, false);
+                ? new ShowOptions(20, 1.0, 0, false)
+                : new ShowOptions(5, 0.8, 5, false);
     }
 
     static ShowOptions parse(String format, String json) {
@@ -39,7 +37,6 @@ final class ShowOptions {
                 number(o, "imageLockSeconds", d.imageLockSeconds),
                 number(o, "videoLockFraction", d.videoLockFraction),
                 number(o, "minVideoLockSeconds", d.minVideoLockSeconds),
-                number(o, "maxLockSeconds", d.maxLockSeconds),
                 o.optBoolean("startMuted", d.startMuted));
     }
 

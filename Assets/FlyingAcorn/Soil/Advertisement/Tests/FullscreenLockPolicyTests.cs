@@ -4,8 +4,10 @@ using NUnit.Framework;
 namespace FlyingAcorn.Soil.Advertisement.Tests
 {
     /// <summary>
-    /// The close-button lock of fullscreen ads. The same cases are tested against the Java and
-    /// Objective-C players, so all three agree.
+    /// The close-button lock of fullscreen ads, pinned to what the Unity-drawn ads did before the
+    /// native players: interstitial 5 s, or 80% of a video but never under 5 s; rewarded 20 s, or
+    /// the whole video; the countdown doubles as the safety net for a stalled or failed video.
+    /// The same cases are tested against the Java and Objective-C players.
     /// </summary>
     public class FullscreenLockPolicyTests
     {
@@ -16,91 +18,108 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
             float position = 0, bool ended = false, bool failed = false)
             => FullscreenLockPolicy.IsUnlocked(o, video, duration, visible, position, ended, failed);
 
+        private static int Remaining(FullscreenShowOptions o, bool video, float duration, float visible,
+            float position = 0, bool ended = false, bool failed = false)
+            => FullscreenLockPolicy.SecondsRemaining(o, video, duration, visible, position, ended, failed);
+
         [Test]
-        public void InterstitialImage_UnlocksAfterFiveVisibleSeconds()
+        public void InterstitialImage_UnlocksAfterFiveSeconds()
         {
             Assert.IsFalse(Unlocked(Interstitial, false, 0, 4.9f));
             Assert.IsTrue(Unlocked(Interstitial, false, 0, 5f));
         }
 
         [Test]
-        public void InterstitialVideo_UnlocksAtEightyPercent()
-        {
-            Assert.AreEqual(16f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 20f), 1e-4);
-            Assert.IsFalse(Unlocked(Interstitial, true, 20f, 30f, 15.9f), "wall time does not count, playback does");
-            Assert.IsTrue(Unlocked(Interstitial, true, 20f, 16f, 16f));
-        }
-
-        [Test]
-        public void InterstitialVideo_NeverLocksLessThanFiveSeconds()
-        {
-            Assert.AreEqual(5f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 6f), 1e-4);
-            Assert.IsFalse(Unlocked(Interstitial, true, 6f, 4.9f, 4.9f));
-            Assert.IsTrue(Unlocked(Interstitial, true, 6f, 5f, 5f));
-        }
-
-        [Test]
-        public void VideoLock_IsNeverLongerThanTheVideo()
-        {
-            Assert.AreEqual(3f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 3f), 1e-4);
-            Assert.AreEqual(0f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 0f), 1e-4);
-            Assert.AreEqual(0f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, -1f), 1e-4);
-        }
-
-        [Test]
-        public void RewardedVideo_UnlocksOnlyAtTheEnd()
-        {
-            Assert.AreEqual(15f, FullscreenLockPolicy.VideoLockSeconds(Rewarded, 15f), 1e-4);
-            Assert.IsFalse(Unlocked(Rewarded, true, 15f, 14.9f, 14.9f));
-            Assert.IsTrue(Unlocked(Rewarded, true, 15f, 15f, 15f));
-            Assert.IsTrue(Unlocked(Rewarded, true, 15f, 14f, 14.5f, ended: true), "an ended video unlocks even if the position lags");
-        }
-
-        [Test]
-        public void RewardedImage_UnlocksAfterTwentyVisibleSeconds()
+        public void RewardedImage_UnlocksAfterTwentySeconds()
         {
             Assert.IsFalse(Unlocked(Rewarded, false, 0, 19.9f));
             Assert.IsTrue(Unlocked(Rewarded, false, 0, 20f));
         }
 
         [Test]
-        public void FailedVideo_FallsBackToTheImageRule_FromTheFirstSecondShown()
+        public void InterstitialVideo_UnlocksAtEightyPercent()
         {
-            Assert.IsFalse(Unlocked(Rewarded, true, 30f, 19f, 2f, failed: true));
-            Assert.IsTrue(Unlocked(Rewarded, true, 30f, 20f, 2f, failed: true));
+            Assert.AreEqual(16f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 20f), 1e-4);
+            Assert.IsFalse(Unlocked(Interstitial, true, 20f, 15.9f, 15.9f));
+            Assert.IsTrue(Unlocked(Interstitial, true, 20f, 16f, 16f));
         }
 
         [Test]
-        public void SafetyNet_NeverTrapsTheUser()
+        public void InterstitialVideo_ShorterThanFiveSeconds_StillLocksFiveSeconds()
         {
-            Assert.IsTrue(Unlocked(Rewarded, true, 300f, 60f, 1f), "a stalled long video unlocks at the cap");
-            Assert.IsFalse(Unlocked(Rewarded, true, 300f, 59.9f, 1f));
-
-            var longImage = new FullscreenShowOptions { ImageLockSeconds = 90, MaxLockSeconds = 60 };
-            Assert.IsTrue(Unlocked(longImage, false, 0, 60f));
+            // As before: the end of an interstitial video does not unlock it early.
+            Assert.AreEqual(5f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 3f), 1e-4);
+            Assert.IsFalse(Unlocked(Interstitial, true, 3f, 3.1f, 3f, ended: true));
+            Assert.AreEqual(2, Remaining(Interstitial, true, 3f, 3.1f, 3f, ended: true));
+            Assert.IsTrue(Unlocked(Interstitial, true, 3f, 5f, 3f, ended: true));
         }
 
         [Test]
-        public void Countdown_FollowsPlaybackForVideo()
+        public void RewardedVideo_UnlocksAtTheEnd_EvenWhenShorterThanTwentySeconds()
         {
-            Assert.AreEqual(16, FullscreenLockPolicy.SecondsRemaining(Interstitial, true, 20f, 0f, 0f, false));
-            Assert.AreEqual(1, FullscreenLockPolicy.SecondsRemaining(Interstitial, true, 20f, 15.5f, 15.5f, false));
-            Assert.AreEqual(0, FullscreenLockPolicy.SecondsRemaining(Interstitial, true, 20f, 17f, 17f, false));
+            Assert.AreEqual(15f, FullscreenLockPolicy.VideoLockSeconds(Rewarded, 15f), 1e-4);
+            Assert.IsFalse(Unlocked(Rewarded, true, 15f, 14.9f, 14.9f));
+            Assert.IsTrue(Unlocked(Rewarded, true, 15f, 15f, 15f));
+            Assert.IsTrue(Unlocked(Rewarded, true, 15f, 14f, 14.5f, ended: true), "an ended video unlocks even if the position lags");
+            Assert.IsTrue(Unlocked(Rewarded, true, 3f, 3f, 3f, ended: true), "a 3 s rewarded video rewards at 3 s");
         }
 
         [Test]
-        public void Countdown_FollowsVisibleTimeForImages()
+        public void RewardedVideo_LongerThanAMinute_IsWatchedToTheEnd()
         {
-            Assert.AreEqual(5, FullscreenLockPolicy.SecondsRemaining(Interstitial, false, 0, 0f, 0f, false));
-            Assert.AreEqual(3, FullscreenLockPolicy.SecondsRemaining(Interstitial, false, 0, 2.2f, 0f, false));
-            Assert.AreEqual(20, FullscreenLockPolicy.SecondsRemaining(Rewarded, true, 30f, 0f, 0f, true));
+            Assert.IsFalse(Unlocked(Rewarded, true, 90f, 70f, 70f), "no cap below the video's length");
+            Assert.IsTrue(Unlocked(Rewarded, true, 90f, 90f, 90f));
         }
 
         [Test]
-        public void Countdown_IsNeverNegative_NorBeyondTheCap()
+        public void StalledVideo_UnlocksWhenTheCountdownEnds()
         {
-            Assert.AreEqual(0, FullscreenLockPolicy.SecondsRemaining(Interstitial, false, 0, 100f, 0f, false));
-            Assert.AreEqual(10, FullscreenLockPolicy.SecondsRemaining(Rewarded, true, 300f, 50f, 1f, false));
+            // Playback stuck at 1 s: the on-screen countdown still ends, as it always did.
+            Assert.IsFalse(Unlocked(Rewarded, true, 15f, 19.9f, 1f));
+            Assert.IsTrue(Unlocked(Rewarded, true, 15f, 20f, 1f), "rewarded: 20 s, or the video's length if longer");
+            Assert.IsTrue(Unlocked(Rewarded, true, 30f, 30f, 1f));
+            Assert.IsTrue(Unlocked(Interstitial, true, 20f, 16f, 1f), "interstitial: 80% of the video");
+        }
+
+        [Test]
+        public void FailedVideo_UnlocksWhenTheCountdownEnds()
+        {
+            Assert.IsFalse(Unlocked(Rewarded, true, 15f, 19f, 2f, failed: true));
+            Assert.IsTrue(Unlocked(Rewarded, true, 15f, 20f, 2f, failed: true));
+            Assert.IsTrue(Unlocked(Interstitial, true, 3f, 5f, 1f, failed: true));
+        }
+
+        [Test]
+        public void VideoOfUnknownLength_IsTimedLikeAnImage()
+        {
+            Assert.IsFalse(Unlocked(Rewarded, true, 0f, 19f, 5f));
+            Assert.IsTrue(Unlocked(Rewarded, true, 0f, 20f, 5f));
+        }
+
+        [Test]
+        public void Countdown_FollowsWhicheverRuleIsCloser()
+        {
+            Assert.AreEqual(16, Remaining(Interstitial, true, 20f, 0f, 0f));
+            Assert.AreEqual(1, Remaining(Interstitial, true, 20f, 15.5f, 15.5f));
+            Assert.AreEqual(0, Remaining(Interstitial, true, 20f, 17f, 17f));
+            Assert.AreEqual(5, Remaining(Rewarded, true, 15f, 10f, 10f), "playback: 5 s to the end");
+            Assert.AreEqual(5, Remaining(Rewarded, true, 15f, 15f, 1f), "stalled: 5 s to the 20 s countdown");
+            Assert.AreEqual(20, Remaining(Rewarded, true, 30f, 10f, 0f, failed: true), "failed: the 30 s countdown");
+        }
+
+        [Test]
+        public void Countdown_ForImagesFollowsVisibleTime()
+        {
+            Assert.AreEqual(5, Remaining(Interstitial, false, 0, 0f));
+            Assert.AreEqual(3, Remaining(Interstitial, false, 0, 2.2f));
+            Assert.AreEqual(20, Remaining(Rewarded, false, 0, 0f));
+        }
+
+        [Test]
+        public void Countdown_IsNeverNegative()
+        {
+            Assert.AreEqual(0, Remaining(Interstitial, false, 0, 100f));
+            Assert.AreEqual(0, Remaining(Rewarded, true, 15f, 40f, 15f, ended: true));
         }
     }
 }

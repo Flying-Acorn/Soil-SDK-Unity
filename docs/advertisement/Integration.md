@@ -287,10 +287,10 @@ Fullscreen ads keep their close button locked for a moment, showing a countdown;
 
 | | Image ad | Video ad |
 |---|---|---|
-| Interstitial | after 5 s on screen | at 80% of the video (at least 5 s) |
-| Rewarded | after 20 s on screen | at the end of the video |
+| Interstitial | after 5 s on screen | at 80% of the video, never under 5 s (a 3 s video still waits 5 s) |
+| Rewarded | after 20 s on screen | at the end of the video (a 3 s video rewards at 3 s) |
 
-Only time the ad is actually visible counts: the countdown stops while the app is in the background or the player has left to the advertiser's page. A video that fails mid-play falls back to the ad's image and the image rule. As a safety net the close button always unlocks after 60 s on screen. Android's back button closes an ad only once it is unlocked. Video ads have a mute button and start with sound on (on iOS the device's silent switch is respected, as for the game).
+These are the same times the SDK always used. Only time the ad is actually visible counts: the countdown stops while the app is in the background or the player has left to the advertiser's page. If a video stalls or fails, the ad shows its image and the close button still unlocks when the countdown ends (interstitial: 5 s or 80% of the video; rewarded: 20 s or the video's length, whichever is longer). Android's back button closes an ad only once it is unlocked. Video ads have a mute button and start with sound on (on iOS the device's silent switch is respected, as for the game).
 
 ### Native Ads
 

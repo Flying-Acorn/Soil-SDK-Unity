@@ -68,11 +68,10 @@ public class ParsingTest {
     @Test
     public void showOptionsParseEveryField() {
         ShowOptions o = ShowOptions.parse("interstitial", "{\"imageLockSeconds\":3,\"videoLockFraction\":0.5,"
-                + "\"minVideoLockSeconds\":2,\"maxLockSeconds\":30,\"startMuted\":true}");
+                + "\"minVideoLockSeconds\":2,\"startMuted\":true}");
         assertEquals(3, o.imageLockSeconds, EPS);
         assertEquals(0.5, o.videoLockFraction, EPS);
         assertEquals(2, o.minVideoLockSeconds, EPS);
-        assertEquals(30, o.maxLockSeconds, EPS);
         assertTrue(o.startMuted);
     }
 
@@ -82,22 +81,19 @@ public class ParsingTest {
         assertEquals(5, interstitial.imageLockSeconds, EPS);
         assertEquals(0.8, interstitial.videoLockFraction, EPS);
         assertEquals(5, interstitial.minVideoLockSeconds, EPS);
-        assertEquals(60, interstitial.maxLockSeconds, EPS);
         assertFalse(interstitial.startMuted);
 
         ShowOptions rewarded = ShowOptions.parse("rewarded", "garbage");
         assertEquals(20, rewarded.imageLockSeconds, EPS);
         assertEquals(1.0, rewarded.videoLockFraction, EPS);
         assertEquals(0, rewarded.minVideoLockSeconds, EPS);
-        assertEquals(60, rewarded.maxLockSeconds, EPS);
     }
 
     @Test
     public void showOptionsFillMissingOrInvalidFieldsFromDefaults() {
-        ShowOptions o = ShowOptions.parse("rewarded", "{\"imageLockSeconds\":\"abc\",\"maxLockSeconds\":null,"
+        ShowOptions o = ShowOptions.parse("rewarded", "{\"imageLockSeconds\":\"abc\","
                 + "\"videoLockFraction\":0.25}");
         assertEquals(20, o.imageLockSeconds, EPS);
-        assertEquals(60, o.maxLockSeconds, EPS);
         assertEquals(0.25, o.videoLockFraction, EPS);
         assertEquals(0, o.minVideoLockSeconds, EPS);
     }

@@ -9,9 +9,26 @@ static double SoilAdsFiniteOrZero(double value)
 double SoilAdsVideoLockSeconds(SoilAdsLockSettings settings, double durationSeconds)
 {
     double duration = fmax(0, SoilAdsFiniteOrZero(durationSeconds));
-    double lock = fmax(SoilAdsFiniteOrZero(settings.minVideoLockSeconds),
-                       SoilAdsFiniteOrZero(settings.videoLockFraction) * duration);
-    return fmin(fmax(lock, 0), duration);
+    return fmax(0, fmax(SoilAdsFiniteOrZero(settings.minVideoLockSeconds),
+                        SoilAdsFiniteOrZero(settings.videoLockFraction) * duration));
+}
+
+double SoilAdsScreenLockSeconds(SoilAdsLockSettings settings, BOOL isVideo, double durationSeconds)
+{
+    double image = SoilAdsFiniteOrZero(settings.imageLockSeconds);
+    return isVideo ? fmax(SoilAdsVideoLockSeconds(settings, durationSeconds), image) : image;
+}
+
+/// A video of unknown length cannot be followed; it is timed like a failed one.
+static BOOL SoilAdsPlaysVideo(BOOL isVideo, double durationSeconds, BOOL videoFailed)
+{
+    return isVideo && !videoFailed && SoilAdsFiniteOrZero(durationSeconds) > 0;
+}
+
+/// After its end a video keeps counting on-screen time, so a short one still unlocks at its lock.
+static double SoilAdsProgress(double durationSeconds, double visibleSeconds, double positionSeconds, BOOL videoEnded)
+{
+    return videoEnded ? fmax(SoilAdsFiniteOrZero(durationSeconds), visibleSeconds) : positionSeconds;
 }
 
 BOOL SoilAdsIsUnlocked(SoilAdsLockSettings settings, BOOL isVideo, double durationSeconds,
@@ -19,21 +36,22 @@ BOOL SoilAdsIsUnlocked(SoilAdsLockSettings settings, BOOL isVideo, double durati
 {
     visibleSeconds = SoilAdsFiniteOrZero(visibleSeconds);
     positionSeconds = SoilAdsFiniteOrZero(positionSeconds);
-    if (visibleSeconds >= settings.maxLockSeconds) return YES;
-    if (isVideo && !videoFailed)
-        return videoEnded || positionSeconds >= SoilAdsVideoLockSeconds(settings, durationSeconds);
-    return visibleSeconds >= settings.imageLockSeconds;
+    if (visibleSeconds >= SoilAdsScreenLockSeconds(settings, isVideo, durationSeconds)) return YES;
+    return SoilAdsPlaysVideo(isVideo, durationSeconds, videoFailed)
+        && SoilAdsProgress(durationSeconds, visibleSeconds, positionSeconds, videoEnded)
+           >= SoilAdsVideoLockSeconds(settings, durationSeconds);
 }
 
 NSInteger SoilAdsSecondsRemaining(SoilAdsLockSettings settings, BOOL isVideo, double durationSeconds,
-                                  double visibleSeconds, double positionSeconds, BOOL videoFailed)
+                                  double visibleSeconds, double positionSeconds, BOOL videoEnded, BOOL videoFailed)
 {
     visibleSeconds = SoilAdsFiniteOrZero(visibleSeconds);
     positionSeconds = SoilAdsFiniteOrZero(positionSeconds);
-    double remaining = (isVideo && !videoFailed)
-        ? SoilAdsVideoLockSeconds(settings, durationSeconds) - positionSeconds
-        : settings.imageLockSeconds - visibleSeconds;
-    remaining = fmin(remaining, settings.maxLockSeconds - visibleSeconds);
+    double remaining = SoilAdsScreenLockSeconds(settings, isVideo, durationSeconds) - visibleSeconds;
+    if (SoilAdsPlaysVideo(isVideo, durationSeconds, videoFailed)) {
+        remaining = fmin(remaining, SoilAdsVideoLockSeconds(settings, durationSeconds)
+                                    - SoilAdsProgress(durationSeconds, visibleSeconds, positionSeconds, videoEnded));
+    }
     remaining = ceil(remaining);
     if (!(remaining > 0)) return 0; // also catches NaN
     if (remaining > (double)NSIntegerMax) return NSIntegerMax;
@@ -83,7 +101,7 @@ NSInteger SoilAdsSecondsRemaining(SoilAdsLockSettings settings, BOOL isVideo, do
 {
     if (_unlocked) return 0;
     return SoilAdsSecondsRemaining(_settings, _isVideo, _videoDuration, _visibleSeconds, _positionSeconds,
-                                   _videoFailed);
+                                   _videoEnded, _videoFailed);
 }
 
 - (BOOL)takeReward

@@ -84,46 +84,40 @@
     XCTAssertEqual(i.imageLockSeconds, 5);
     XCTAssertEqual(i.videoLockFraction, 0.8);
     XCTAssertEqual(i.minVideoLockSeconds, 5);
-    XCTAssertEqual(i.maxLockSeconds, 60);
     XCTAssertFalse(i.startMuted);
     SoilAdsShowOptions *r = [SoilAdsShowOptions defaultsForFormat:SoilAdsFormatRewarded];
     XCTAssertEqual(r.imageLockSeconds, 20);
     XCTAssertEqual(r.videoLockFraction, 1.0);
     XCTAssertEqual(r.minVideoLockSeconds, 0);
-    XCTAssertEqual(r.maxLockSeconds, 60);
     XCTAssertEqual([SoilAdsShowOptions defaultsForFormat:SoilAdsFormatBanner].position, SoilAdsBannerPositionBottom);
 }
 
 - (void)testFullOptions
 {
     SoilAdsShowOptions *o = [SoilAdsShowOptions optionsWithJSON:
-        @"{\"imageLockSeconds\":3,\"videoLockFraction\":0.5,\"minVideoLockSeconds\":2,\"maxLockSeconds\":30,\"startMuted\":true}"
+        @"{\"imageLockSeconds\":3,\"videoLockFraction\":0.5,\"minVideoLockSeconds\":2,\"startMuted\":true}"
                                                          format:SoilAdsFormatRewarded];
     XCTAssertEqual(o.imageLockSeconds, 3);
     XCTAssertEqual(o.videoLockFraction, 0.5);
     XCTAssertEqual(o.minVideoLockSeconds, 2);
-    XCTAssertEqual(o.maxLockSeconds, 30);
     XCTAssertTrue(o.startMuted);
     SoilAdsLockSettings s = o.lockSettings;
     XCTAssertEqual(s.imageLockSeconds, 3);
     XCTAssertEqual(s.videoLockFraction, 0.5);
     XCTAssertEqual(s.minVideoLockSeconds, 2);
-    XCTAssertEqual(s.maxLockSeconds, 30);
 }
 
 - (void)testPartialInvalidAndStringOptions
 {
     SoilAdsShowOptions *o = [SoilAdsShowOptions optionsWithJSON:
-        @"{\"imageLockSeconds\":\"7\",\"videoLockFraction\":-1,\"minVideoLockSeconds\":null,\"maxLockSeconds\":\"abc\",\"startMuted\":\"TRUE\"}"
+        @"{\"imageLockSeconds\":\"7\",\"videoLockFraction\":-1,\"minVideoLockSeconds\":null,\"startMuted\":\"TRUE\"}"
                                                          format:SoilAdsFormatInterstitial];
     XCTAssertEqual(o.imageLockSeconds, 7);
     XCTAssertEqual(o.videoLockFraction, 0.8, @"negative keeps the default");
     XCTAssertEqual(o.minVideoLockSeconds, 5, @"null keeps the default");
-    XCTAssertEqual(o.maxLockSeconds, 60, @"non-numeric keeps the default");
     XCTAssertTrue(o.startMuted);
     XCTAssertTrue([SoilAdsShowOptions optionsWithJSON:@"{\"startMuted\":1}" format:SoilAdsFormatRewarded].startMuted);
     XCTAssertFalse([SoilAdsShowOptions optionsWithJSON:@"{\"startMuted\":\"no\"}" format:SoilAdsFormatRewarded].startMuted);
-    XCTAssertEqual([SoilAdsShowOptions optionsWithJSON:@"{\"maxLockSeconds\":0}" format:SoilAdsFormatRewarded].maxLockSeconds, 0);
 }
 
 - (void)testBadOptionsJSONGivesDefaults

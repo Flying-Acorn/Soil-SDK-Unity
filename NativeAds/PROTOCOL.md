@@ -127,16 +127,17 @@ Fullscreen (interstitial and rewarded; C# always sends every field):
   "imageLockSeconds": 5,
   "videoLockFraction": 0.8,
   "minVideoLockSeconds": 5,
-  "maxLockSeconds": 60,
   "startMuted": false
 }
 ```
-Defaults C# sends: interstitial `5 / 0.8 / 5 / 60`, rewarded `20 / 1.0 / 0 / 60`.
+Defaults C# sends: interstitial `5 / 0.8 / 5`, rewarded `20 / 1.0 / 0`.
 
-## Fullscreen lock policy (identical on both platforms, unit-tested on both)
+## Fullscreen lock policy (identical on all platforms, unit-tested on all)
 
 The close button is **locked** for a while, then unlocks. Rewarded ads grant the reward at the
-moment they unlock.
+moment they unlock. The timing is the one the Unity-drawn ads always had - interstitial: 5 s, or
+80% of a video but never under 5 s; rewarded: 20 s, or the whole video - except that only time
+the ad is on screen counts.
 
 Inputs: media (`video`/`image`), video duration `D` seconds, `visibleSeconds` (time the ad has been
 on screen while the app was in the foreground — does not advance while backgrounded or while the
@@ -144,20 +145,27 @@ user is away after a click), `positionSeconds` (video playback position), `video
 `videoFailed`.
 
 ```
-videoLock = clamp(max(minVideoLockSeconds, videoLockFraction * D), 0, D)
-unlocked =
-     visibleSeconds >= maxLockSeconds                     // safety net: never trap the user
-  || (media == video && !videoFailed && (videoEnded || positionSeconds >= videoLock))
-  || ((media == image || videoFailed) && visibleSeconds >= imageLockSeconds)
-secondsRemaining (for the countdown label) =
-     media == video && !videoFailed ? ceil(videoLock - positionSeconds)
-                                    : ceil(imageLockSeconds - visibleSeconds),
-     never below 0, never above ceil(maxLockSeconds - visibleSeconds)
+videoLock  = max(minVideoLockSeconds, videoLockFraction * D)      // may outlast a short video
+screenLock = media == video ? max(videoLock, imageLockSeconds) : imageLockSeconds
+playing    = media == video && !videoFailed && D > 0
+progress   = videoEnded ? max(D, visibleSeconds) : positionSeconds
+
+unlocked = visibleSeconds >= screenLock                  // the countdown; also the net under a stalled/failed video
+        || (playing && progress >= videoLock)             // watched far enough (rewarded: to the end)
+
+secondsRemaining = max(0, ceil(min(screenLock - visibleSeconds,
+                                   playing ? videoLock - progress : infinity)))
 ```
 
-Once unlocked it stays unlocked. `rewarded` is sent once, on the first unlock of a rewarded ad.
-A video that fails mid-play switches to the fallback image (or keeps the last frame) and continues
-under the image rule, measured from when the ad was first shown.
+| | Image | Video of D seconds |
+|---|---|---|
+| Interstitial | 5 s | 0.8·D on screen or of playback, at least 5 s (a 3 s video: 5 s) |
+| Rewarded | 20 s | end of the video; a stalled video: max(20, D) s on screen |
+
+There is no other cap. Once unlocked it stays unlocked; `videoEnded` and `videoFailed` are sticky.
+`rewarded` is sent once, on the first unlock of a rewarded ad. A video that fails mid-play shows the
+fallback image (or keeps the last frame) and unlocks on the countdown, measured from when the ad
+was first shown.
 
 ## Fullscreen presentation
 

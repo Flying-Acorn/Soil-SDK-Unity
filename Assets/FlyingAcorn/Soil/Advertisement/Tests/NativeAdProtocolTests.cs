@@ -67,14 +67,13 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
             Assert.AreEqual(5f, (float)interstitial["imageLockSeconds"]);
             Assert.AreEqual(0.8f, (float)interstitial["videoLockFraction"]);
             Assert.AreEqual(5f, (float)interstitial["minVideoLockSeconds"]);
-            Assert.AreEqual(60f, (float)interstitial["maxLockSeconds"]);
+            Assert.IsNull(interstitial["maxLockSeconds"], "no cap: the countdown is the safety net");
             Assert.AreEqual(false, (bool)interstitial["startMuted"]);
 
             var rewarded = JObject.Parse(FullscreenShowOptions.DefaultsFor(AdFormats.Rewarded).ToJson());
             Assert.AreEqual(20f, (float)rewarded["imageLockSeconds"]);
             Assert.AreEqual(1f, (float)rewarded["videoLockFraction"]);
             Assert.AreEqual(0f, (float)rewarded["minVideoLockSeconds"]);
-            Assert.AreEqual(60f, (float)rewarded["maxLockSeconds"]);
         }
 
         [Test]

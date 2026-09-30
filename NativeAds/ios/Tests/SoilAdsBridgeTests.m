@@ -127,7 +127,7 @@
     NSString *json = SoilAdsJSON(@{@"adId": @"r1", @"imagePath": SoilAdsResource(@"image.png")});
     SoilAds_Load("rewarded", json.UTF8String);
     [self waitForEventCount:1];
-    SoilAds_Show("rewarded", "{\"imageLockSeconds\":0.3,\"videoLockFraction\":1,\"minVideoLockSeconds\":0,\"maxLockSeconds\":60,\"startMuted\":false}");
+    SoilAds_Show("rewarded", "{\"imageLockSeconds\":0.3,\"videoLockFraction\":1,\"minVideoLockSeconds\":0,\"startMuted\":false}");
     XCTAssertEqualObjects([self waitForEventCount:2][@"event"], @"shown");
     XCTAssertEqualObjects(SoilAdsStubPauseCalls(), @[@1]);
     XCTAssertFalse(SoilAds_IsReady("rewarded"));
