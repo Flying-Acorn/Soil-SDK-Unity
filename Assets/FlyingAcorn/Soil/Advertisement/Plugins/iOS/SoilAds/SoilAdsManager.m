@@ -173,6 +173,8 @@ static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
     if (![text isKindOfClass:[NSString class]]) return nil;
     text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (text.length == 0) return nil;
+    // Same rule as the other players: a link with control characters is never opened.
+    if ([text rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location != NSNotFound) return nil;
     NSURL *url = [NSURL URLWithString:text];
     if (!url) {
         // Before iOS 17 spaces and non-ASCII characters make URLWithString: fail; escape them

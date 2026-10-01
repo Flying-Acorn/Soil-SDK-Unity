@@ -458,7 +458,13 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
 
 - (void)closeTapped
 {
-    if (_tornDown) return;
+    if (_tornDown) {
+        // The session already ended but UIKit never dismissed the ad (the player gave up
+        // retrying): the button still takes it off screen, with no further events.
+        if (self.presentingViewController.presentedViewController == self && !self.isBeingDismissed)
+            [self.presentingViewController dismissViewControllerAnimated:NO completion:nil];
+        return;
+    }
     [self tick];
     if (_tornDown || !_lockPolicy.unlocked) return;
     [self.delegate fullscreenControllerDidRequestClose:self];

@@ -724,13 +724,21 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     SoilAdsStubbornViewController *root = (SoilAdsStubbornViewController *)self.root;
     [self load:@"interstitial" fields:[self imageAd]];
     [self showFullscreen:@"interstitial" options:nil];
+    UIViewController *ad = self.manager.fullscreenController;
     [self.manager hideFormat:@"interstitial"];
     [self waitForClosed:1];
     XCTAssertEqual(root.dismissCalls.count, 4u, @"one dismissal and three retries");
     XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
     XCTAssertNil(self.manager.fullscreenController);
+
+    // The ad UIKit left on screen still closes from its own button, without new events.
+    XCTAssertEqual(root.presentedViewController, ad);
     root.ignoredDismissals = 0;
-    [root dismissViewControllerAnimated:NO completion:nil];
+    UIButton *close = (UIButton *)SoilAdsFindViews(ad.view, @"soil_ad_close").firstObject;
+    XCTAssertNotNil(close);
+    [close sendActionsForControlEvents:UIControlEventTouchUpInside];
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return root.presentedViewController == nil; }));
+    XCTAssertEqual([self.recorder countOf:@"closed"], 1u);
 }
 
 - (void)testShowWhileInactiveWaitsUntilTheAppIsActive
@@ -821,6 +829,11 @@ static UILabel *FindLabel(UIView *view, NSString *text)
                           @"https://example.com/a%20b?q=%C3%BC#top", @"spaces and non-ASCII are escaped");
     XCTAssertEqualObjects([SoilAdsManager clickURLFromString:@"https://example.com/a%20b"].absoluteString,
                           @"https://example.com/a%20b", @"existing escapes are kept");
+    XCTAssertEqualObjects([SoilAdsManager clickURLFromString:@"\u00a0https://example.com/x\u2003"].absoluteString,
+                          @"https://example.com/x", @"Unicode spaces are trimmed too");
+    XCTAssertNil([SoilAdsManager clickURLFromString:@"https://exa\nmple.com"], @"control characters are refused");
+    NSString *bell = [NSString stringWithFormat:@"https://example.com/%C", (unichar)7];
+    XCTAssertNil([SoilAdsManager clickURLFromString:bell]);
 }
 
 - (void)testDisallowedClickSchemeReportsClickedButOpensNothing
