@@ -78,6 +78,30 @@ public final class SoilAdsBridge {
         return current != null && current.isReady(format);
     }
 
+    /**
+     * Opens the click URL of an ad the game draws itself (the native format) the way the players
+     * open their own: a refused link opens nothing, the others open as browsable links from the
+     * host activity. Returns whether the link is going to be opened.
+     */
+    public static boolean openLink(final String url) {
+        if (!Ui.isOpenableClickUrl(url)) {
+            Log.w(TAG, "Not opening a click URL that is not a web or app link: " + url);
+            return false;
+        }
+        post(new Runnable() {
+            @Override
+            public void run() {
+                Activity activity = host();
+                if (activity == null) {
+                    Log.w(TAG, "No activity to open a click URL from");
+                    return;
+                }
+                Ui.openUrl(activity, url);
+            }
+        });
+        return true;
+    }
+
     /** Tests capture events here instead of Unity; null restores Unity. */
     static void setEventSinkForTests(EventSink testSink) {
         sink = testSink == null ? unitySink : testSink;
@@ -88,11 +112,7 @@ public final class SoilAdsBridge {
             AndroidPresenter presenter = new AndroidPresenter(main, new AndroidPresenter.HostProvider() {
                 @Override
                 public Activity host() {
-                    // Unity's activity can be recreated after initialize: a finished one gives way
-                    // to Unity's current activity instead of blocking every show until GC.
-                    Activity activity = hostActivity.get();
-                    boolean usable = activity != null && !activity.isFinishing() && !activity.isDestroyed();
-                    return usable ? activity : unityCurrentActivity();
+                    return SoilAdsBridge.host();
                 }
             });
             manager = new SoilAdsManager(new MediaLoader(main), presenter, new EventSink() {
@@ -103,6 +123,15 @@ public final class SoilAdsBridge {
             });
         }
         return manager;
+    }
+
+    /** The game's activity; main thread only. */
+    private static Activity host() {
+        // Unity's activity can be recreated after initialize: a finished one gives way to Unity's
+        // current activity instead of blocking every show until GC.
+        Activity activity = hostActivity.get();
+        boolean usable = activity != null && !activity.isFinishing() && !activity.isDestroyed();
+        return usable ? activity : unityCurrentActivity();
     }
 
     private static void post(final Runnable call) {

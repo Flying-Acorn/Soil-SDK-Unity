@@ -127,7 +127,9 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Fired when a native ad's content is ready to be rendered. Unlike the other formats,
         /// the SDK does not draw a native ad - the game receives this payload and renders the
-        /// title, description, call to action, icon and image in its own UI.
+        /// title, description, call to action, icon and image in its own UI. The textures stay
+        /// valid until a newer content replaces this one and no view registered for this one
+        /// remains (see <see cref="NativeAdContent"/>), or until DestroyNativeAd.
         /// </summary>
         public static event System.Action<NativeAdContent> OnNativeAdContentReady;
 

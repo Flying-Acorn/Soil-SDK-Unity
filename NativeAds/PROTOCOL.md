@@ -233,6 +233,11 @@ scheme is never opened.
   link only.
 - C# applies the same rule before the creative reaches the player (`AdLinkPolicy`; app schemes are
   allowed on Android builds only), and a refused link is treated as no link.
+- Native-format ads are drawn by the game, so C# opens their links itself: on Android through
+  `SoilAdsBridge.openLink(String url)` (static, any thread; returns `false` for a refused link,
+  otherwise opens it on the main thread from the host activity exactly as a player click does),
+  falling back to `Application.OpenURL` only when the player is missing from the build; elsewhere
+  with `Application.OpenURL`.
 
 `clicked` is sent for every tap, whether or not a link opened.
 

@@ -340,6 +340,7 @@ private void Start()
 {
     Advertisement.Events.OnNativeAdLoaded += OnNativeReady;
     Advertisement.Events.OnNativeAdError += OnNativeError;
+    // Answered with Loaded or Error - after the ad's files are downloaded, if they still are.
     Advertisement.LoadAd(AdFormat.native);
 }
 
@@ -396,7 +397,9 @@ Advertisement.ShowNativeAd(bannerReferences);       // icon + image + headline +
 Advertisement.ShowNativeAd(leaderboardReferences);  // icon + headline only
 ```
 
-Keep the references object your view created — you need it to release just that view.
+Registrations are kept per GameObject: to release a view, pass a references object naming the
+same GameObjects — the one your view created, or an equivalent new one such as
+`NativeAdReferences.ForContainer(adCardRoot)`.
 
 #### 4. Hide and release
 
@@ -415,6 +418,12 @@ Call `HideNativeAd(myReferences)` from a view's `OnDisable`, **not** `DestroyNat
 latter takes the ad away from every other place showing it. Reserve `DestroyNativeAd()` for
 teardown and the ad-free purchase.
 
+`content.Icon` and `content.MainImage` belong to the SDK. Loading the same ad again keeps the same
+content and textures. When a different ad (or a re-downloaded file) replaces the content, the old
+textures are destroyed once no view registered for the old content remains — right away if none
+was registered — so render the new content when `OnNativeAdLoaded` arrives rather than holding on
+to old textures. `DestroyNativeAd()` destroys them at once.
+
 > One ad shared across places means the same advertiser appears in each. Fine for places the
 > player reaches separately. If a **single screen** shows several native slots at once they would
 > all render the identical creative — show one slot per screen.
@@ -426,7 +435,12 @@ clickable unit.
 
 Pointer events bubble up to the nearest ancestor handler, so the simplest way to make the entire
 ad clickable — including custom views the SDK knows nothing about, such as a badge, a rating row
-or a background panel — is to register your layout root:
+or a background panel — is to register your layout root.
+
+A `Button`, `Toggle` or anything else that handles clicks inside a registered view would stop the
+tap there, so the SDK attaches a click handler next to each of them too: tapping such a control
+runs the control **and** counts as one click on the ad. Keep controls that are not part of the ad
+— a close or "remove ads" button — outside the views you register.
 
 ```csharp
 // The whole card is clickable, whatever you put inside it.
@@ -531,7 +545,7 @@ Before shipping, thoroughly test the following on real Android and iOS devices:
 
 Ad images and videos are downloaded ahead of time into `SoilAssets` under `Application.persistentDataPath`:
 
-- An ad group that is selected again reuses its files; only missing or broken files are downloaded.
+- An ad group that is selected again reuses its files; only missing or broken files are downloaded. The link and texts of a reused file's ad are refreshed from the server.
 - Downloads time out after 30 seconds without new data (videos may take up to 10 minutes in total, images 2), and are retried twice.
 - Leftover partial downloads and files no ad refers to are deleted at startup.
 - On iOS the files are excluded from iCloud backup.
@@ -549,6 +563,7 @@ In the Editor, ads are drawn by a placeholder (clicks are only logged). On deskt
 - `SoilAdManager.canvasReferences` is obsolete and always null.
 - `SoilAdManager.bannerAdPlacement`, `interstitialAdPlacement`, `rewardedAdPlacement` and the `Models.AdPlacements` types (the Unity ad prefabs and their components) are removed. Code that used them must switch to the `Advertisement` API.
 - On Android, fullscreen ads now pause Unity's activity (see *Game Pause, Input and Audio During Ads*).
+- The Editor class `FlyingAcorn.Soil.Advertisement.Editor.TMPFontHelper` (the *FlyingAcorn/Soil/Advertisement/Font Tools* menu, used to build fonts for the Unity-drawn ads) is removed. Use TextMeshPro's own *Window > TextMeshPro > Font Asset Creator*.
 
 ## Example Script
 

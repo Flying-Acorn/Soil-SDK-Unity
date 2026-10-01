@@ -76,11 +76,26 @@ namespace FlyingAcorn.Soil.Advertisement
         // be counted again.
         private static string _shownNativeAdId;
         // One native ad can be rendered in several places at once (the native banner, a
-        // leaderboard row). Click handlers are tracked PER registered view set, so showing the ad
-        // in a second place does not unbind the first place's taps, and hiding one place does not
-        // silence the other.
-        private static readonly Dictionary<NativeAdReferences, List<SoilNativeAdClickHandler>>
-            _nativeAdClickHandlers = new();
+        // leaderboard row). Clicks are tracked per registered GameObject: each one remembers the
+        // GameObjects it bound a handler on (itself and the uGUI controls inside it), so showing
+        // the ad in a second place does not unbind the first place's taps, hiding one place does
+        // not silence the other, and a hide with an equivalent references object (a new
+        // NativeAdReferences.ForContainer(root)) releases what the show bound.
+        private static readonly Dictionary<GameObject, List<GameObject>> _nativeAdTargets = new();
+        private static readonly Dictionary<GameObject, NativeAdClickBinding> _nativeAdBindings = new();
+
+        // The files the current native content's textures were decoded from, so a reload of the
+        // same ad reuses them instead of decoding (and leaking) a new pair.
+        private static string _nativeIconPath;
+        private static string _nativeMainImagePath;
+        // Contents replaced while a registered view was still bound to them; their textures are
+        // destroyed once no view is (ReleaseRetiredNativeTextures).
+        private static readonly List<NativeAdContent> _retiredNativeAdContents = new();
+
+        // LoadAd(native) calls made while the native files are being cached wait for them, as the
+        // other formats' slots do, and are answered when caching ends.
+        private static bool _nativeCaching;
+        private static bool _nativeLoadRequested;
 
         // Rewarded ad cooldown tracking
         private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
@@ -118,7 +133,13 @@ namespace FlyingAcorn.Soil.Advertisement
             _slotAds.Clear();
             _nativeAdContent = null;
             _shownNativeAdId = null;
-            _nativeAdClickHandlers.Clear();
+            _nativeAdTargets.Clear();
+            _nativeAdBindings.Clear();
+            _nativeIconPath = null;
+            _nativeMainImagePath = null;
+            _retiredNativeAdContents.Clear();
+            _nativeCaching = false;
+            _nativeLoadRequested = false;
             _lastRewardedAdShownTime = DateTime.MinValue;
             BannerPosition = AdPosition.BottomCenter;
             FullscreenOptionsOverride = null;
@@ -157,6 +178,8 @@ namespace FlyingAcorn.Soil.Advertisement
             EnsurePlayerRuntime();
             foreach (var format in _requestedFormats)
                 SlotFor(format)?.BeginCaching();
+            if (_requestedFormats.Contains(AdFormat.native))
+                _nativeCaching = true;
 
             // Start loading cached assets in background; we'll await inside the success handler
             _cachedAssetsTask = AssetCache.LoadCachedAssetsAsync();
@@ -268,7 +291,12 @@ namespace FlyingAcorn.Soil.Advertisement
 
             // Formats the server had nothing for answer their pending LoadAd calls with NoFill.
             foreach (var format in _requestedFormats.Where(f => !_selectedAdGroups.ContainsKey(f)))
-                SetSlotCreative(format, null, null);
+            {
+                if (format == AdFormat.native)
+                    NativeCachingEnded(NativeAdErrors.NoFill);
+                else
+                    SetSlotCreative(format, null, null);
+            }
 
             if (_selectedAdGroups.Count == 0)
             {
@@ -351,6 +379,14 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             if (_requestedFormats == null) return;
             foreach (var format in _requestedFormats)
+                CachingFailed(format, error);
+        }
+
+        private static void CachingFailed(AdFormat format, string error)
+        {
+            if (format == AdFormat.native)
+                NativeCachingEnded(error);
+            else
                 SlotFor(format)?.CachingFailed(error);
         }
 
@@ -609,7 +645,7 @@ namespace FlyingAcorn.Soil.Advertisement
             catch (Exception ex)
             {
                 MyDebug.LogWarning($"[Advertisement] Caching {adFormat} failed: {ex.Message}");
-                SlotFor(adFormat)?.CachingFailed(NativeAdErrors.Network);
+                CachingFailed(adFormat, NativeAdErrors.Network);
             }
             finally
             {
@@ -624,9 +660,16 @@ namespace FlyingAcorn.Soil.Advertisement
         private static void OnFormatAssetsReady(AdFormat adFormat)
         {
             if (adFormat == AdFormat.native)
+            {
+                // The Loaded or Error this raises answers any LoadAd that waited for the files.
+                _nativeCaching = false;
+                _nativeLoadRequested = false;
                 LoadNativeAd();
+            }
             else
+            {
                 PrepareFormat(adFormat);
+            }
 
             // Raised after preparing, so a LoadAd from a listener finds the ad already on its way.
             Events.InvokeOnAdFormatAssetsLoaded(adFormat);
@@ -953,15 +996,18 @@ namespace FlyingAcorn.Soil.Advertisement
 
         /// <summary>
         /// Loads an ad for the specified format. Always answered with the format's Loaded or Error
-        /// event - later if the ad's files are still downloading. For rewarded ads in cooldown the
-        /// Loaded event waits until the cooldown expires.
+        /// event - later if the ad's files are still downloading (native ads included). For
+        /// rewarded ads in cooldown the Loaded event waits until the cooldown expires.
         /// </summary>
         /// <param name="adFormat">The ad format to load (banner, interstitial, rewarded, native).</param>
         public static void LoadAd(AdFormat adFormat)
         {
             if (adFormat == AdFormat.native)
             {
-                LoadNativeAd();
+                if (_nativeCaching)
+                    _nativeLoadRequested = true;
+                else
+                    LoadNativeAd();
                 return;
             }
 
@@ -980,7 +1026,9 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Builds the native ad from the cached native assets and fires OnNativeAdLoaded, or
         /// OnNativeAdError when the cached assets cannot make a complete ad. Called automatically
-        /// once native assets finish caching, and by LoadAd(AdFormat.native).
+        /// once native assets finish caching, and by LoadAd(AdFormat.native). A texture whose file
+        /// has not changed is reused rather than decoded again; the textures of a replaced content
+        /// are destroyed once no registered view shows it.
         /// </summary>
         private static void LoadNativeAd()
         {
@@ -989,33 +1037,129 @@ namespace FlyingAcorn.Soil.Advertisement
 
             if (model == null)
             {
-                _nativeAdContent = null;
+                SetNativeAdContent(null, null, null);
                 MyDebug.Verbose($"[Advertisement] Native ad not available: {buildError}");
                 Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, ToAdError(buildError)));
                 return;
             }
 
-            _nativeAdContent = new NativeAdContent(
-                model.AdId,
-                model.Title,
-                model.Description,
-                model.CallToAction,
-                model.ClickUrl,
-                AssetCache.LoadTexture(model.IconAssetId),
-                model.HasMainImage ? AssetCache.LoadTexture(model.MainImageAssetId) : null);
+            var current = _nativeAdContent;
+            var iconEntry = FindNativeEntry(assets, model.IconAssetId, AssetType.native_icon);
+            var mainImageEntry = model.HasMainImage
+                ? FindNativeEntry(assets, model.MainImageAssetId, AssetType.native_image)
+                : null;
+            var iconPath = iconEntry?.LocalPath;
+            var mainImagePath = mainImageEntry?.LocalPath;
+
+            var icon = current != null && current.Icon != null && iconPath != null && iconPath == _nativeIconPath
+                ? current.Icon
+                : AssetCache.LoadTexture(iconEntry);
+            var mainImage = mainImageEntry == null
+                ? null
+                : current != null && current.MainImage != null && mainImagePath == _nativeMainImagePath
+                    ? current.MainImage
+                    : AssetCache.LoadTexture(mainImageEntry);
 
             // The icon is the one image a native layout cannot do without, so a texture that
             // fails to decode makes the ad unusable rather than merely degraded.
-            if (_nativeAdContent.Icon == null)
+            if (icon == null)
             {
-                _nativeAdContent = null;
+                if (mainImage != null && mainImage != current?.MainImage)
+                    DestroyTexture(mainImage);
+                SetNativeAdContent(null, null, null);
                 MyDebug.LogWarning("[Advertisement] Native ad icon texture could not be loaded.");
                 Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, AdError.InternalError));
                 return;
             }
 
-            MyDebug.Verbose($"[Advertisement] Native ad loaded (ad {model.AdId}, image: {_nativeAdContent.HasMainImage})");
+            // The same ad from the same files: the content the game already has stays valid.
+            var unchanged = current != null
+                            && current.AdId == model.AdId
+                            && current.Title == model.Title
+                            && current.Description == model.Description
+                            && current.CallToAction == model.CallToAction
+                            && current.ClickUrl == model.ClickUrl
+                            && current.Icon == icon
+                            && current.MainImage == mainImage;
+            if (!unchanged)
+            {
+                SetNativeAdContent(
+                    new NativeAdContent(model.AdId, model.Title, model.Description, model.CallToAction,
+                        model.ClickUrl, icon, mainImage),
+                    iconPath, mainImage == null ? null : mainImagePath);
+            }
+
+            MyDebug.Verbose($"[Advertisement] Native ad loaded (ad {model.AdId}, image: {_nativeAdContent.HasMainImage}, rebuilt: {!unchanged})");
             Events.InvokeOnNativeAdLoaded(new AdEventData(AdFormat.native));
+        }
+
+        private static AssetCacheEntry FindNativeEntry(List<AssetCacheEntry> assets, string id, AssetType type) =>
+            string.IsNullOrEmpty(id) ? null : assets.FirstOrDefault(a => a != null && a.Id == id && a.AssetType == type);
+
+        /// <summary>
+        /// Makes <paramref name="next"/> the loaded native ad. The previous content is retired: its
+        /// textures are destroyed as soon as no registered view is bound to it (at once when none
+        /// is), except those <paramref name="next"/> reuses.
+        /// </summary>
+        private static void SetNativeAdContent(NativeAdContent next, string iconPath, string mainImagePath)
+        {
+            var previous = _nativeAdContent;
+            _nativeAdContent = next;
+            _nativeIconPath = next == null ? null : iconPath;
+            _nativeMainImagePath = next == null ? null : mainImagePath;
+            if (previous != null && previous != next && !_retiredNativeAdContents.Contains(previous))
+                _retiredNativeAdContents.Add(previous);
+            ReleaseRetiredNativeTextures();
+        }
+
+        /// <summary>
+        /// Destroys the textures of retired contents no registered view is bound to any more.
+        /// A texture the current content or another retired one still uses is kept.
+        /// </summary>
+        private static void ReleaseRetiredNativeTextures()
+        {
+            for (var i = _retiredNativeAdContents.Count - 1; i >= 0; i--)
+            {
+                var retired = _retiredNativeAdContents[i];
+                if (_nativeAdBindings.Values.Any(b => b.Content == retired)) continue;
+
+                _retiredNativeAdContents.RemoveAt(i);
+                if (!IsNativeTextureInUse(retired.Icon)) DestroyTexture(retired.Icon);
+                if (!IsNativeTextureInUse(retired.MainImage)) DestroyTexture(retired.MainImage);
+            }
+        }
+
+        private static bool IsNativeTextureInUse(Texture2D texture)
+        {
+            if (texture == null) return false;
+            if (_nativeAdContent != null && (_nativeAdContent.Icon == texture || _nativeAdContent.MainImage == texture))
+                return true;
+            return _retiredNativeAdContents.Any(c => c.Icon == texture || c.MainImage == texture);
+        }
+
+        private static void DestroyTexture(Texture2D texture)
+        {
+            if (texture == null) return;
+            if (Application.isPlaying)
+                UnityEngine.Object.Destroy(texture);
+            else
+                UnityEngine.Object.DestroyImmediate(texture);
+        }
+
+        /// <summary>
+        /// Native caching ended without new files (no ad group, or the round failed): a LoadAd
+        /// that waited for it is answered with what is loaded, or the error.
+        /// </summary>
+        private static void NativeCachingEnded(string error)
+        {
+            _nativeCaching = false;
+            if (!_nativeLoadRequested) return;
+            _nativeLoadRequested = false;
+
+            if (_nativeAdContent != null)
+                Events.InvokeOnNativeAdLoaded(new AdEventData(AdFormat.native));
+            else
+                Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, ToAdError(error)));
         }
 
         /// <summary>
@@ -1081,7 +1225,9 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Shows the loaded native ad. The SDK does not draw anything: it delivers the content
         /// through OnNativeAdContentReady (and returns it here) and registers the supplied
-        /// GameObjects so taps anywhere on the ad are attributed and open the click URL.
+        /// GameObjects so taps anywhere on the ad are attributed and open the click URL. Buttons,
+        /// Toggles and other click handlers inside a registered GameObject count as part of the ad
+        /// too, so keep controls that are not (a close button) outside the registered views.
         /// </summary>
         /// <param name="references">The GameObjects the game renders the ad into. May be null if the game handles its own clicks.</param>
         /// <returns>The content to render, or null when no native ad is ready.</returns>
@@ -1113,20 +1259,36 @@ namespace FlyingAcorn.Soil.Advertisement
             return content;
         }
 
+        /// <summary>A click handler the SDK bound on one GameObject, and who it is bound for.</summary>
+        private sealed class NativeAdClickBinding
+        {
+            public SoilNativeAdClickHandler Handler;
+            /// <summary>The content the view was showing when it was (last) bound.</summary>
+            public NativeAdContent Content;
+            /// <summary>The registered GameObjects this binding was made for.</summary>
+            public readonly HashSet<GameObject> Owners = new();
+        }
+
         private static void RegisterNativeAdClickTargets(NativeAdReferences references)
         {
             if (references == null) return;
+            ForgetDestroyedNativeAdTargets();
 
-            // Re-showing into the SAME views replaces only their handlers.
-            ClearNativeAdClickTargets(references);
+            // Capture the ad this view is rendering rather than reading the current one at
+            // click time. The two can differ - a surface can still be showing an earlier
+            // creative after the ad was replaced - and a tap must always open the advertiser
+            // the player is actually looking at.
+            var clicked = _nativeAdContent;
 
-            var handlers = new List<SoilNativeAdClickHandler>();
+            // The same view can legitimately fill two slots (e.g. the container is also the
+            // main image); it is registered once.
+            var targets = new HashSet<GameObject>();
             foreach (var target in references.All())
             {
-                if (!target) continue;
-                // The same view can legitimately fill two slots (e.g. the container is also the
-                // main image); bind it once.
-                if (handlers.Any(h => h && h.gameObject == target)) continue;
+                if (!target || !targets.Add(target)) continue;
+
+                // Re-showing into the SAME view replaces only its handlers.
+                ReleaseNativeAdTarget(target);
 
                 // Clicks arrive through uGUI raycasting, so a view with no raycast-target Graphic
                 // on itself or a child can never be hit and would silently swallow every tap.
@@ -1134,47 +1296,99 @@ namespace FlyingAcorn.Soil.Advertisement
                 if (!target.GetComponentsInChildren<Graphic>(true).Any(g => g.raycastTarget))
                     MyDebug.LogWarning($"[Advertisement] Native ad view '{target.name}' has no raycast-target Graphic; clicks on it will not register.");
 
-                if (!target.TryGetComponent(out SoilNativeAdClickHandler handler))
-                    handler = target.AddComponent<SoilNativeAdClickHandler>();
+                // uGUI gives a click only to the nearest click handler above the tapped object, so
+                // a Button, Toggle or any other click handler inside the view would keep the tap
+                // from ever reaching the view's own handler. Those get a handler of their own: a
+                // tap still reaches exactly one SoilNativeAdClickHandler, the deepest one.
+                var bound = new List<GameObject> { target };
+                foreach (var child in target.GetComponentsInChildren<UnityEngine.EventSystems.IPointerClickHandler>(true))
+                {
+                    var go = (child as Component)?.gameObject;
+                    if (go && !bound.Contains(go)) bound.Add(go);
+                }
 
-                // Capture the ad this view is rendering rather than reading the current one at
-                // click time. The two can differ - a surface can still be showing an earlier
-                // creative after the ad was replaced - and a tap must always open the advertiser
-                // the player is actually looking at.
-                var clicked = _nativeAdContent;
-                handler.Bind(() => OnNativeAdClicked(clicked));
-                handlers.Add(handler);
+                foreach (var go in bound)
+                    BindNativeAdClick(go, target, clicked);
+                _nativeAdTargets[target] = bound;
             }
 
-            _nativeAdClickHandlers[references] = handlers;
+            ReleaseRetiredNativeTextures();
+        }
+
+        private static void BindNativeAdClick(GameObject go, GameObject owner, NativeAdContent content)
+        {
+            if (!_nativeAdBindings.TryGetValue(go, out var binding))
+            {
+                binding = new NativeAdClickBinding();
+                _nativeAdBindings[go] = binding;
+            }
+
+            if (!binding.Handler && !go.TryGetComponent(out binding.Handler))
+                binding.Handler = go.AddComponent<SoilNativeAdClickHandler>();
+
+            binding.Owners.Add(owner);
+            binding.Content = content;
+            binding.Handler.Bind(() => OnNativeAdClicked(content));
         }
 
         /// <summary>
-        /// Unbinds every click handler currently attached to the game's views. The components are
-        /// deliberately NOT destroyed: Object.Destroy is deferred to the end of the frame, so a
-        /// hide-then-show (or two shows) within one frame would re-bind a component Unity is
-        /// about to delete, and clicks would silently stop working. An unbound handler is inert,
-        /// and the next show re-binds it.
+        /// Unbinds the handlers one registered GameObject bound, except those another registered
+        /// GameObject still needs. The components are deliberately NOT destroyed:
+        /// Object.Destroy is deferred to the end of the frame, so a hide-then-show (or two shows)
+        /// within one frame would re-bind a component Unity is about to delete, and clicks would
+        /// silently stop working. An unbound handler is inert, and the next show re-binds it.
         /// </summary>
-        private static void ClearNativeAdClickTargets(NativeAdReferences references)
+        private static void ReleaseNativeAdTarget(GameObject target)
         {
-            if (references == null || !_nativeAdClickHandlers.TryGetValue(references, out var handlers))
-                return;
+            if (!_nativeAdTargets.TryGetValue(target, out var bound)) return;
+            _nativeAdTargets.Remove(target);
 
-            foreach (var handler in handlers)
+            foreach (var go in bound)
             {
-                if (handler)
-                    handler.Bind(null);
-            }
+                if (!_nativeAdBindings.TryGetValue(go, out var binding)) continue;
+                binding.Owners.Remove(target);
+                if (binding.Owners.Count > 0) continue;
 
-            _nativeAdClickHandlers.Remove(references);
+                if (binding.Handler)
+                    binding.Handler.Bind(null);
+                _nativeAdBindings.Remove(go);
+            }
         }
 
-        /// <summary>Unbinds every registered view set. Used when the ad itself goes away.</summary>
+        /// <summary>Releases the registrations of views the game destroyed without hiding them.</summary>
+        private static void ForgetDestroyedNativeAdTargets()
+        {
+            foreach (var target in _nativeAdTargets.Keys.Where(t => !t).ToList())
+                ReleaseNativeAdTarget(target);
+        }
+
+        private static void ClearNativeAdClickTargets(NativeAdReferences references)
+        {
+            if (references == null) return;
+            foreach (var target in references.All())
+            {
+                if (target)
+                    ReleaseNativeAdTarget(target);
+            }
+
+            ForgetDestroyedNativeAdTargets();
+            ReleaseRetiredNativeTextures();
+        }
+
+        /// <summary>Unbinds every registered view. Used when the ad itself goes away.</summary>
         private static void ClearAllNativeAdClickTargets()
         {
-            foreach (var references in _nativeAdClickHandlers.Keys.ToList())
-                ClearNativeAdClickTargets(references);
+            foreach (var target in _nativeAdTargets.Keys.ToList())
+                ReleaseNativeAdTarget(target);
+
+            foreach (var binding in _nativeAdBindings.Values)
+            {
+                if (binding.Handler)
+                    binding.Handler.Bind(null);
+            }
+
+            _nativeAdBindings.Clear();
+            ReleaseRetiredNativeTextures();
         }
 
         private static void OnNativeAdClicked(NativeAdContent content)
@@ -1194,9 +1408,9 @@ namespace FlyingAcorn.Soil.Advertisement
 
         /// <summary>
         /// Stops attributing clicks for ONE place the ad was shown in and fires OnNativeAdClosed.
-        /// Pass the same references given to ShowNativeAd; other places showing this ad keep
-        /// working. Call this from a view's OnDisable - DestroyNativeAd would take the ad away
-        /// from every other place too.
+        /// Pass the references given to ShowNativeAd, or an equivalent one naming the same
+        /// GameObjects; other places showing this ad keep working. Call this from a view's
+        /// OnDisable - DestroyNativeAd would take the ad away from every other place too.
         /// </summary>
         [UsedImplicitly]
         public static void HideNativeAd(NativeAdReferences references)
@@ -1220,14 +1434,15 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Releases the loaded native ad. After this, IsFormatReady(AdFormat.native) is false
+        /// Releases the loaded native ad, everywhere, and destroys its textures (see
+        /// <see cref="NativeAdContent"/>). After this, IsFormatReady(AdFormat.native) is false
         /// until LoadAd(AdFormat.native) succeeds again.
         /// </summary>
         [UsedImplicitly]
         public static void DestroyNativeAd()
         {
             ClearAllNativeAdClickTargets();
-            _nativeAdContent = null;
+            SetNativeAdContent(null, null, null);
             _shownNativeAdId = null;
         }
 

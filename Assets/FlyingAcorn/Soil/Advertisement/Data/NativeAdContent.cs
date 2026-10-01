@@ -9,6 +9,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
     ///
     /// <see cref="MainImage"/> may be null (icon-only native ads are valid); the title, call to
     /// action and icon are always present.
+    ///
+    /// The SDK owns <see cref="Icon"/> and <see cref="MainImage"/>. Reloading the same ad from the
+    /// same files keeps this object and its textures. When a new content replaces this one (a
+    /// different ad, or a re-downloaded file), the textures it no longer shares with the new
+    /// content are destroyed once no view registered for this content through
+    /// <see cref="Advertisement.ShowNativeAd"/> remains - at once if none was registered - so
+    /// render the new content (it arrives with OnNativeAdLoaded / OnNativeAdContentReady) instead
+    /// of keeping these. <see cref="Advertisement.DestroyNativeAd"/> destroys them right away.
     /// </summary>
     public class NativeAdContent
     {

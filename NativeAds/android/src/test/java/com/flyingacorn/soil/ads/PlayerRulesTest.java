@@ -71,6 +71,19 @@ public class PlayerRulesTest {
     }
 
     @Test
+    public void bridgeOpensOnlyTheLinksThePlayersOpen() {
+        assertTrue(SoilAdsBridge.openLink("https://example.com/click?x=1"));
+        assertTrue(SoilAdsBridge.openLink("market://details?id=com.example.game"));
+        assertTrue(SoilAdsBridge.openLink(" storeapp://details?id=x "));
+        for (String url : new String[]{
+                null, "", "javascript:alert(1)", "intent:#Intent;component=com.example/.Secret;end",
+                "file:///data/x", "tel:+100", "https:", "https://exa\nmple.com",
+        }) {
+            assertFalse(String.valueOf(url), SoilAdsBridge.openLink(url));
+        }
+    }
+
+    @Test
     public void surroundingSpaceIsTrimmed() {
         assertEquals("https://example.com", Ui.clickUrlToOpen("  https://example.com \t"));
         assertEquals("storeapp://details?id=x", Ui.clickUrlToOpen("\u00a0storeapp://details?id=x\n"));
