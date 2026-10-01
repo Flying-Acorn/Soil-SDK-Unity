@@ -172,7 +172,14 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             var cachingTasks = new List<UniTask>();
             foreach (var (cacheKey, asset, assetType, ad) in plan)
             {
-                if (!missing.Contains(cacheKey)) continue;
+                if (!missing.Contains(cacheKey))
+                {
+                    // A kept file keeps its bytes, but the ad around it may have changed since it
+                    // was downloaded (link, texts), and an asset several ads share now belongs to
+                    // the ad it is planned for.
+                    RefreshMetadata(cacheKey, asset, adGroup.click_url, ad);
+                    continue;
+                }
                 cachingTasks.Add(CacheAssetAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
             }
 
@@ -296,6 +303,31 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             }
 
             return plan;
+        }
+
+        /// <summary>
+        /// Rewrites the ad-level data of a cached entry from the current ad group, as a fresh
+        /// download would record it. The file is left alone.
+        /// </summary>
+        private static void RefreshMetadata(string cacheKey, Asset asset, string clickUrl, Ad ad)
+        {
+            lock (_lockObject)
+            {
+                if (!_cachedAssets.TryGetValue(cacheKey, out var entry)) return;
+                ApplyMetadata(entry, asset, clickUrl, ad);
+            }
+        }
+
+        private static void ApplyMetadata(AssetCacheEntry entry, Asset asset, string clickUrl, Ad ad)
+        {
+            entry.ClickUrl = clickUrl;
+            entry.Width = asset.width;
+            entry.Height = asset.height;
+            entry.AltText = asset.alt_text;
+            entry.AdId = ad?.id;
+            entry.MainHeaderText = ad?.main_header?.text_content;
+            entry.ActionButtonText = ad?.action_button?.text_content;
+            entry.DescriptionText = ad?.description?.text_content;
         }
 
         private static bool IsCachedAndValid(string cacheKey)
@@ -639,8 +671,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 // stalling it on screen. Downloads stream straight to disk.
                 // File names never take a server string as is: the id is reduced to [A-Za-z0-9_-]
                 // (or hashed) and the extension to a plain one, so nothing can escape SoilAssets.
+                // A URL without one still gets one: iOS picks the video decoder by extension,
+                // while image decoders read the content and only need a neutral name.
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-                var extension = AssetCachePlan.SafeExtension(Path.GetExtension(new Uri(resolvedUrl).AbsolutePath));
+                var extension = AssetCachePlan.SafeExtension(Path.GetExtension(new Uri(resolvedUrl).AbsolutePath),
+                    assetType == AssetType.video ? ".mp4" : ".img");
                 var baseName = $"{adFormat}_{assetType}_{AssetCachePlan.SafeFileId(asset.id)}";
                 var fileName = $"{baseName}_{timestamp}{extension}";
                 var filePath = Path.Combine(CacheDirectory, fileName);
@@ -666,17 +701,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     AdFormat = adFormat,
                     LocalPath = filePath,
                     OriginalUrl = resolvedUrl, // Store the resolved URL
-                    ClickUrl = clickUrl, // Store the click URL from AdGroup
-                    Width = asset.width,
-                    Height = asset.height,
-                    AltText = asset.alt_text,
-                    CachedAt = DateTime.UtcNow,
-                    // Store ad-level data for later use in placements
-                    AdId = ad?.id,
-                    MainHeaderText = ad?.main_header?.text_content,
-                    ActionButtonText = ad?.action_button?.text_content,
-                    DescriptionText = ad?.description?.text_content
+                    CachedAt = DateTime.UtcNow
                 };
+                // The click URL of the ad group and the ad-level data of the ad it was cached for.
+                ApplyMetadata(cachedAsset, asset, clickUrl, ad);
 
                 lock (_lockObject)
                 {
@@ -829,12 +857,12 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// </summary>
         public static AssetCacheEntry GetCachedAsset(AdFormat adFormat, AssetType assetType)
         {
-            var assets = _cachedAssets.Values.Where(a => a.AdFormat == adFormat && a.AssetType == assetType).ToList();
+            var assetsForFormat = GetCachedAssets(adFormat);
+            var assets = assetsForFormat.Where(a => a.AssetType == assetType).ToList();
             if (!assets.Any())
             {
-                MyDebug.Verbose($"No {assetType} asset found for {adFormat}. Available assets for this format: {_cachedAssets.Values.Count(a => a.AdFormat == adFormat)}");
+                MyDebug.Verbose($"No {assetType} asset found for {adFormat}. Available assets for this format: {assetsForFormat.Count}");
                 // List available assets for this format
-                var assetsForFormat = _cachedAssets.Values.Where(a => a.AdFormat == adFormat).ToList();
                 foreach (var entry in assetsForFormat)
                 {
                     MyDebug.Verbose($"- Available: {entry.AssetType} ({entry.Id})");
@@ -853,12 +881,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// </summary>
         public static AssetCacheEntry GetCachedAssetByUUID(string uuid)
         {
-            var asset = _cachedAssets.Values.FirstOrDefault(a => a.Id == uuid);
+            var all = GetAllCachedAssets();
+            var asset = all.FirstOrDefault(a => a.Id == uuid);
 
             if (asset == null)
             {
-                MyDebug.LogWarning($"Asset with UUID {uuid} not found in cache. Available assets: {_cachedAssets.Count}");
-                foreach (var entry in _cachedAssets.Values.Take(5)) // Show first 5 for debugging
+                MyDebug.LogWarning($"Asset with UUID {uuid} not found in cache. Available assets: {all.Count}");
+                foreach (var entry in all.Take(5)) // Show first 5 for debugging
                 {
                     MyDebug.Verbose($"- {entry.Id}: {entry.AssetType} for {entry.AdFormat}");
                 }
@@ -872,19 +901,26 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Gets all cached assets for a specific ad format
+        /// Gets all cached assets for a specific ad format. The list is a snapshot: later caching
+        /// does not change it.
         /// </summary>
         public static List<AssetCacheEntry> GetCachedAssets(AdFormat adFormat)
         {
-            return _cachedAssets.Values.Where(a => a.AdFormat == adFormat).ToList();
+            lock (_lockObject)
+            {
+                return _cachedAssets.Values.Where(a => a.AdFormat == adFormat).ToList();
+            }
         }
 
         /// <summary>
-        /// Gets all cached assets
+        /// Gets all cached assets. The list is a snapshot: later caching does not change it.
         /// </summary>
         public static List<AssetCacheEntry> GetAllCachedAssets()
         {
-            return _cachedAssets.Values.ToList();
+            lock (_lockObject)
+            {
+                return _cachedAssets.Values.ToList();
+            }
         }
 
         /// <summary>
@@ -897,15 +933,19 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
             lock (_lockObject)
             {
-                asset = GetCachedAssetByUUID(uuid);
-                if (asset == null)
-                    return false;
-
-                keyToRemove = _cachedAssets.FirstOrDefault(kvp => kvp.Value.Id == uuid).Key;
+                var found = _cachedAssets.FirstOrDefault(kvp => kvp.Value.Id == uuid);
+                asset = found.Value;
+                keyToRemove = found.Key;
                 if (keyToRemove != null)
                 {
                     _cachedAssets.Remove(keyToRemove);
                 }
+            }
+
+            if (asset == null)
+            {
+                MyDebug.LogWarning($"Asset with UUID {uuid} not found in cache.");
+                return false;
             }
 
             try
@@ -1118,6 +1158,15 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 MyDebug.LogWarning($"Asset not found in cache: {uuid}");
                 return null;
             }
+
+            return LoadTexture(asset);
+        }
+
+        /// <summary>Decodes one cached entry's file into a new texture, or null.</summary>
+        internal static Texture2D LoadTexture(AssetCacheEntry asset)
+        {
+            if (asset == null) return null;
+            var uuid = asset.Id;
 
             // Accept both image and logo assets for texture loading
             if (asset.AssetType != AssetType.image && asset.AssetType != AssetType.logo

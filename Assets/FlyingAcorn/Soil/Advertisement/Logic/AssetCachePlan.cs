@@ -103,6 +103,17 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
             return "." + body.ToLowerInvariant();
         }
 
+        /// <summary>
+        /// <see cref="SafeExtension(string)"/>, or <paramref name="fallback"/> when the URL has no
+        /// plain extension. Players that pick a decoder by extension (iOS AVURLAsset for videos)
+        /// need one on every file.
+        /// </summary>
+        public static string SafeExtension(string extension, string fallback)
+        {
+            var safe = SafeExtension(extension);
+            return safe.Length > 0 ? safe : SafeExtension(fallback);
+        }
+
         private static bool IsSafe(string value)
         {
             foreach (var c in value)

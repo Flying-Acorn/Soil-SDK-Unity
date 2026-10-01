@@ -136,5 +136,18 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         {
             Assert.AreEqual(expected, AssetCachePlan.SafeExtension(extension));
         }
+
+        [TestCase(".webm", ".mp4", ".webm")]
+        [TestCase(".MOV", ".mp4", ".mov")]
+        [TestCase("", ".mp4", ".mp4")]
+        [TestCase(null, ".mp4", ".mp4")]
+        [TestCase(".mp4/../../x", ".mp4", ".mp4")]
+        [TestCase("", ".img", ".img")]
+        [TestCase("", null, "")]
+        [TestCase("", "../x", "")]
+        public void SafeExtension_FallsBackWhenTheUrlHasNone(string extension, string fallback, string expected)
+        {
+            Assert.AreEqual(expected, AssetCachePlan.SafeExtension(extension, fallback));
+        }
     }
 }
