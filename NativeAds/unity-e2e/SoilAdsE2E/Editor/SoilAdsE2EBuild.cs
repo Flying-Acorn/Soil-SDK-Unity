@@ -21,12 +21,17 @@ public static class SoilAdsE2EBuild
         var architectures = PlayerSettings.Android.targetArchitectures;
         var appId = PlayerSettings.GetApplicationIdentifier(group);
         var bundle = EditorUserBuildSettings.buildAppBundle;
+        var minifyDebug = PlayerSettings.Android.minifyDebug;
+        var minifyRelease = PlayerSettings.Android.minifyRelease;
         try
         {
             PlayerSettings.SetScriptingBackend(group, ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.X86_64 | AndroidArchitecture.ARM64;
             PlayerSettings.SetApplicationIdentifier(group, AppId);
             EditorUserBuildSettings.buildAppBundle = false;
+            // R8 on, as in a shipping game: the player only works if its keep rule survives.
+            PlayerSettings.Android.minifyDebug = true;
+            PlayerSettings.Android.minifyRelease = true;
             Build(BuildTarget.Android, Arg("-e2eOutput"));
         }
         finally
@@ -35,6 +40,8 @@ public static class SoilAdsE2EBuild
             PlayerSettings.Android.targetArchitectures = architectures;
             PlayerSettings.SetApplicationIdentifier(group, appId);
             EditorUserBuildSettings.buildAppBundle = bundle;
+            PlayerSettings.Android.minifyDebug = minifyDebug;
+            PlayerSettings.Android.minifyRelease = minifyRelease;
             AssetDatabase.SaveAssets();
         }
     }

@@ -417,9 +417,14 @@ namespace FlyingAcorn.Soil.Advertisement.E2E
 
         private IEnumerator Expect(string evt, float timeoutSeconds = 15)
         {
-            var until = Time.realtimeSinceStartup + timeoutSeconds;
-            while (!_events.Contains(evt) && Time.realtimeSinceStartup < until)
+            // Only time the game runs counts: a click can leave the app for a browser (and its
+            // first-run screens) for longer than the timeout, and the answer arrives on return.
+            var waited = 0f;
+            while (!_events.Contains(evt) && waited < timeoutSeconds)
+            {
                 yield return null;
+                waited += Mathf.Min(Time.unscaledDeltaTime, 0.25f);
+            }
             Check(_events.Contains(evt), $"expected {evt}");
         }
 
