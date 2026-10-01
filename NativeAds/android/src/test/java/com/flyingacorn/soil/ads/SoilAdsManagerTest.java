@@ -394,6 +394,35 @@ public class SoilAdsManagerTest {
     }
 
     @Test
+    public void adThatNeverAppearedGoesBackIntoItsSlot() throws Exception {
+        LoadedAd ad = loadReady("interstitial", "image", 0);
+        manager.show("interstitial", null);
+        assertFalse(manager.isReady("interstitial"));
+        manager.hide("interstitial");
+        assertTrue(manager.isReady("interstitial"));
+        assertFalse(ad.isReleased());
+
+        events.clear();
+        manager.show("interstitial", null);
+        assertSame(ad, presenter.fullscreenAd);
+    }
+
+    @Test
+    public void adThatNeverAppearedStaysOutOfAReloadedOrDestroyedSlot() throws Exception {
+        loadReady("interstitial", "image", 0);
+        manager.show("interstitial", null);
+        LoadedAd second = loadReady("interstitial", "image", 0);
+        manager.hide("interstitial");
+        assertTrue(manager.isReady("interstitial"));
+        manager.show("interstitial", null);
+        assertSame("the newer load wins", second, presenter.fullscreenAd);
+
+        manager.hide("interstitial");
+        manager.destroy("interstitial");
+        assertFalse(manager.isReady("interstitial"));
+    }
+
+    @Test
     public void presenterFailureKeepsTheAdLoaded() throws Exception {
         LoadedAd ad = loadReady("interstitial", "image", 0);
         presenter.error = "no_host";

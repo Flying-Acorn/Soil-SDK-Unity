@@ -132,9 +132,10 @@ final class FullscreenSession {
         registry.remove(id);
         handler.removeCallbacks(attachTimeout);
         SoilAdActivity current = activity;
-        if (current == null) releaseAd();
-        else if (!current.isFinishing()) current.finish();
+        if (current != null && !current.isFinishing()) current.finish();
+        // The listener first: a show that never appeared hands the ad back to its slot.
         listener.onClosed();
+        if (current == null) releaseAd();
     }
 
     private void releaseAd() {

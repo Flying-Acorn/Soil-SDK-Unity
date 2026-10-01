@@ -159,6 +159,7 @@ final class SoilAdsManager {
         }
         slot.ad = null;
         Show show = new Show(format);
+        show.returnToSlotIfNeverShown(slot, ad);
         fullscreen = show;
         String error = presenter.presentFullscreen(format, ad, options, show);
         if (error != null) {
@@ -214,9 +215,19 @@ final class SoilAdsManager {
         private boolean shown;
         private boolean rewarded;
         private boolean finished;
+        private Slot slot;
+        private LoadedAd ad;
+        private int loadToken;
 
         Show(String format) {
             this.format = format;
+        }
+
+        /** A fullscreen ad that never reaches the screen goes back into its slot, unless reloaded. */
+        void returnToSlotIfNeverShown(Slot slot, LoadedAd ad) {
+            this.slot = slot;
+            this.ad = ad;
+            this.loadToken = slot.loadToken;
         }
 
         @Override
@@ -251,6 +262,10 @@ final class SoilAdsManager {
             if (shown) {
                 emit(AdEvents.simple(format, AdEvents.CLOSED));
             } else {
+                if (slot != null && slot.ad == null && slot.loadToken == loadToken && !ad.isReleased()) {
+                    ad.retain();
+                    slot.ad = ad;
+                }
                 showFailed(format, AdFormats.ERROR_INTERNAL, "The ad was dismissed before it appeared");
             }
         }

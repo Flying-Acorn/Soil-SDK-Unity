@@ -88,8 +88,11 @@ public final class SoilAdsBridge {
             AndroidPresenter presenter = new AndroidPresenter(main, new AndroidPresenter.HostProvider() {
                 @Override
                 public Activity host() {
+                    // Unity's activity can be recreated after initialize: a finished one gives way
+                    // to Unity's current activity instead of blocking every show until GC.
                     Activity activity = hostActivity.get();
-                    return activity != null ? activity : unityCurrentActivity();
+                    boolean usable = activity != null && !activity.isFinishing() && !activity.isDestroyed();
+                    return usable ? activity : unityCurrentActivity();
                 }
             });
             manager = new SoilAdsManager(new MediaLoader(main), presenter, new EventSink() {
