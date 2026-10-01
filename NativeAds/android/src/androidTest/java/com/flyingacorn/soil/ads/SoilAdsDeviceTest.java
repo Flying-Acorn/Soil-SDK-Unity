@@ -945,7 +945,9 @@ public class SoilAdsDeviceTest {
         instrumentation.waitForIdleSync();
         View again = find(host, "soil_ad_banner");
         assertNotNull(again);
-        assertEquals(game.getHeight() / 2f, (again.getTop() + again.getBottom()) / 2f, 2f);
+        // Centered in the safe area: between the top and bottom insets, not the whole window.
+        float safeMiddle = safe[1] + (game.getHeight() - safe[1] - safe[3]) / 2f;
+        assertEquals(safeMiddle, (again.getTop() + again.getBottom()) / 2f, 2f);
 
         SoilAdsBridge.destroy("banner");
         instrumentation.waitForIdleSync();

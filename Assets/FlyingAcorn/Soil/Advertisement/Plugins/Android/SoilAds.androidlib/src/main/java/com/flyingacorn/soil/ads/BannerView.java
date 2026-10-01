@@ -116,6 +116,12 @@ final class BannerView extends FrameLayout {
         params.rightMargin = safeInsets[2];
         if (gravity == Gravity.TOP) params.topMargin = safeInsets[1];
         if (gravity == Gravity.BOTTOM) params.bottomMargin = safeInsets[3];
+        if (gravity == Gravity.CENTER_VERTICAL) {
+            // A centered child moves by topMargin - bottomMargin: half of each inset centers it
+            // in the safe area, as on iOS.
+            params.topMargin = safeInsets[1] / 2;
+            params.bottomMargin = safeInsets[3] / 2;
+        }
         return params;
     }
 
