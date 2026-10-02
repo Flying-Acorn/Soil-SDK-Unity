@@ -39,6 +39,7 @@ its UI/main thread. Results come back only as events.
 | Hide | `hide(String format)` | `void SoilAds_Hide(const char* format)` |
 | Destroy | `destroy(String format)` | `void SoilAds_Destroy(const char* format)` |
 | Is ready | `boolean isReady(String format)` | `bool SoilAds_IsReady(const char* format)` |
+| Shown received | — | `void SoilAds_ShownReceived(const char* format)`: C# got a fullscreen `shown`, so the game can be paused |
 
 `initialize` may be called more than once; the last receiver wins. Calls made before
 `initialize` still work; their events are dropped until a receiver exists.
@@ -190,9 +191,11 @@ was first shown.
   inside the safe area. The ad is presented only while the app is active: a `show` made while it is
   inactive (backgrounded, a system alert, Control Center) waits until it becomes active, with no
   event until then. If a view controller transition is running, it presents when that transition
-  ends. `UnityPause(1)` right before presenting, only if `UnityIsPaused()` was 0; `UnityPause(0)`
-  after dismissal, only if the player paused Unity, so a game that was already paused stays
-  paused. If UIKit has not finished the dismissal after 3 s and the ad is still on screen, the
+  ends. The game keeps running until `shown` has reached it: C# calls `SoilAds_ShownReceived`,
+  or after 0.5 s at the latest, the player calls `UnityPause(1)` (only if `UnityIsPaused()` was 0,
+  and only once the app is active), so `shown` arrives when the ad appears, as on Android.
+  `UnityPause(0)` after dismissal, only if the player paused Unity, so a game that was already
+  paused stays paused. If UIKit has not finished the dismissal after 3 s and the ad is still on screen, the
   dismissal is retried without animation up to 3 times, 1 s apart; the game resumes and `closed` is
   sent once the ad is off screen, or after the last retry. Known limitations: while the ad holds
   Unity paused, backgrounding the app does not reach the game's `OnApplicationPause`; ad audio

@@ -50,9 +50,9 @@ private void OnAdsInitFailed(string error)
 Interstitial and rewarded ads are drawn natively **on top of Unity**:
 
 - **Android**: the ad opens in its own activity. Unity's activity pauses underneath, which pauses the game loop and the game's audio. Your game gets `OnApplicationPause(true)` when the ad opens and `OnApplicationPause(false)` when it closes — make sure resume logic (app-open ads, session timers, "welcome back" screens) does not treat that as the player leaving the app.
-- **iOS**: the ad is presented over Unity's view controller and Unity is paused (`UnityPause`) until it closes. A game that was already paused stays paused. A show requested while the app is inactive waits until it is active again.
+- **iOS**: the ad is presented over Unity's view controller and Unity is paused (`UnityPause`) until it closes, starting right after `Shown` has reached your game. A game that was already paused stays paused. A show requested while the app is inactive waits until it is active again.
 
-So gameplay receives no input and makes no sound while a fullscreen ad is up, without any code in your game. Events raised while Unity is paused (`Shown`, `Rewarded`, `Clicked`) are delivered, in order, as soon as it resumes — right before `Closed`.
+So gameplay receives no input and makes no sound while a fullscreen ad is up, without any code in your game. `Shown` arrives when the ad appears, on both platforms. Events raised while the game is paused under the ad (`Clicked`, `Rewarded`) are delivered, in order, as soon as it resumes — right before `Closed`.
 
 `SoilAdInputBlocker.IsBlocked` (or `Advertisement.IsFullscreenAdShowing`) is true while a fullscreen ad is on screen, for game code that wants to know. If your game keeps its own timers in real time, pause them from the events:
 

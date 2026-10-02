@@ -24,3 +24,4 @@ void SoilAds_Show(const char *format, const char *optionsJson);
 void SoilAds_Hide(const char *format);
 void SoilAds_Destroy(const char *format);
 bool SoilAds_IsReady(const char *format);
+void SoilAds_ShownReceived(const char *format);

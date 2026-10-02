@@ -349,6 +349,8 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     XCTAssertTrue(vc.prefersStatusBarHidden);
     XCTAssertTrue(vc.prefersHomeIndicatorAutoHidden);
     XCTAssertEqual(vc.supportedInterfaceOrientations, self.root.supportedInterfaceOrientations);
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"the game runs until `shown` has reached it");
+    [self.manager acknowledgeShownFormat:@"interstitial"];
     XCTAssertEqualObjects(self.host.pauseCalls, @[@YES]);
     XCTAssertFalse([self.manager isReady:@"interstitial"], @"fullscreen show consumes the slot");
 
@@ -461,6 +463,56 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     [self.manager hideFormat:@"interstitial"];
     [self waitForClosed:1];
     XCTAssertEqualObjects([self.recorder sequenceForFormat:@"interstitial"], @"loaded,shown,closed");
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"closed before the game was paused: nothing to undo");
+}
+
+- (void)testGameIsPausedOnlyAfterShownReachedIt
+{
+    [self load:@"rewarded" fields:[self imageAd]];
+    [self showFullscreen:@"rewarded" options:nil];
+    XCTAssertEqual(self.host.pauseCalls.count, 0u);
+    [self.manager acknowledgeShownFormat:@"interstitial"];
+    [self.manager acknowledgeShownFormat:nil];
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"only the format on screen counts");
+    [self.manager acknowledgeShownFormat:@"rewarded"];
+    [self.manager acknowledgeShownFormat:@"rewarded"];
+    SoilAdsSpin(0.8); // the timeout must not pause a second time
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES]);
+    [self.manager hideFormat:@"rewarded"];
+    [self waitForClosed:1];
+    XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
+}
+
+- (void)testGameIsPausedAfterATimeoutWhenShownIsNotAcknowledged
+{
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:nil];
+    XCTAssertEqual(self.host.pauseCalls.count, 0u);
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return self.host.pauseCalls.count == 1; }));
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES]);
+    [self.manager acknowledgeShownFormat:@"interstitial"];
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES], @"a late acknowledgement changes nothing");
+    [self.manager hideFormat:@"interstitial"];
+    [self waitForClosed:1];
+    XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
+}
+
+- (void)testPauseAfterShownWaitsUntilTheAppIsActive
+{
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:nil];
+    self.host.appActive = NO; // e.g. the user left right after the ad appeared
+    [self.manager acknowledgeShownFormat:@"interstitial"];
+    SoilAdsSpin(0.8);
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"a pause now would be undone when the app comes back");
+
+    self.host.appActive = YES;
+    [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES]);
+    [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
+    XCTAssertEqualObjects(self.host.pauseCalls, @[@YES], @"paused once");
+    [self.manager hideFormat:@"interstitial"];
+    [self waitForClosed:1];
     XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]));
 }
 
@@ -762,6 +814,8 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     [[NSNotificationCenter defaultCenter] postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];
     XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"shown"] == 1; }));
     XCTAssertEqual(self.root.presentedViewController, self.manager.fullscreenController);
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"the game is paused only once `shown` has reached it");
+    [self.manager acknowledgeShownFormat:@"rewarded"];
     XCTAssertEqualObjects(self.host.pauseCalls, @[@YES]);
     [self.manager hideFormat:@"rewarded"];
     [self waitForClosed:1];

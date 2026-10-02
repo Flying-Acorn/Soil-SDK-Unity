@@ -11,7 +11,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol SoilAdsHost <NSObject>
 /// The view controller banners attach to and fullscreen ads are presented from.
 - (nullable UIViewController *)soilAdsRootViewController;
-/// YES right before a fullscreen ad is presented, NO after it is dismissed; always paired.
+/// YES once a fullscreen ad is on screen and its `shown` has reached the game (or after a short
+/// timeout), NO after it is dismissed; always paired.
 /// The host should leave the game as it found it (not resume a game that was already paused).
 - (void)soilAdsSetGamePaused:(BOOL)paused;
 @optional
@@ -38,6 +39,8 @@ typedef void (^SoilAdsEventSink)(NSString *json);
 - (void)showFormat:(nullable NSString *)format optionsJSON:(nullable NSString *)json;
 - (void)hideFormat:(nullable NSString *)format;
 - (void)destroyFormat:(nullable NSString *)format;
+/// C# has received `shown` for this fullscreen format: the game can be paused now.
+- (void)acknowledgeShownFormat:(nullable NSString *)format;
 
 /// Any thread.
 - (BOOL)isReady:(nullable NSString *)format;

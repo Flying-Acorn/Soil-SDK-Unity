@@ -370,7 +370,18 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             if (e == null || _slots == null) return;
             MyDebug.Verbose($"[Advertisement] Player: {e.Format} {e.Type} {e.Media} {e.Error} {e.Message}");
-            _slots.HandleEvent(e);
+            try
+            {
+                _slots.HandleEvent(e);
+            }
+            finally
+            {
+#if UNITY_IOS && !UNITY_EDITOR
+                // The iOS player pauses the game under a fullscreen ad only once Shown got here.
+                if (e.Type == NativeAdEventType.Shown && AdFormats.IsFullscreen(e.Format))
+                    (_player as IosAdPlayer)?.ShownReceived(e.Format);
+#endif
+            }
         }
 
         private static AdSlot SlotFor(AdFormat format) => _slots?[format.ToString()];

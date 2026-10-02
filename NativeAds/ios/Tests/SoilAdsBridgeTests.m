@@ -129,6 +129,9 @@
     [self waitForEventCount:1];
     SoilAds_Show("rewarded", "{\"imageLockSeconds\":0.3,\"videoLockFraction\":1,\"minVideoLockSeconds\":0,\"startMuted\":false}");
     XCTAssertEqualObjects([self waitForEventCount:2][@"event"], @"shown");
+    XCTAssertEqual(SoilAdsStubPauseCalls().count, 0u, @"the game runs until `shown` has reached it");
+    SoilAds_ShownReceived("rewarded");
+    XCTAssertTrue(SoilAdsWaitUntil(5, ^BOOL { return SoilAdsStubPauseCalls().count == 1; }));
     XCTAssertEqualObjects(SoilAdsStubPauseCalls(), @[@1]);
     XCTAssertFalse(SoilAds_IsReady("rewarded"));
     XCTAssertEqualObjects([self waitForEventCount:3][@"event"], @"rewarded");
@@ -157,7 +160,8 @@
     [self waitForEventCount:4];
     SoilAds_Show("interstitial", NULL);
     XCTAssertEqualObjects([self waitForEventCount:5][@"event"], @"shown");
-    XCTAssertEqual(UnityIsPaused(), 1);
+    SoilAds_ShownReceived("interstitial");
+    XCTAssertTrue(SoilAdsWaitUntil(5, ^BOOL { return UnityIsPaused() == 1; }));
     SoilAds_Hide("interstitial");
     XCTAssertEqualObjects([self waitForEventCount:6][@"event"], @"closed");
     XCTAssertEqualObjects(SoilAdsStubPauseCalls(), (@[@1, @0]));

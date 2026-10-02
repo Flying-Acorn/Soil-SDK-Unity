@@ -20,6 +20,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         [DllImport("__Internal")] private static extern void SoilAds_Show(string format, string optionsJson);
         [DllImport("__Internal")] private static extern void SoilAds_Hide(string format);
         [DllImport("__Internal")] private static extern void SoilAds_Destroy(string format);
+        [DllImport("__Internal")] private static extern void SoilAds_ShownReceived(string format);
 
         private readonly Action<NativeAdEvent> _report;
         private readonly bool _available;
@@ -47,6 +48,12 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         public void Hide(string format) => Call(() => SoilAds_Hide(format), format, NativeAdEventType.Unknown);
 
         public void Destroy(string format) => Call(() => SoilAds_Destroy(format), format, NativeAdEventType.Unknown);
+
+        /// <summary>
+        /// Tells the player a fullscreen `shown` has reached the game. The player keeps the game
+        /// running until then (or a short timeout), so Shown arrives when the ad appears.
+        /// </summary>
+        public void ShownReceived(string format) => Call(() => SoilAds_ShownReceived(format), format, NativeAdEventType.Unknown);
 
         private void Call(Action call, string format, NativeAdEventType failure)
         {

@@ -20,6 +20,7 @@ void SoilAds_Show(const char *format, const char *optionsJson);
 void SoilAds_Hide(const char *format);
 void SoilAds_Destroy(const char *format);
 bool SoilAds_IsReady(const char *format);
+void SoilAds_ShownReceived(const char *format);
 
 @interface SoilAdsUnityHost : NSObject <SoilAdsHost>
 @end
@@ -123,6 +124,12 @@ void SoilAds_Destroy(const char *format)
 {
     NSString *formatName = SoilAdsCopyString(format);
     SoilAdsOnMain(^{ [SoilAdsSharedManager() destroyFormat:formatName]; });
+}
+
+void SoilAds_ShownReceived(const char *format)
+{
+    NSString *formatName = SoilAdsCopyString(format);
+    SoilAdsOnMain(^{ [SoilAdsSharedManager() acknowledgeShownFormat:formatName]; });
 }
 
 bool SoilAds_IsReady(const char *format)

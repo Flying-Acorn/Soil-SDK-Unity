@@ -10,6 +10,8 @@ static const NSTimeInterval SoilAdsDismissTimeout = 3.0;
 /// While it is, dismiss it again (unanimated) this many times, this far apart, then give up.
 static const NSInteger SoilAdsDismissRetries = 3;
 static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
+/// The game is paused once C# has received `shown`, or this long after it was sent at the latest.
+static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
 
 /// One fullscreen show, from `show` to `closed` (or to `showFailed` if it never reached the screen).
 @interface SoilAdsSession : NSObject
@@ -20,6 +22,8 @@ static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
 @property (nonatomic) NSUInteger generation;
 /// Observes UIApplicationDidBecomeActiveNotification while a show waits for the app to be active.
 @property (nonatomic, strong, nullable) id activeObserver;
+/// The same, while the pause that follows `shown` waits for the app to be active.
+@property (nonatomic, strong, nullable) id pauseObserver;
 @property (nonatomic) BOOL presenting;
 @property (nonatomic) BOOL presented;
 @property (nonatomic) BOOL gamePaused;
@@ -336,9 +340,9 @@ static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
         return;
     }
 
+    // The game keeps running until `shown` has reached it (see -pauseGameForSession:), so the
+    // event arrives when the ad appears, as on Android.
     session.presenting = YES;
-    session.gamePaused = YES;
-    [_host soilAdsSetGamePaused:YES];
     SoilAdsFullscreenViewController *controller = session.controller;
     [presenter presentViewController:controller animated:YES completion:^{
         [weakSelf sessionPresented:session];
@@ -364,7 +368,54 @@ static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
     NSString *name = SoilAdsFormatName(session.format);
     [self emitFormat:name event:@"shown" extra:nil];
     if (session.rewardPending) [self sendRewardForSession:session];
-    if (session.closeRequested) [self dismissSession:session];
+    if (session.closeRequested) {
+        [self dismissSession:session];
+        return;
+    }
+    // C# acknowledges `shown` (-acknowledgeShownFormat:); if it does not, pause anyway.
+    __weak __typeof__(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SoilAdsShownAckTimeout * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [weakSelf pauseGameForSession:session];
+    });
+}
+
+- (void)acknowledgeShownFormat:(NSString *)format
+{
+    SoilAdsSession *session = _session;
+    if (!session || !session.presented || ![SoilAdsFormatName(session.format) isEqualToString:format]) return;
+    [self pauseGameForSession:session];
+}
+
+/// Pauses the game under a fullscreen ad that is on screen, once.
+- (void)pauseGameForSession:(SoilAdsSession *)session
+{
+    if (session != _session || session.finished || session.gamePaused || !session.presented) return;
+    if (![self appIsActive]) {
+        // The trampoline resumes a game it paused itself when the app comes back, which would
+        // undo a pause made now: pause once the app is active again.
+        if (!session.pauseObserver) {
+            __weak __typeof__(self) weakSelf = self;
+            __weak SoilAdsSession *weakSession = session; // the session holds the observer
+            session.pauseObserver = [[NSNotificationCenter defaultCenter]
+                addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:[NSOperationQueue mainQueue]
+                        usingBlock:^(NSNotification *note) {
+                SoilAdsSession *waiting = weakSession;
+                if (waiting) [weakSelf pauseGameForSession:waiting];
+            }];
+        }
+        return;
+    }
+    [self stopWaitingToPause:session];
+    session.gamePaused = YES;
+    [_host soilAdsSetGamePaused:YES];
+}
+
+- (void)stopWaitingToPause:(SoilAdsSession *)session
+{
+    if (!session.pauseObserver) return;
+    [[NSNotificationCenter defaultCenter] removeObserver:session.pauseObserver];
+    session.pauseObserver = nil;
 }
 
 - (void)sendRewardForSession:(SoilAdsSession *)session
@@ -446,6 +497,7 @@ static const NSTimeInterval SoilAdsDismissRetryInterval = 1.0;
     if (session.finished) return;
     session.finished = YES;
     [self stopWaitingForActive:session];
+    [self stopWaitingToPause:session];
     [session.controller teardown];
     if (_session == session) _session = nil;
     if (session.gamePaused) {
