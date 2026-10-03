@@ -190,6 +190,9 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     }
     NSString *scheme = url.scheme.lowercaseString;
     if (!scheme || ![@[@"http", @"https", @"itms-apps", @"itms-appss"] containsObject:scheme]) return nil;
+    // Nothing after the scheme ("https:") is not a link either.
+    NSString *rest = [url.resourceSpecifier stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/"]];
+    if (rest.length == 0) return nil;
     return url;
 }
 
