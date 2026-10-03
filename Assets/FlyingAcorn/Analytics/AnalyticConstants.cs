@@ -73,12 +73,17 @@ namespace FlyingAcorn.Analytics
 
         public enum PaymentSDK
         {
-            Other,
-            AppStore,
-            GooglePlay,
-            Soil,
-            Myket,
-            CafeBazaar
+            Other = 0,
+            AppStore = 1,
+            GooglePlay = 2,
+            Soil = 3,
+            // Regional Android billing. Compiled out of iOS players, kept in the editor; see
+            // BuildData.Constants.Store for the same pattern. Values are explicit so omitting
+            // these never renumbers anything.
+#if !UNITY_IOS || UNITY_EDITOR
+            Myket = 4,
+            CafeBazaar = 5
+#endif
         }
 
         public const string FlyingAcorn = "FlyingAcorn";
