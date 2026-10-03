@@ -1,0 +1,22 @@
+{
+    "name": "FlyingAcorn.Soil.Socialization.Tests",
+    "rootNamespace": "FlyingAcorn.Soil.Socialization.Tests",
+    "references": [
+        "FlyingAcorn.Soil.Socialization.Logic"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll",
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": []
+}

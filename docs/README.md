@@ -35,6 +35,7 @@ All demo Unity scenes are located under `Assets/FlyingAcorn/Soil/**/Demo/`.
 | Economy        | `Assets/FlyingAcorn/Soil/Economy/Demo/SoilUserEconomyExample.unity`        |
 | Leaderboard    | `Assets/FlyingAcorn/Soil/Leaderboard/Demo/SoilLeaderboardExample.unity`    |
 | Socialization  | `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity`|
+| Friends v2     | `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendsV2Example.unity`|
 | Scene Switcher | `Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity`                     |
 
 > Tip: Start with the Scene Switcher to jump across feature demos during evaluation.

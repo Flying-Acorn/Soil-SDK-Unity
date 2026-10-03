@@ -131,6 +131,66 @@ private async void LoadFriendsLeaderboard(string leaderboardId)
 
 **Note**: The `relative` parameter determines if ranks are relative to the current user or absolute.
 
+## Friends v2: requests, accept and block
+
+Friends v2 asks before two players become friends, and lets a player block another. It needs the
+**Socialization v2** feature on your app (ask your Soil contact). The calls above (`Socialization.*`, Friends v1)
+keep working beside it on the same friendships, so older builds stay friends with newer ones. Once your older
+builds are gone, ask us to turn Friends v1 off: until then a modified client could still add friends instantly
+through it.
+
+A refusal is an answer, not an exception. Every action returns a `FriendActionResult`; check `Status`
+(`FriendStatus`) and `Succeeded`. Only a transport failure, an expired sign-in or the feature being off throws a
+`SocializationException`. Every action is safe to retry after a timeout.
+
+```csharp
+using FlyingAcorn.Soil.Socialization;
+using FlyingAcorn.Soil.Socialization.Logic;
+
+// The code players share and type: SoilServices.UserInfo.public_id (8 characters, e.g. "K7M29QX4").
+var sent = await FriendsV2.SendRequestByPublicId(typedCode);
+switch (sent.Status)
+{
+    case FriendStatus.RequestSent: ShowSent(sent.user.name); break;
+    case FriendStatus.FriendshipCreated: ShowNowFriends(sent.user.name); break; // they had asked first
+    case FriendStatus.FriendNotFound: ShowNoSuchPlayer(); break;
+    case FriendStatus.RequestLimitReached:
+    case FriendStatus.FriendLimitReached: ShowLimit(); break;
+    case FriendStatus.Throttled: RetryIn(sent.RetryAfterSeconds); break;
+}
+
+// Badges and lists: one list per call, plus every list's count.
+var incoming = await FriendsV2.GetList(FriendListKind.Incoming);
+SetBadge(incoming.counts.incoming);
+foreach (var player in incoming.users)
+    AddRequestRow(player.name, player.public_id, accept: () => FriendsV2.Accept(player.uuid),
+        decline: () => FriendsV2.Decline(player.uuid));
+```
+
+| Call | Does |
+|---|---|
+| `GetList(FriendListKind kind = Friends)` | `Friends`, `Incoming`, `Outgoing` or `Blocked`, newest first (up to 1000), with `counts` |
+| `SendRequest(uuid)` / `SendRequestByPublicId(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`) |
+| `Accept(uuid)` / `Decline(uuid)` | Answers a request this player received |
+| `Cancel(uuid)` | Withdraws a request this player sent |
+| `Remove(uuid)` | Ends a friendship for both players |
+| `Block(uuid)` / `Unblock(uuid)` | Hides a player: ends the friendship and their requests. They are not told |
+
+Things to know:
+
+- **Limits** are set per app on the dashboard (App Settings → Friend limits): friends per player (300),
+  requests waiting per player (100) and players blocked per player (500). Sending requests is limited to
+  20 a minute and 200 a day, blocking to 30 a minute and 300 a day.
+- **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
+  simply never gets an answer. Do not show anything else.
+- **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
+  the lists again.
+- **The friend leaderboard** (`Socialization.GetFriendsLeaderboard`) works with Friends v1 or v2.
+- **Invite rewards**: friendships keep their original `since` when they move. If your game rewards a friend
+  it has not seen before whose friendship is recent, a friend made shortly before the player signed in shows up
+  as unseen on the real account and would be rewarded again. Record rewarded friends in cloud save on the
+  account that earned them, or skip friends whose `since` is older than the sign-in.
+
 ## Advanced Integration Patterns
 
 ### Handling Friend Invites via Deep Links
@@ -229,7 +289,7 @@ else
 
 ## Demo Scene
 
-See the [Socialization Demo](../README.md#demo-scenes) (`SoilSocializationExample.unity`) for a complete working example.
+See the [demo scenes](../README.md#demo-scenes) for complete working examples: `SoilSocializationExample.unity` (Friends v1) and `SoilFriendsV2Example.unity` (Friends v2).
 
 ## API Reference
 
@@ -238,6 +298,12 @@ See the [Socialization Demo](../README.md#demo-scenes) (`SoilSocializationExampl
 - `Socialization.AddFriendWithUUID(string uuid)`
 - `Socialization.RemoveFriendWithUUID(string uuid)`
 - `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)` → `Task<LeaderboardResponse>`
+
+Friends v2 (`FriendsV2`, needs the Socialization v2 feature):
+
+- `FriendsV2.GetList(FriendListKind kind = FriendListKind.Friends)` → `UniTask<FriendList>`
+- `FriendsV2.SendRequest(string uuid)`, `FriendsV2.SendRequestByPublicId(string publicId)` → `UniTask<FriendActionResult>`
+- `FriendsV2.Accept`, `Decline`, `Cancel`, `Remove`, `Block`, `Unblock` (`string uuid`) → `UniTask<FriendActionResult>`
 
 ## Other Documentations
 
