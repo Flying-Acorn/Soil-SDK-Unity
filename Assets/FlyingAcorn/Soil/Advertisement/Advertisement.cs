@@ -98,8 +98,11 @@ namespace FlyingAcorn.Soil.Advertisement
         private static bool _nativeLoadRequested;
 
         // Rewarded ad cooldown tracking
-        private static DateTime _lastRewardedAdShownTime = DateTime.MinValue;
+        // Stopwatch ticks of the last rewarded close, 0 for none: a monotonic clock, so setting the
+        // device clock back (or a daylight-saving change) cannot stretch the cooldown.
+        private static long _lastRewardedAdShownTicks;
         private static readonly float RewardedAdCooldownSeconds = 10f;
+        private const string LegacyVideoCacheFolder = "AdVideoCache";
 
         // The clock of the slot watchdogs: unscaled time while the game runs. A long frame (the
         // app was in the background, or paused under a fullscreen ad) counts only this much, so an
@@ -140,7 +143,8 @@ namespace FlyingAcorn.Soil.Advertisement
             _retiredNativeAdContents.Clear();
             _nativeCaching = false;
             _nativeLoadRequested = false;
-            _lastRewardedAdShownTime = DateTime.MinValue;
+            _lastRewardedAdShownTicks = 0;
+            _legacyVideoCacheDeleted = false;
             BannerPosition = AdPosition.BottomCenter;
             FullscreenOptionsOverride = null;
             _runtimeClock = 0;
@@ -176,6 +180,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _requestedFormats = adFormats.Distinct().ToList();
 
             EnsurePlayerRuntime();
+            DeleteLegacyVideoCache();
             foreach (var format in _requestedFormats)
                 SlotFor(format)?.BeginCaching();
             if (_requestedFormats.Contains(AdFormat.native))
@@ -198,6 +203,30 @@ namespace FlyingAcorn.Soil.Advertisement
 
             // Trigger services initialization if not already started
             SoilServices.InitializeAsync();
+        }
+
+        private static bool _legacyVideoCacheDeleted;
+
+        /// <summary>
+        /// SDKs before the native players kept every played video in AdVideoCache and never
+        /// removed it; videos now live in the ad cache. Deleted once per launch, off the main thread.
+        /// </summary>
+        private static void DeleteLegacyVideoCache()
+        {
+            if (_legacyVideoCacheDeleted) return;
+            _legacyVideoCacheDeleted = true;
+            var directory = System.IO.Path.Combine(Application.persistentDataPath, LegacyVideoCacheFolder);
+            UniTask.RunOnThreadPool(() =>
+            {
+                try
+                {
+                    if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+                }
+                catch (Exception ex)
+                {
+                    MyDebug.Verbose($"[Advertisement] Could not delete {LegacyVideoCacheFolder}: {ex.Message}");
+                }
+            }).Forget();
         }
 
         private static void UnlistenCore()
@@ -251,7 +280,7 @@ namespace FlyingAcorn.Soil.Advertisement
             var roundAdGroups = new List<string>();
             var roundCampaigns = new List<string>();
             Exception lastException = null;
-            var failureCount = 0;
+            var failedFormats = new HashSet<AdFormat>();
             foreach (var format in _requestedFormats)
             {
                 try
@@ -271,28 +300,34 @@ namespace FlyingAcorn.Soil.Advertisement
                 }
                 catch (Exception ex)
                 {
-                    failureCount++;
+                    failedFormats.Add(format);
                     lastException = ex;
                     MyDebug.LogWarning($"Failed to select ad group for format {format}: {ex.Message}");
                 }
             }
 
-            if (failureCount == _requestedFormats.Count && lastException != null)
+            if (failedFormats.Count == _requestedFormats.Count && lastException != null)
             {
                 _campaignRequested = false;
                 _isInitializing = false;
                 _campaignSelectionSucceeded = false;
-                FailCaching(NativeAdErrors.Network);
+                // The ads cached last session still work (they are local files); a later
+                // InitializeAsync tries the server again.
+                foreach (var format in _requestedFormats)
+                    UseCachedAdOrFail(format, NativeAdErrors.Network);
                 Events.InvokeOnInitializeFailed($"Failed to select ad groups: {lastException.Message}");
                 return;
             }
 
             _campaignSelectionSucceeded = true; // success path, regardless of per-format availability
 
-            // Formats the server had nothing for answer their pending LoadAd calls with NoFill.
+            // A format whose request failed keeps last session's ad if its files are still cached;
+            // formats the server had nothing for answer their pending LoadAd calls with NoFill.
             foreach (var format in _requestedFormats.Where(f => !_selectedAdGroups.ContainsKey(f)))
             {
-                if (format == AdFormat.native)
+                if (failedFormats.Contains(format))
+                    UseCachedAdOrFail(format, NativeAdErrors.Network);
+                else if (format == AdFormat.native)
                     NativeCachingEnded(NativeAdErrors.NoFill);
                 else
                     SetSlotCreative(format, null, null);
@@ -300,8 +335,13 @@ namespace FlyingAcorn.Soil.Advertisement
 
             if (_selectedAdGroups.Count == 0)
             {
-                await ClearAssetCacheAsync();
-                AdvertisementPlayerPrefs.CachedAdGroups = new Dictionary<AdFormat, AdGroup>();
+                // Only an answer of "nothing" for every format retires the cached ads; a format
+                // whose request failed may be showing them.
+                if (failedFormats.Count == 0)
+                {
+                    await ClearAssetCacheAsync();
+                    AdvertisementPlayerPrefs.CachedAdGroups = new Dictionary<AdFormat, AdGroup>();
+                }
                 _campaignRequested = false;
                 _isInitializing = false;
                 Events.InvokeOnInitialized();
@@ -399,6 +439,23 @@ namespace FlyingAcorn.Soil.Advertisement
                 NativeCachingEnded(error);
             else
                 SlotFor(format)?.CachingFailed(error);
+        }
+
+        /// <summary>
+        /// The ad server could not be asked for this format: prepares the ad whose files are still
+        /// cached from an earlier session, or fails pending loads with <paramref name="error"/>.
+        /// </summary>
+        private static void UseCachedAdOrFail(AdFormat format, string error)
+        {
+            var hasCachedFiles = AssetCache.GetCachedAssets(format).Any(entry => entry != null && entry.IsValid);
+            if (!hasCachedFiles || (format != AdFormat.native && !HasAdPlayer))
+            {
+                CachingFailed(format, error);
+                return;
+            }
+
+            MyDebug.Verbose($"[Advertisement] Using the cached {format} ad: the ad server could not be reached");
+            OnFormatAssetsReady(format);
         }
 
         private static void SetSlotCreative(AdFormat format, AdCreative creative, Ad ad)
@@ -883,12 +940,15 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <returns>True if in cooldown, false if available</returns>
         public static bool IsRewardedAdInCooldown()
         {
-            if (_lastRewardedAdShownTime == DateTime.MinValue)
+            if (_lastRewardedAdShownTicks == 0)
                 return false;
 
-            var timeSinceLastShown = (DateTime.Now - _lastRewardedAdShownTime).TotalSeconds;
-            return timeSinceLastShown < RewardedAdCooldownSeconds;
+            return SecondsSinceRewardedAdShown() < RewardedAdCooldownSeconds;
         }
+
+        private static double SecondsSinceRewardedAdShown() =>
+            (System.Diagnostics.Stopwatch.GetTimestamp() - _lastRewardedAdShownTicks)
+            / (double)System.Diagnostics.Stopwatch.Frequency;
 
         /// <summary>
         /// Gets the remaining cooldown time for rewarded ads in seconds
@@ -896,11 +956,10 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <returns>Remaining cooldown time in seconds, 0 if no cooldown</returns>
         public static float GetRewardedAdCooldownRemainingSeconds()
         {
-            if (_lastRewardedAdShownTime == DateTime.MinValue)
+            if (_lastRewardedAdShownTicks == 0)
                 return 0f;
 
-            var timeSinceLastShown = (DateTime.Now - _lastRewardedAdShownTime).TotalSeconds;
-            var remainingTime = RewardedAdCooldownSeconds - timeSinceLastShown;
+            var remainingTime = RewardedAdCooldownSeconds - SecondsSinceRewardedAdShown();
             return remainingTime > 0 ? (float)remainingTime : 0f;
         }
 
@@ -909,7 +968,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         public static void SetRewardedAdCooldown()
         {
-            _lastRewardedAdShownTime = DateTime.Now;
+            _lastRewardedAdShownTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         }
 
         /// <summary>
@@ -917,7 +976,7 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         public static void ResetRewardedAdCooldown()
         {
-            _lastRewardedAdShownTime = DateTime.MinValue;
+            _lastRewardedAdShownTicks = 0;
         }
 
         /// <summary>
@@ -1580,7 +1639,7 @@ namespace FlyingAcorn.Soil.Advertisement
                 yield break;
             }
 
-            var cacheDir = System.IO.Path.Combine(Application.persistentDataPath, "AdVideoCache");
+            var cacheDir = System.IO.Path.Combine(Application.persistentDataPath, LegacyVideoCacheFolder);
             string filePath;
             try
             {

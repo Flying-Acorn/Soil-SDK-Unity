@@ -68,6 +68,56 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
             _slots.Tick();
         }
 
+        // --- Load requests for an ad that is gone ---
+
+        [Test]
+        public void LoadAd_WhileABannerWhoseAdWasRemovedIsOnScreen_IsAnsweredAtOnce()
+        {
+            var slot = Prepared(AdFormats.Banner);
+            _slots.Show(AdFormats.Banner, "{}");
+            Native(AdFormats.Banner, NativeAdEventType.Shown);
+            slot.SetCreative(null); // the cache lost the banner's files
+            _notices.Clear();
+
+            slot.RequestLoad();
+
+            CollectionAssert.AreEqual(new[] { "banner:LoadFailed:no_fill" }, _notices);
+        }
+
+        [Test]
+        public void LoadAd_WaitingForAFullscreenShow_IsAnsweredWhenItsAdIsRemoved()
+        {
+            var slot = Prepared(AdFormats.Interstitial);
+            _slots.Show(AdFormats.Interstitial, "{}");
+            Native(AdFormats.Interstitial, NativeAdEventType.Shown);
+            slot.RequestLoad(); // waits for the show to end
+            _notices.Clear();
+
+            slot.SetCreative(null);
+            Native(AdFormats.Interstitial, NativeAdEventType.Closed);
+            slot.RequestLoad();
+
+            CollectionAssert.AreEqual(new[]
+            {
+                "interstitial:LoadFailed:no_fill", "interstitial:Closed", "interstitial:LoadFailed:no_fill"
+            }, _notices);
+        }
+
+        [Test]
+        public void LoadAd_WaitingForAFullscreenShow_StillLoadsTheNextAdWhenThereIsOne()
+        {
+            var slot = Prepared(AdFormats.Interstitial);
+            _slots.Show(AdFormats.Interstitial, "{}");
+            Native(AdFormats.Interstitial, NativeAdEventType.Shown);
+            slot.RequestLoad();
+            _notices.Clear();
+
+            Native(AdFormats.Interstitial, NativeAdEventType.Closed);
+            Native(AdFormats.Interstitial, NativeAdEventType.Loaded);
+
+            CollectionAssert.AreEqual(new[] { "interstitial:Closed", "interstitial:Loaded" }, _notices);
+        }
+
         // --- Throwing handlers ---
 
         [Test]

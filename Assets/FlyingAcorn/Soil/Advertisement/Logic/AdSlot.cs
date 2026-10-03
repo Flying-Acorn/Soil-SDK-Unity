@@ -141,6 +141,14 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         public void RequestLoad()
         {
             _loadRequested = true;
+            // Nothing to load and nothing on its way: answer now, even while an ad is on screen
+            // (e.g. a banner whose files were removed meanwhile), or the call would never be answered.
+            if (Creative == null && !IsCaching && !IsPrepared && !IsPreparing)
+            {
+                FailPendingLoad(_noFill ? NativeAdErrors.NoFill : NativeAdErrors.NotLoaded);
+                return;
+            }
+
             if (IsPrepared || IsPreparing || IsCaching || IsShowing)
             {
                 Tick();
