@@ -523,7 +523,7 @@ GameObject:
   - component: {fileID: 486169207}
   - component: {fileID: 7530741322254645861}
   m_Layer: 5
-  m_Name: FriendV2Row
+  m_Name: FriendRequestRow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

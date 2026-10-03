@@ -9,6 +9,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+// This demo shows the old instant-add calls, which are obsolete: keep their warnings out of the Console.
+#pragma warning disable CS0618
+
 namespace FlyingAcorn.Soil.Socialization.Demo
 {
     public class SocializationDemoHandler : MonoBehaviour

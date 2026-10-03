@@ -6,18 +6,19 @@ Friend system and close competition features to create an engaging social gaming
 
 Two versions share the same friendships:
 
-- **Friends v1** (`Socialization`): adding a player makes you friends at once.
-- **Friends v2** (`FriendsV2`): requests the other player accepts or declines, plus blocking. Players can add
+- **Friend requests**: the other player accepts or declines, and players can block each other. Players add
   each other by the short code `SoilServices.UserInfo.public_id`, which is easier to share and type than a UUID.
-  See [Friends v2](Integration.md#friends-v2-requests-accept-and-block).
+  See [Friend requests](Integration.md#friend-requests-send-accept-and-block).
+- **Instant add** (old, marked obsolete): adding a player makes you friends at once, without asking. It keeps
+  working for builds already shipped.
 
 ## Finding Other Players
 
-With **Friends v2**, the simplest way is the player code: show `SoilServices.UserInfo.public_id` (for example
-`K7M29QX4`) in your game, and let other players type it into `FriendsV2.SendRequestByPublicId`. Every
-`FriendsV2` list and answer then gives you the UUID the other actions take.
+The simplest way is the player code: show `SoilServices.UserInfo.public_id` (for example `K7M29QX4`) in your
+game, and let other players type it into `Socialization.SendFriendRequestByCode`. Every friend list and answer
+then gives you the UUID the other actions take.
 
-**Friends v1** takes UUIDs only. Here are common ways to obtain them:
+The old instant add takes UUIDs only. Here are common ways to obtain them:
 
 ### From Leaderboard Scores
 
@@ -65,8 +66,8 @@ See [Integration](Integration.md) for detailed setup and usage.
 
 Demo scenes:
 
-- Friends v1: `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity`
-- Friends v2: `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendsV2Example.unity` - your code, the four lists with their counts, sending by code or UUID, and each list's actions. Needs the Socialization v2 feature.
+- Friend requests: `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendRequestsExample.unity` - your code, the four lists with their counts, sending by code or UUID, and each list's actions. Needs the Friend requests feature.
+- Instant add (old): `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity`
 
 Both are also reachable from the scene switcher (`Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity`).
 

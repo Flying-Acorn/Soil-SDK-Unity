@@ -32,7 +32,10 @@ private void OnSDKReady()
 }
 ```
 
-### 2. Get Friends List
+> **Steps 2-4 are the old instant-add calls**, now marked `[Obsolete]`: adding makes two players friends without
+> asking. They keep working for builds already shipped. New games use [Friend requests](#friend-requests-send-accept-and-block).
+
+### 2. Get Friends List (old)
 
 Fetch the current user's friends:
 
@@ -58,7 +61,7 @@ private async void LoadFriends()
 }
 ```
 
-### 3. Add a Friend
+### 3. Add a Friend (old)
 
 Add a friend using their UUID:
 
@@ -80,9 +83,9 @@ private async void AddFriend(string friendUuid)
 }
 ```
 
-**Note**: See [Finding Other Players](../socialization/Introduction.md#finding-other-players) in the Introduction for ways to find other players: the player code for Friends v2, or UUIDs from leaderboards and shared game info.
+**Note**: See [Finding Other Players](../socialization/Introduction.md#finding-other-players) in the Introduction for ways to find other players: the player code for friend requests, or UUIDs from leaderboards and shared game info.
 
-### 4. Remove a Friend
+### 4. Remove a Friend (old)
 
 Remove a friend using their UUID:
 
@@ -131,13 +134,13 @@ private async void LoadFriendsLeaderboard(string leaderboardId)
 
 **Note**: The `relative` parameter determines if ranks are relative to the current user or absolute.
 
-## Friends v2: requests, accept and block
+## Friend requests: send, accept and block
 
-Friends v2 asks before two players become friends, and lets a player block another. It needs the
-**Socialization v2** feature on your app (ask your Soil contact). The calls above (`Socialization.*`, Friends v1)
-keep working beside it on the same friendships, so older builds stay friends with newer ones. Once your older
-builds are gone, ask us to turn Friends v1 off: until then a modified client could still add friends instantly
-through it.
+Friend requests ask before two players become friends, and let a player block another. They need the
+**Friend requests** feature on your app (ask your Soil contact). The old instant-add calls above keep working
+beside them on the same friendships, so older builds stay friends with newer ones. Once your older builds are
+gone, ask us to turn the old instant add off: until then a modified client could still add friends without
+asking.
 
 A refusal is an answer, not an exception. Every action returns a `FriendActionResult`; check `Status`
 (`FriendStatus`) and `Succeeded`. Only a transport failure, an expired sign-in or the feature being off throws a
@@ -148,7 +151,7 @@ using FlyingAcorn.Soil.Socialization;
 using FlyingAcorn.Soil.Socialization.Logic;
 
 // The code players share and type: SoilServices.UserInfo.public_id (8 characters, e.g. "K7M29QX4").
-var sent = await FriendsV2.SendRequestByPublicId(typedCode);
+var sent = await Socialization.SendFriendRequestByCode(typedCode);
 switch (sent.Status)
 {
     case FriendStatus.RequestSent: ShowSent(sent.user.name); break;
@@ -160,34 +163,34 @@ switch (sent.Status)
 }
 
 // Badges and lists: one list per call, plus every list's count.
-var incoming = await FriendsV2.GetList(FriendListKind.Incoming);
+var incoming = await Socialization.GetFriendList(FriendListKind.Incoming);
 SetBadge(incoming.counts.incoming);
 foreach (var player in incoming.users)
-    AddRequestRow(player.name, player.public_id, accept: () => FriendsV2.Accept(player.uuid),
-        decline: () => FriendsV2.Decline(player.uuid));
+    AddRequestRow(player.name, player.public_id, accept: () => Socialization.AcceptFriendRequest(player.uuid),
+        decline: () => Socialization.DeclineFriendRequest(player.uuid));
 ```
 
 | Call | Does |
 |---|---|
-| `GetList(FriendListKind kind = Friends)` | `Friends`, `Incoming`, `Outgoing` or `Blocked`, newest first (up to 1000), with `counts` |
-| `SendRequest(uuid)` / `SendRequestByPublicId(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`) |
-| `Accept(uuid)` / `Decline(uuid)` | Answers a request this player received |
-| `Cancel(uuid)` | Withdraws a request this player sent |
-| `Remove(uuid)` | Ends a friendship for both players |
-| `Block(uuid)` / `Unblock(uuid)` | Hides a player: ends the friendship and their requests. They are not told |
+| `GetFriendList(FriendListKind kind = Friends)` | `Friends`, `Incoming`, `Outgoing` or `Blocked`, newest first (up to 1000), with `counts` |
+| `SendFriendRequest(uuid)` / `SendFriendRequestByCode(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`) |
+| `AcceptFriendRequest(uuid)` / `DeclineFriendRequest(uuid)` | Answers a request this player received |
+| `CancelFriendRequest(uuid)` | Withdraws a request this player sent |
+| `RemoveFriend(uuid)` | Ends a friendship for both players |
+| `BlockPlayer(uuid)` / `UnblockPlayer(uuid)` | Hides a player: ends the friendship and their requests. They are not told |
 
 Things to know:
 
-- **Limits** are set per app on the dashboard (App Settings → Friend limits): friends per player (300),
+- **Limits** are set per app on the dashboard (Friends → Settings): friends per player (300),
   requests waiting per player (100) and players blocked per player (500). Sending requests is limited to
   20 a minute and 200 a day, blocking to 30 a minute and 300 a day.
-- **Reading** friends - the lists of both versions and the friend leaderboard - is limited to 120 requests a
+- **Reading** friends - the friend lists, old and new, and the friend leaderboard - is limited to 120 requests a
   minute per player, together. Fetch when a screen opens rather than on a timer.
 - **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
   simply never gets an answer. Do not show anything else.
 - **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
   the lists again.
-- **The friend leaderboard** (`Socialization.GetFriendsLeaderboard`) works with Friends v1 or v2.
+- **The friend leaderboard** (`Socialization.GetFriendsLeaderboard`) works with either feature.
 - **Invite rewards**: friendships keep their original `since` when they move. If your game rewards a friend
   it has not seen before whose friendship is recent, a friend made shortly before the player signed in shows up
   as unseen on the real account and would be rewarded again. Record rewarded friends in cloud save on the
@@ -219,11 +222,13 @@ private async Task AddFriendFromInvite(string friendUuid)
 {
     try
     {
-        var response = await Socialization.AddFriendWithUUID(friendUuid);
-        Debug.Log($"Friend added from invite: {response.detail.message}");
+        // The inviter shared the link, so a request from the invitee is what they asked for.
+        var result = await Socialization.SendFriendRequest(friendUuid);
+        Debug.Log($"Friend request from invite: {result.Status}");
         
-        // Optionally award a prize for accepting the invite
-        AwardFriendInvitePrize();
+        // Optionally award a prize once you are friends
+        if (result.Status == FriendStatus.FriendshipCreated)
+            AwardFriendInvitePrize();
         
         // Refresh friends list
         LoadFriends();
@@ -291,21 +296,24 @@ else
 
 ## Demo Scene
 
-See the [demo scenes](../README.md#demo-scenes) for complete working examples: `SoilSocializationExample.unity` (Friends v1) and `SoilFriendsV2Example.unity` (Friends v2).
+See the [demo scenes](../README.md#demo-scenes) for complete working examples: `SoilFriendRequestsExample.unity` (friend requests) and `SoilSocializationExample.unity` (old instant add).
 
 ## API Reference
 
 - `Socialization.Ready` (property)
+- `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)` → `Task<LeaderboardResponse>` (either feature)
+
+Old instant add, marked `[Obsolete]`:
+
 - `Socialization.GetFriends()`
 - `Socialization.AddFriendWithUUID(string uuid)`
 - `Socialization.RemoveFriendWithUUID(string uuid)`
-- `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)` → `Task<LeaderboardResponse>`
 
-Friends v2 (`FriendsV2`, needs the Socialization v2 feature):
+Friend requests (need the Friend requests feature):
 
-- `FriendsV2.GetList(FriendListKind kind = FriendListKind.Friends)` → `UniTask<FriendList>`
-- `FriendsV2.SendRequest(string uuid)`, `FriendsV2.SendRequestByPublicId(string publicId)` → `UniTask<FriendActionResult>`
-- `FriendsV2.Accept`, `Decline`, `Cancel`, `Remove`, `Block`, `Unblock` (`string uuid`) → `UniTask<FriendActionResult>`
+- `Socialization.GetFriendList(FriendListKind kind = FriendListKind.Friends)` → `UniTask<FriendList>`
+- `Socialization.SendFriendRequest(string uuid)`, `Socialization.SendFriendRequestByCode(string playerCode)` → `UniTask<FriendActionResult>`
+- `Socialization.AcceptFriendRequest`, `DeclineFriendRequest`, `CancelFriendRequest`, `RemoveFriend`, `BlockPlayer`, `UnblockPlayer` (`string uuid`) → `UniTask<FriendActionResult>`
 
 ## Other Documentations
 

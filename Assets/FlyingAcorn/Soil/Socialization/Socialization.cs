@@ -17,7 +17,7 @@ namespace FlyingAcorn.Soil.Socialization
     /// <summary>
     /// Static class for socialization features including friends management and social leaderboards.
     /// </summary>
-    public static class Socialization
+    public static partial class Socialization
     {
         /// <summary>
         /// Gets whether the Socialization service is ready for use.
@@ -31,6 +31,7 @@ namespace FlyingAcorn.Soil.Socialization
         /// Fetches the current user's friends list.
         /// </summary>
         /// <returns>The friends response containing the list of friends.</returns>
+        [Obsolete("The old instant-add friends API. Use GetFriendList, which also lists requests and blocks.")]
         public static async UniTask<FriendsResponse> GetFriends()
         {
             if (!Ready)
@@ -80,6 +81,7 @@ namespace FlyingAcorn.Soil.Socialization
         /// </summary>
         /// <param name="uuid">The UUID of the user to add as a friend.</param>
         /// <returns>The friends response after adding the friend.</returns>
+        [Obsolete("The old instant-add friends API: it makes friends without asking. Use SendFriendRequest or SendFriendRequestByCode.")]
         public static async UniTask<FriendsResponse> AddFriendWithUUID(string uuid)
         {
             if (string.IsNullOrEmpty(uuid))
@@ -135,6 +137,7 @@ namespace FlyingAcorn.Soil.Socialization
         /// </summary>
         /// <param name="uuid">The UUID of the friend to remove.</param>
         /// <returns>The friends response after removing the friend.</returns>
+        [Obsolete("The old instant-add friends API. Use RemoveFriend.")]
         public static async UniTask<FriendsResponse> RemoveFriendWithUUID(string uuid)
         {
             if (string.IsNullOrEmpty(uuid))

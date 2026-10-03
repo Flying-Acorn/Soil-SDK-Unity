@@ -5,8 +5,8 @@ using NUnit.Framework;
 
 namespace FlyingAcorn.Soil.Socialization.Tests
 {
-    // Bodies are copied from the server's answers (socialization/views_v2.py).
-    public class FriendsV2ProtocolTests
+    // Bodies are copied from the server's answers (socialization/views_requests.py).
+    public class FriendsProtocolTests
     {
         private const string Sara =
             "{\"uuid\": \"7d829b62-b897-4984-ba1a-bb88948bc980\", \"public_id\": \"LC88VN3T\", \"name\": \"Sara\", " +
@@ -15,7 +15,7 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [Test]
         public void RequestSent_IsASuccessWithTheOtherPlayer()
         {
-            var result = FriendsV2Protocol.ParseAction(200,
+            var result = FriendsProtocol.ParseAction(200,
                 "{\"detail\": {\"code\": 7, \"message\": \"request_sent\"}, \"user\": " + Sara + "}");
             Assert.AreEqual(FriendStatus.RequestSent, result.Status);
             Assert.IsTrue(result.Succeeded);
@@ -26,13 +26,13 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [Test]
         public void RefusalsAreAnswersNotFailures()
         {
-            var limit = FriendsV2Protocol.ParseAction(409,
+            var limit = FriendsProtocol.ParseAction(409,
                 "{\"detail\": {\"code\": 15, \"message\": \"request_limit_reached\"}, \"user\": " + Sara + "}");
             Assert.AreEqual(FriendStatus.RequestLimitReached, limit.Status);
             Assert.IsFalse(limit.Succeeded);
             Assert.IsNotNull(limit.user);
 
-            var missing = FriendsV2Protocol.ParseAction(404, "{\"detail\": {\"code\": 3, \"message\": \"friend_not_found\"}}");
+            var missing = FriendsProtocol.ParseAction(404, "{\"detail\": {\"code\": 3, \"message\": \"friend_not_found\"}}");
             Assert.AreEqual(FriendStatus.FriendNotFound, missing.Status);
             Assert.IsNull(missing.user);
         }
@@ -40,10 +40,10 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [Test]
         public void Throttled_CarriesRetryAfter()
         {
-            var result = FriendsV2Protocol.ParseAction(429, "{\"detail\": {\"code\": 6, \"message\": \"throttled\"}}", "42");
+            var result = FriendsProtocol.ParseAction(429, "{\"detail\": {\"code\": 6, \"message\": \"throttled\"}}", "42");
             Assert.AreEqual(FriendStatus.Throttled, result.Status);
             Assert.AreEqual(42, result.RetryAfterSeconds);
-            Assert.IsNull(FriendsV2Protocol.ParseAction(429, "{\"detail\": {\"code\": 6}}", "soon").RetryAfterSeconds);
+            Assert.IsNull(FriendsProtocol.ParseAction(429, "{\"detail\": {\"code\": 6}}", "soon").RetryAfterSeconds);
         }
 
         [TestCase(401, "{\"detail\": \"Authentication credentials were not provided.\"}")]
@@ -53,14 +53,14 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [TestCase(200, "[]")]
         public void BodiesThatAreNotFriendAnswersAreNotParsed(long status, string body)
         {
-            Assert.IsNull(FriendsV2Protocol.ParseAction(status, body));
-            Assert.IsNull(FriendsV2Protocol.StatusOf(body));
+            Assert.IsNull(FriendsProtocol.ParseAction(status, body));
+            Assert.IsNull(FriendsProtocol.StatusOf(body));
         }
 
         [Test]
         public void AnUnknownCodeFromANewerServerStillParses()
         {
-            var result = FriendsV2Protocol.ParseAction(200, "{\"detail\": {\"code\": 99, \"message\": \"something_new\"}}");
+            var result = FriendsProtocol.ParseAction(200, "{\"detail\": {\"code\": 99, \"message\": \"something_new\"}}");
             Assert.AreEqual(99, (int)result.Status);
             Assert.AreEqual("something_new", result.detail.message);
         }
@@ -68,7 +68,7 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [Test]
         public void List_ReadsUsersAndCounts()
         {
-            var list = FriendsV2Protocol.ParseList(200,
+            var list = FriendsProtocol.ParseList(200,
                 "{\"detail\": {\"code\": 17, \"message\": \"friends_listed\"}, \"list\": \"incoming\", \"users\": [" +
                 Sara.TrimEnd('}') + ", \"since\": \"2026-09-28T12:53:38.512000+00:00\"}], " +
                 "\"counts\": {\"friends\": 2, \"incoming\": 1, \"outgoing\": 0, \"blocked\": 3}}");
@@ -83,8 +83,8 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [Test]
         public void List_FailuresAndMissingPartsAreSafe()
         {
-            Assert.IsNull(FriendsV2Protocol.ParseList(400, "{\"detail\": {\"code\": 16, \"message\": \"invalid_request\"}}"));
-            var bare = FriendsV2Protocol.ParseList(200, "{\"detail\": {\"code\": 17, \"message\": \"friends_listed\"}}");
+            Assert.IsNull(FriendsProtocol.ParseList(400, "{\"detail\": {\"code\": 16, \"message\": \"invalid_request\"}}"));
+            var bare = FriendsProtocol.ParseList(200, "{\"detail\": {\"code\": 17, \"message\": \"friends_listed\"}}");
             Assert.IsNotNull(bare.users);
             Assert.IsNotNull(bare.counts);
         }
@@ -95,18 +95,18 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [TestCase(FriendListKind.Blocked, "blocked")]
         public void ListQueriesMatchTheServer(FriendListKind kind, string query)
         {
-            Assert.AreEqual(query, FriendsV2Protocol.ListQuery(kind));
+            Assert.AreEqual(query, FriendsProtocol.ListQuery(kind));
         }
 
         [Test]
         public void ActionPathsAndBodiesMatchTheServer()
         {
-            Assert.AreEqual("socialization/v2/friends/request/", FriendsV2Protocol.ActionPath(FriendsV2Protocol.Request));
+            Assert.AreEqual("socialization/friend-requests/request/", FriendsProtocol.ActionPath(FriendsProtocol.Request));
             foreach (var action in new[] { "request", "accept", "decline", "cancel", "remove", "block", "unblock" })
-                Assert.AreEqual($"socialization/v2/friends/{action}/", FriendsV2Protocol.ActionPath(action));
-            Assert.AreEqual("abc", (string)JObject.Parse(FriendsV2Protocol.ByUuid("abc"))["uuid"]);
+                Assert.AreEqual($"socialization/friend-requests/{action}/", FriendsProtocol.ActionPath(action));
+            Assert.AreEqual("abc", (string)JObject.Parse(FriendsProtocol.ByUuid("abc"))["uuid"]);
             // Escaped, never concatenated: whatever a player types stays one string.
-            Assert.AreEqual("a\"b", (string)JObject.Parse(FriendsV2Protocol.ByPublicId("a\"b"))["public_id"]);
+            Assert.AreEqual("a\"b", (string)JObject.Parse(FriendsProtocol.ByPublicId("a\"b"))["public_id"]);
         }
 
         [Test]

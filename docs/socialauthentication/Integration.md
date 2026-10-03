@@ -119,8 +119,9 @@ account is abandoned, and the server moves what the player built on it:
 
 - **Leaderboards**: their scores in each board's current period (a board keeping the best score keeps the
   higher one; one keeping the latest keeps the newer one). Past periods stay where they are.
-- **Friends** (apps on Friends v2 only): friends, requests and blocks, keeping their dates. A block always
-  wins over a friendship. Apps on Friends v1 only keep the old behaviour, where friends stay on the old account.
+- **Friends** (apps with the Friend requests feature only): friends, requests and blocks, keeping their dates.
+  A block always wins over a friendship. Apps with only the old instant add keep the old behaviour, where friends
+  stay on the old account.
 
 Cloud saves, purchases and economy balances are not moved. Nothing moves when the current account has a sign-in
 of its own, because it can still be reached.

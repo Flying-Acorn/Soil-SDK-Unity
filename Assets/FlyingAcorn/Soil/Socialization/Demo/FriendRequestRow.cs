@@ -6,8 +6,8 @@ using UnityEngine.UI;
 
 namespace FlyingAcorn.Soil.Socialization.Demo
 {
-    /// <summary>One player in a Friends v2 list, with up to two actions for the list it is in.</summary>
-    public class FriendV2Row : MonoBehaviour
+    /// <summary>One player in a friends list, with up to two actions for the list it is in.</summary>
+    public class FriendRequestRow : MonoBehaviour
     {
         public TextMeshProUGUI playerName;
         public TextMeshProUGUI detail;

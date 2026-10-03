@@ -94,8 +94,8 @@ namespace FlyingAcorn.Soil.Socialization.Logic
 
     /// <summary>
     /// What an action did. A refusal - no such player, a limit, a block - is an answer, not an exception:
-    /// check <see cref="Status"/>. Only a transport failure, an expired sign-in, or the app lacking Friends v2
-    /// throws.
+    /// check <see cref="Status"/>. Only a transport failure, an expired sign-in, or the app lacking the Friend
+    /// requests feature throws.
     /// </summary>
     [Serializable]
     public class FriendActionResult
@@ -114,10 +114,10 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         [JsonIgnore] public bool Succeeded => HttpStatus >= 200 && HttpStatus < 300;
     }
 
-    /// <summary>The request and answer formats of <c>/api/socialization/v2/friends/</c>.</summary>
-    public static class FriendsV2Protocol
+    /// <summary>The request and answer formats of <c>/api/socialization/friend-requests/</c>.</summary>
+    public static class FriendsProtocol
     {
-        public const string BasePath = "socialization/v2/friends/";
+        public const string BasePath = "socialization/friend-requests/";
 
         public const string Request = "request";
         public const string Accept = "accept";

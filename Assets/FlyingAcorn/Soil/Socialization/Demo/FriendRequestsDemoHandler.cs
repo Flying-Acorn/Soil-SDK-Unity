@@ -12,12 +12,12 @@ using UnityEngine.UI;
 namespace FlyingAcorn.Soil.Socialization.Demo
 {
     /// <summary>
-    /// Friends v2: requests, accept/decline, cancel, remove and block, one list at a time.
-    /// Needs the app's Socialization v2 feature.
+    /// Friend requests: send, accept/decline, cancel, remove and block, one list at a time.
+    /// Needs the app's Friend requests feature.
     /// </summary>
-    public class FriendsV2DemoHandler : MonoBehaviour
+    public class FriendRequestsDemoHandler : MonoBehaviour
     {
-        [SerializeField] private FriendV2Row rowPrefab;
+        [SerializeField] private FriendRequestRow rowPrefab;
         [SerializeField] private VerticalLayoutGroup rowsContainer;
         [SerializeField] private TMP_InputField idInput;
         [SerializeField] private Button sendRequestButton;
@@ -31,7 +31,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         [SerializeField] private TextMeshProUGUI headerText;
         [SerializeField] private TextMeshProUGUI statusText;
 
-        private readonly List<FriendV2Row> _rows = new();
+        private readonly List<FriendRequestRow> _rows = new();
         private FriendListKind _list = FriendListKind.Friends;
         private bool _busy;
 
@@ -124,7 +124,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 return;
             }
 
-            Run(() => Guid.TryParse(typed, out _) ? FriendsV2.SendRequest(typed) : FriendsV2.SendRequestByPublicId(typed));
+            Run(() => Guid.TryParse(typed, out _) ? Socialization.SendFriendRequest(typed) : Socialization.SendFriendRequestByCode(typed));
         }
 
         private void BlockTyped()
@@ -137,7 +137,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 return;
             }
 
-            Run(() => FriendsV2.Block(typed));
+            Run(() => Socialization.BlockPlayer(typed));
         }
 
         /// <summary>Starts an action unless another call is still running, so a double tap sends once.</summary>
@@ -175,7 +175,7 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             FriendList list;
             try
             {
-                list = await FriendsV2.GetList(kind);
+                list = await Socialization.GetFriendList(kind);
             }
             catch (Exception e)
             {
@@ -206,25 +206,25 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         }
 
         /// <summary>What a player can do from each list.</summary>
-        private void SetActions(FriendV2Row row, FriendEntry entry, FriendListKind kind)
+        private void SetActions(FriendRequestRow row, FriendEntry entry, FriendListKind kind)
         {
             var uuid = entry.uuid;
             switch (kind)
             {
                 case FriendListKind.Friends:
-                    row.SetAction(true, "Remove", () => Run(() => FriendsV2.Remove(uuid)));
-                    row.SetAction(false, "Block", () => Run(() => FriendsV2.Block(uuid)));
+                    row.SetAction(true, "Remove", () => Run(() => Socialization.RemoveFriend(uuid)));
+                    row.SetAction(false, "Block", () => Run(() => Socialization.BlockPlayer(uuid)));
                     break;
                 case FriendListKind.Incoming:
-                    row.SetAction(true, "Accept", () => Run(() => FriendsV2.Accept(uuid)));
-                    row.SetAction(false, "Decline", () => Run(() => FriendsV2.Decline(uuid)));
+                    row.SetAction(true, "Accept", () => Run(() => Socialization.AcceptFriendRequest(uuid)));
+                    row.SetAction(false, "Decline", () => Run(() => Socialization.DeclineFriendRequest(uuid)));
                     break;
                 case FriendListKind.Outgoing:
-                    row.SetAction(true, "Cancel", () => Run(() => FriendsV2.Cancel(uuid)));
+                    row.SetAction(true, "Cancel", () => Run(() => Socialization.CancelFriendRequest(uuid)));
                     row.SetAction(false, null, null);
                     break;
                 case FriendListKind.Blocked:
-                    row.SetAction(true, "Unblock", () => Run(() => FriendsV2.Unblock(uuid)));
+                    row.SetAction(true, "Unblock", () => Run(() => Socialization.UnblockPlayer(uuid)));
                     row.SetAction(false, null, null);
                     break;
             }

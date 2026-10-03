@@ -20,7 +20,7 @@ namespace FlyingAcorn.Soil.Socialization.Data
         AddFriend = 2,
         RemoveFriend = 3,
         GetFriendsLeaderboard = 4,
-        FriendsV2List = 5,
-        FriendsV2Action = 6
+        GetFriendList = 5,
+        FriendAction = 6
     }
 }
