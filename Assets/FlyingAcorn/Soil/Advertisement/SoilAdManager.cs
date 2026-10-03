@@ -1,7 +1,5 @@
-using System;
 using FlyingAcorn.Analytics;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace FlyingAcorn.Soil.Advertisement
 {
@@ -13,23 +11,6 @@ namespace FlyingAcorn.Soil.Advertisement
     public class SoilAdManager : MonoBehaviour
     {
         public static SoilAdManager Instance { get; private set; }
-
-        /// <summary>Unused: ads are no longer drawn on a Unity canvas. Kept so old code compiles.</summary>
-        [Obsolete("Ads are drawn by native players; the SDK no longer copies a canvas setup. Always null.")]
-        public class CanvasReferences
-        {
-            public Vector2 ReferenceResolution;
-            public CanvasScaler.ScaleMode UIScaleMode;
-            public CanvasScaler.ScreenMatchMode ScreenMatchMode;
-            public float MatchWidthOrHeight;
-            public float ReferencePixelsPerUnit;
-            public int Layer;
-        }
-
-        /// <summary>Unused: ads are no longer drawn on a Unity canvas. Always null.</summary>
-        [Obsolete("Ads are drawn by native players; the SDK no longer copies a canvas setup. Always null.")]
-        [NonSerialized]
-        public CanvasReferences canvasReferences;
 
         internal static SoilAdManager GetOrCreate()
         {
