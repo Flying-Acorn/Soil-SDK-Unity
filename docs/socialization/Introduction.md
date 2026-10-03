@@ -11,9 +11,13 @@ Two versions share the same friendships:
   each other by the short code `SoilServices.UserInfo.public_id`, which is easier to share and type than a UUID.
   See [Friends v2](Integration.md#friends-v2-requests-accept-and-block).
 
-## Getting Player UUIDs
+## Finding Other Players
 
-To add friends, you need their UUID. Here are common ways to obtain UUIDs:
+With **Friends v2**, the simplest way is the player code: show `SoilServices.UserInfo.public_id` (for example
+`K7M29QX4`) in your game, and let other players type it into `FriendsV2.SendRequestByPublicId`. Every
+`FriendsV2` list and answer then gives you the UUID the other actions take.
+
+**Friends v1** takes UUIDs only. Here are common ways to obtain them:
 
 ### From Leaderboard Scores
 

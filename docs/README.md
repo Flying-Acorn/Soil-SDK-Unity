@@ -12,7 +12,7 @@ For installation instructions, see [Installation](./Installation.md).
     - [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
     - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
     - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
-    - [Socialization](./socialization/Introduction.md) - Friend systems.
+    - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking and friend leaderboards.
 
 - Purchasing
     - [Purchasing](./purchasing/Introduction.md) - In-app purchases.

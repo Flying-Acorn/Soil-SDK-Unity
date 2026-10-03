@@ -111,6 +111,32 @@ private void OnLinkFailed(ThirdParty party, SoilException exception)
 }
 ```
 
+#### When linking switches to an existing account
+
+If the account a player signs in with is already linked to another Soil account (for example, a returning
+player on a new device), the SDK switches to that account instead of linking the current one. The current
+account is abandoned, and the server moves what the player built on it:
+
+- **Leaderboards**: their scores in each board's current period (a board keeping the best score keeps the
+  higher one; one keeping the latest keeps the newer one). Past periods stay where they are.
+- **Friends** (apps on Friends v2 only): friends, requests and blocks, keeping their dates. A block always
+  wins over a friendship. Apps on Friends v1 only keep the old behaviour, where friends stay on the old account.
+
+Cloud saves, purchases and economy balances are not moved. Nothing moves when the current account has a sign-in
+of its own, because it can still be reached.
+
+Reload anything per-player after a switch: `UserApiHandler.OnUserFilled` is raised with `true` when the user
+changed.
+
+```csharp
+UserApiHandler.OnUserFilled += userChanged =>
+{
+    if (!userChanged) return;
+    ReloadFriends();
+    ReloadLeaderboards();
+};
+```
+
 ### 4. Check Linked Accounts
 
 Retrieve and display all linked accounts:

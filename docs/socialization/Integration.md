@@ -80,7 +80,7 @@ private async void AddFriend(string friendUuid)
 }
 ```
 
-**Note**: See [Getting Player UUIDs](../socialization/Introduction.md#getting-player-uuids) in the Introduction for ways to obtain other players' UUIDs (from leaderboards or shared game info).
+**Note**: See [Finding Other Players](../socialization/Introduction.md#finding-other-players) in the Introduction for ways to find other players: the player code for Friends v2, or UUIDs from leaderboards and shared game info.
 
 ### 4. Remove a Friend
 

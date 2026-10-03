@@ -84,7 +84,9 @@ if (userInfo != null)
 
 `public_id` is a short, uppercase code (for example `K7M29QX4`) that is safe to show to
 players and easy to read out loud or retype — use it anywhere you would otherwise ask a
-player to share their `uuid`. The server assigns it when the account is created and never
+player to share their `uuid`. Friends v2 takes it directly: `FriendsV2.SendRequestByPublicId(code)` (see
+[Socialization](../socialization/Integration.md#friends-v2-requests-accept-and-block)). The server assigns it when
+the account is created and never
 changes it, so it cannot be set through `UpdatePlayerInfo()`. It is `null` for users whose
 info was cached before this field existed, until the next fetch refreshes them.
 

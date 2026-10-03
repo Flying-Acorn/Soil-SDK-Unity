@@ -13,7 +13,7 @@ Based on your needs, only import the package you need from <a href="https://gith
     - [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
     - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
     - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
-    - [Socialization](./socialization/Introduction.md) - Friend systems.
+    - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking and friend leaderboards.
 
 - Purchasing - `Soil-X.Y.Z-Purchasing.unitypackage`
     - [Purchasing](./purchasing/Introduction.md) - In-app purchases.
