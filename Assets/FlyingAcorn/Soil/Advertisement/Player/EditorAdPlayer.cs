@@ -287,7 +287,6 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         // Built once per Game view size, never per GUI call.
         private GUIStyle _text, _title, _button, _badge, _textRtl, _titleLine, _titleLineRtl, _videoTitle;
         private float _styledFor;
-        private readonly Dictionary<string, string> _shaped = new();
         private readonly Dictionary<string, GUIContent> _badgeContents = new();
         private int _countdownShown = -1;
         private string _countdownText;
@@ -365,10 +364,10 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             var textsRight = hasCallToAction ? cta.x - Unit : bar.xMax - Unit;
             DrawTexts(new Rect(bar.x + Unit, bar.y + Unit * 0.6f, textsRight - bar.x - Unit, barHeight - Unit * 1.2f),
                 creative, 2);
-            if (hasCallToAction && GUI.Button(cta, Shape(creative.CallToAction), _button))
+            if (hasCallToAction && GUI.Button(cta, creative.CallToAction ?? "", _button))
                 PressCallToAction();
 
-            Badge(new Vector2(Unit, Unit), Shape(BadgeText) + "  (Editor)");
+            Badge(new Vector2(Unit, Unit), BadgeText + "  (Editor)");
             var size = Unit * 2.2f;
             var close = new Rect(Screen.width - size - Unit, Unit, size, size);
             if (p.Unlocked)
@@ -396,14 +395,14 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             var title = rtl ? _titleLineRtl : _titleLine;
             var text = rtl ? _textRtl : _text;
             var titleHeight = title.fontSize * 1.4f;
-            GUI.Label(new Rect(area.x, area.y, area.width, titleHeight), Shape(creative.Title), title);
+            GUI.Label(new Rect(area.x, area.y, area.width, titleHeight), creative.Title ?? "", title);
             GUI.Label(new Rect(area.x, area.y + titleHeight, area.width, text.fontSize * 1.35f * descriptionLines),
-                Shape(creative.Description), text);
+                creative.Description ?? "", text);
         }
 
         private void Badge(Vector2 at, string label = null)
         {
-            label ??= Shape(BadgeText);
+            label ??= BadgeText;
             if (!_badgeContents.TryGetValue(label, out var content))
                 _badgeContents[label] = content = new GUIContent(label);
             var size = _badge.CalcSize(content);
@@ -422,19 +421,12 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         private static bool IsRightToLeft(string text)
         {
             if (string.IsNullOrEmpty(text)) return false;
+            // Hebrew, Arabic and their presentation forms. IMGUI does not join or reorder these letters,
+            // so the Editor placeholder only aligns them; devices draw them with the OS.
             foreach (var c in text)
-                if (RTLTMPro.TextUtils.IsRTLCharacter(c)) return true;
+                if (c is >= '\u0590' and <= '\u08FF' or >= '\uFB1D' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF')
+                    return true;
             return false;
-        }
-
-        // IMGUI draws characters as they come; Persian and Arabic need joining and reordering first.
-        private string Shape(string text)
-        {
-            if (!IsRightToLeft(text)) return text ?? "";
-            if (_shaped.TryGetValue(text, out var shaped)) return shaped;
-            var output = new RTLTMPro.FastStringBuilder(RTLTMPro.RTLSupport.DefaultBufferSize);
-            RTLTMPro.RTLSupport.FixRTL(text, output, farsi: true, fixTextTags: false);
-            return _shaped[text] = output.ToString();
         }
 
         private static Rect Inset(Rect r, float by) => new(r.x + by, r.y + by, r.width - 2 * by, r.height - 2 * by);

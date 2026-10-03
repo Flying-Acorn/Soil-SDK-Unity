@@ -37,4 +37,7 @@ Demo scene: `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample
 
 ## Dependencies
 
-- <a href="https://github.com/pnarimani/RTLTMPro/" target="_blank">RTL Text Mesh Pro</a> (shapes right-to-left text in the Editor's ad placeholders; the device players use the OS)
+- Core SDK
+- Unity UI (`com.unity.ugui`)
+
+The device players use only the operating system. RTL Text Mesh Pro is no longer needed: the Editor placeholder aligns Persian text to the right but does not join its letters, and devices draw it correctly through the OS.

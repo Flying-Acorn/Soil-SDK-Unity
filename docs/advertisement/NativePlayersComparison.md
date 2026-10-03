@@ -18,7 +18,7 @@ Banner, interstitial and rewarded ads moved from Unity-drawn canvases (VideoPlay
 | Events | ✅ AdMob-like order, exactly one close, watchdogs | ⚠️ No ordering guarantee or watchdogs |
 | Click safety | ✅ Browsable links only, device-action links blocked | ❌ Any link opened |
 | Downloads and cache | ✅ Reuse, retries, self-repair, iCloud-excluded | ⚠️ Images only |
-| Dependencies and sanctions | ✅ OS only on device (RTLTMPro only for the Editor placeholder), no regional strings on iOS | ❌ TMP and RTLTMPro at runtime |
+| Dependencies and sanctions | ✅ OS only, nothing extra in the Editor, no regional strings on iOS | ❌ TMP and RTLTMPro at runtime |
 | Tests | ✅ Unit, device, end-to-end and minified | ❌ Few |
 | Codebases | ❌ C#, Java and Objective-C | ✅ C# only |
 | Visual customization | ❌ Native code changes | ✅ Prefabs editable per game |

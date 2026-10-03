@@ -62,7 +62,7 @@ visible, and send events back as one-line JSON.
 | `Logic/AdLinkPolicy.cs` | Which click links may open: web and store links always; on Android other app links too, except ones that act on the device (`intent:`, `file:`, `tel:`…) |
 | `Player/AndroidAdPlayer.cs`, `IosAdPlayer.cs` | Thin bridges: `AndroidJavaClass` calls into Java; `[DllImport("__Internal")]` calls into Objective-C |
 | `Player/SoilAdsNativeReceiver.cs` | The GameObject that receives `UnitySendMessage` events from both players |
-| `Player/EditorAdPlayer.cs` | In the Editor, an IMGUI placeholder that follows the same rules (lock times, events), so game flows can be tested without a device. The only user of RTLTMPro |
+| `Player/EditorAdPlayer.cs` | In the Editor, an IMGUI placeholder that follows the same rules (lock times, events), so game flows can be tested without a device. IMGUI aligns Persian text but does not join its letters |
 | `Editor/SoilAdsProguardRules.cs` | Adds `-keep class com.flyingacorn.soil.ads.** { *; }` to Unity's `proguard-unity.txt`, so R8 never strips the Android player |
 
 ### The players

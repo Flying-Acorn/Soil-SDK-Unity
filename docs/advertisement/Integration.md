@@ -575,6 +575,7 @@ In the Editor, ads are drawn by a placeholder (clicks are only logged). On deskt
 - `SoilAdManager.bannerAdPlacement`, `interstitialAdPlacement`, `rewardedAdPlacement` and the `Models.AdPlacements` types (the Unity ad prefabs and their components) are removed. Code that used them must switch to the `Advertisement` API.
 - On Android, fullscreen ads now pause Unity's activity (see *Game Pause, Input and Audio During Ads*).
 - The Editor class `FlyingAcorn.Soil.Advertisement.Editor.TMPFontHelper` (the *FlyingAcorn/Soil/Advertisement/Font Tools* menu, used to build fonts for the Unity-drawn ads) is removed. Use TextMeshPro's own *Window > TextMeshPro > Font Asset Creator*.
+- RTL Text Mesh Pro is no longer shipped or used. Delete `Assets/RTLTMPro` unless your game uses it itself (see [Upgrading](../Installation.md#upgrading)).
 
 ## Example Script
 
