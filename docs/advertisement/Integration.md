@@ -565,7 +565,7 @@ Ad images and videos are downloaded ahead of time into `SoilAssets` under `Appli
 
 ## Platforms Without a Native Player
 
-In the Editor, ads are drawn by a placeholder (clicks are only logged). On desktop, WebGL and consoles, banner, interstitial and rewarded ads always answer `NoFill` and their files are not downloaded; native ads (drawn by your own UI) still work.
+In the Editor, ads are drawn by a placeholder (clicks are only logged). When Soil has no ad for a format (no fill, or the ad request fails), the Editor shows a test ad in its place ("Soil test ad", with a generated image), so every ad place in the layout can be checked in Play mode; a real ad replaces it. Turn this off with `Advertisement.UseEditorTestAds = false`. It has no effect in player builds. On desktop, WebGL and consoles, banner, interstitial and rewarded ads always answer `NoFill` and their files are not downloaded; native ads (drawn by your own UI) still work.
 
 ## Migrating From the Unity-Drawn Ads
 

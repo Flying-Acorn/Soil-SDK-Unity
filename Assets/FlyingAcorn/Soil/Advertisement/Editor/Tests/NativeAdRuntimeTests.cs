@@ -33,6 +33,7 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         public void SetUp()
         {
             ResetAds();
+            Advertisement.UseEditorTestAds = false; // these tests check Soil's own answers
             _clicks = 0;
             _loaded = 0;
             _errors.Clear();

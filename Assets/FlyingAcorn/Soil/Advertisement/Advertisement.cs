@@ -147,6 +147,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _legacyVideoCacheDeleted = false;
             BannerPosition = AdPosition.BottomCenter;
             FullscreenOptionsOverride = null;
+            UseEditorTestAds = true;
             _runtimeClock = 0;
             _pendingRepairs.Clear();
             _pendingRebuilds.Clear();
@@ -437,6 +438,10 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             if (format == AdFormat.native)
                 NativeCachingEnded(error);
+#if UNITY_EDITOR
+            else if (UseEditorTestAds && SlotFor(format) is { Creative: null })
+                SetSlotCreative(format, null, null); // an Editor test ad
+#endif
             else
                 SlotFor(format)?.CachingFailed(error);
         }
@@ -462,6 +467,15 @@ namespace FlyingAcorn.Soil.Advertisement
         {
             var slot = SlotFor(format);
             if (slot == null) return;
+#if UNITY_EDITOR
+            if (creative == null && UseEditorTestAds)
+            {
+                // Soil has nothing for this format: the Editor shows a test ad in its place.
+                creative = EditorTestAds.CreativeFor(format);
+                ad = ToAd(format, creative);
+                MyDebug.Info($"[Advertisement] No Soil {format} ad: showing an Editor test ad");
+            }
+#endif
             if (ad != null) _slotAds[format] = ad;
             slot.SetCreative(creative);
         }
@@ -639,6 +653,13 @@ namespace FlyingAcorn.Soil.Advertisement
 
         /// <summary>Replaces the fullscreen lock defaults, e.g. to keep device tests short.</summary>
         internal static FullscreenShowOptions FullscreenOptionsOverride { get; set; }
+
+        /// <summary>
+        /// Editor only: when Soil has no ad for a format (no fill, or the ad request fails), show a test ad in
+        /// its place so the game's ad layout can be checked in Play mode. A real ad replaces it.
+        /// No effect in player builds.
+        /// </summary>
+        public static bool UseEditorTestAds { get; set; } = true;
 
         internal static IAdPlayer PlayerForTesting => _player;
 
@@ -1107,6 +1128,13 @@ namespace FlyingAcorn.Soil.Advertisement
 
             if (model == null)
             {
+#if UNITY_EDITOR
+                if (UseEditorTestNativeAd())
+                {
+                    Events.InvokeOnNativeAdLoaded(new AdEventData(AdFormat.native));
+                    return;
+                }
+#endif
                 SetNativeAdContent(null, null, null);
                 MyDebug.Verbose($"[Advertisement] Native ad not available: {buildError}");
                 Events.InvokeOnNativeAdError(new AdEventData(AdFormat.native, ToAdError(buildError)));
@@ -1162,6 +1190,20 @@ namespace FlyingAcorn.Soil.Advertisement
             MyDebug.Verbose($"[Advertisement] Native ad loaded (ad {model.AdId}, image: {_nativeAdContent.HasMainImage}, rebuilt: {!unchanged})");
             Events.InvokeOnNativeAdLoaded(new AdEventData(AdFormat.native));
         }
+
+#if UNITY_EDITOR
+        /// <summary>Soil has no native ad: the Editor gets a test one, kept while it is the one shown.</summary>
+        private static bool UseEditorTestNativeAd()
+        {
+            if (!UseEditorTestAds) return false;
+            if (_nativeAdContent?.AdId != EditorTestAds.NativeAdId)
+            {
+                SetNativeAdContent(EditorTestAds.NativeContent(), null, null);
+                MyDebug.Info("[Advertisement] No Soil native ad: showing an Editor test ad");
+            }
+            return true;
+        }
+#endif
 
         private static AssetCacheEntry FindNativeEntry(List<AssetCacheEntry> assets, string id, AssetType type) =>
             string.IsNullOrEmpty(id) ? null : assets.FirstOrDefault(a => a != null && a.Id == id && a.AssetType == type);
@@ -1223,6 +1265,9 @@ namespace FlyingAcorn.Soil.Advertisement
         private static void NativeCachingEnded(string error)
         {
             _nativeCaching = false;
+#if UNITY_EDITOR
+            if (_nativeAdContent == null) UseEditorTestNativeAd();
+#endif
             if (!_nativeLoadRequested) return;
             _nativeLoadRequested = false;
 
