@@ -74,6 +74,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 throw new SoilException($"Unexpected error while linking account: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
+            // 403: the server refused this link (e.g. it could not check the identity token), which is
+            // not a connection problem, so the game must not tell the player to check their internet.
+            if (request.responseCode == (long)HttpStatusCode.Forbidden)
+            {
+                throw new SoilException($"Server refused the link: {request.downloadHandler?.text}", SoilExceptionErrorCode.RequestRejected);
+            }
+
             if (request.responseCode < 200 || request.responseCode >= 300)
             {
                 throw new SoilException($"Server returned error {(HttpStatusCode)request.responseCode}: {request.downloadHandler?.text}", SoilExceptionErrorCode.TransportError);
@@ -162,9 +169,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
         [UsedImplicitly]
         internal static async UniTask<UnlinkResponse> Unlink(ThirdPartySettings settings, CancellationToken cancellationToken = default)
         {
+            var party = GetParty(settings);
             var body = new Dictionary<string, object>
             {
-                { "app_party", GetParty(settings).id }
+                { "app_party", party.id }
             };
             var stringBody = JsonConvert.SerializeObject(body);
 
@@ -194,7 +202,23 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                 throw new SoilException($"Unexpected error while unlinking account: {ex.Message}", SoilExceptionErrorCode.TransportError);
             }
 
-            if (request.responseCode != (long)HttpStatusCode.NotFound && (request.responseCode < 200 || request.responseCode >= 300))
+            if (request.responseCode == (long)HttpStatusCode.NotFound)
+            {
+                // Already unlinked. The body is not relied on: a proxy or an older server can answer 404
+                // with something that is not an UnlinkResponse, and the party asked for is known here.
+                LinkingPlayerPrefs.RemoveLink(settings.ThirdParty);
+                return new UnlinkResponse
+                {
+                    detail = new LinkStatusResponse
+                    {
+                        code = LinkStatus.LinkNotFound,
+                        message = nameof(LinkStatus.LinkNotFound),
+                        app_party = new Data.AppParty { id = party.id, party = settings.ThirdParty }
+                    }
+                };
+            }
+
+            if (request.responseCode < 200 || request.responseCode >= 300)
             {
                 throw new SoilException($"Server returned error {(HttpStatusCode)request.responseCode}: {request.downloadHandler?.text}", SoilExceptionErrorCode.TransportError);
             }
