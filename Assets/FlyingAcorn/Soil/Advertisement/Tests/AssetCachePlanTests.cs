@@ -90,6 +90,23 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
             CollectionAssert.AreEqual(new[] { "old", "older" }, stale);
         }
 
+        [Test]
+        public void Retired_IsWhatTheNewCacheNoLongerUses_KeepingSharedFiles()
+        {
+            var retired = AssetCachePlan.Retired(
+                new[] { "/c/old_video.mp4", "/c/shared_logo.png", "/c/old_image.jpg", "/c/old_image.jpg" },
+                new[] { "/c/new_video.mp4", "/c/shared_logo.png" });
+
+            CollectionAssert.AreEqual(new[] { "/c/old_video.mp4", "/c/old_image.jpg" }, retired);
+        }
+
+        [Test]
+        public void Retired_IgnoresBlanksAndMissingLists()
+        {
+            CollectionAssert.IsEmpty(AssetCachePlan.Retired(null, new[] { "/c/a" }));
+            CollectionAssert.AreEqual(new[] { "/c/a" }, AssetCachePlan.Retired(new[] { "", null, "/c/a" }, null));
+        }
+
         [TestCase("3f2c9a1e-7b4d-4c1a-9e2f-000000000001")]
         [TestCase("abc_DEF-123")]
         public void SafeFileId_KeepsPlainIds(string id)

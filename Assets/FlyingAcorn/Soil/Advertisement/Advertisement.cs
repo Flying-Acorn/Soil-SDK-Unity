@@ -120,6 +120,18 @@ namespace FlyingAcorn.Soil.Advertisement
         // The creative each format last built from the cache; only those are repaired.
         private static readonly Dictionary<AdFormat, AdCreative> _cacheCreatives = new();
 
+        // Rotation (AdRotation): the next ad group of an interstitial or rewarded format is fetched
+        // and its files staged next to the cache (after a close; interstitials also right after a
+        // switch); the format switches to it on a frame its slot has nothing ready, and the files
+        // it switched away from are deleted once the slot has finished loading the new ad.
+        private static readonly HashSet<AdFormat> _rotatingFormats = new();
+        private static readonly Dictionary<AdFormat, (AdGroup adGroup, AssetCache.StagedFormatAssets assets)> _stagedRotations = new();
+        private static readonly Dictionary<AdFormat, List<string>> _retiredFiles = new();
+        // The ad group each format's prepared ad came from: recorded as seen when it is shown.
+        private static readonly Dictionary<AdFormat, AdGroup> _preparedAdGroups = new();
+        // Reused every frame a staged ad group waits, so waiting allocates nothing.
+        private static readonly List<AdFormat> _rotationFormatsBuffer = new();
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
@@ -154,6 +166,11 @@ namespace FlyingAcorn.Soil.Advertisement
             _repairAttempts.Clear();
             _cachingFormats.Clear();
             _cacheCreatives.Clear();
+            // Staged and retired files are left to the orphan cleanup of the next cache load.
+            _rotatingFormats.Clear();
+            _stagedRotations.Clear();
+            _retiredFiles.Clear();
+            _preparedAdGroups.Clear();
             AssetCache.ResetStatics();
             AdLinkPolicy.ResetStatics();
             Events.ResetSubscribers();
@@ -268,14 +285,13 @@ namespace FlyingAcorn.Soil.Advertisement
             _campaignSelectionSucceeded = false; // reset before attempt
             _selectedAdGroups.Clear();
 
-            // Select formats sequentially (not in parallel): each selection is added to this round's
-            // exclusion set immediately, so the next format's request prefers a different ad group
-            // (and thus a different advertised app). Frequency capping is best-effort - see
-            // SelectAdGroupWithFrequencyCapAsync - so limited inventory falls back to showing an ad
-            // rather than starving. A single format's failure is logged and skipped rather than
-            // aborting the whole round, since the other formats' requests are independent - but if
-            // every single format failed with an exception (e.g. total network outage), that's
-            // reported as an init failure rather than silently "no ads available".
+            // Select formats sequentially (not in parallel): each selection is reported as seen in
+            // the next format's request, so the server prefers a different ad group (and thus a
+            // different advertised app) for it - see ChooseAdGroupAsync. A single format's failure
+            // is logged and skipped rather than aborting the whole round, since the other formats'
+            // requests are independent - but if every single format failed with an exception (e.g.
+            // total network outage), that's reported as an init failure rather than silently "no
+            // ads available".
             var recentAdGroups = AdvertisementPlayerPrefs.RecentAdGroupIds;
             var recentCampaigns = AdvertisementPlayerPrefs.RecentCampaignIds;
             var roundAdGroups = new List<string>();
@@ -286,18 +302,17 @@ namespace FlyingAcorn.Soil.Advertisement
             {
                 try
                 {
-                    var adGroup = await SelectAdGroupWithFrequencyCapAsync(
-                        format, recentAdGroups, recentCampaigns, roundAdGroups, roundCampaigns);
+                    var adGroup = await ChooseAdGroupAsync(format,
+                        AdRotation.SeenIds(recentAdGroups, roundAdGroups),
+                        AdRotation.SeenIds(recentCampaigns, roundCampaigns));
                     if (adGroup == null) continue;
 
                     _selectedAdGroups[format] = adGroup;
 
-                    // Exclude this app from the remaining formats in THIS round to avoid duplicates.
+                    // Reported as seen for the remaining formats of THIS round, to avoid duplicates.
+                    // The history itself records ads when they are shown, not when they are picked.
                     if (!string.IsNullOrEmpty(adGroup.id)) roundAdGroups.Add(adGroup.id);
                     if (!string.IsNullOrEmpty(adGroup.campaign_id)) roundCampaigns.Add(adGroup.campaign_id);
-
-                    // Persist for cross-session variety preference.
-                    AdvertisementPlayerPrefs.RecordShownAdGroup(adGroup);
                 }
                 catch (Exception ex)
                 {
@@ -404,6 +419,11 @@ namespace FlyingAcorn.Soil.Advertisement
             if (_pendingRepairs.Count > 0 || _pendingRebuilds.Count > 0)
                 RunCacheRepairs();
 
+            if (_stagedRotations.Count > 0)
+                SwitchStagedRotations();
+            if (_retiredFiles.Count > 0)
+                DeleteRetiredFilesOfLoadedSlots();
+
             _slots?.Tick();
         }
 
@@ -503,6 +523,8 @@ namespace FlyingAcorn.Soil.Advertisement
                     InvokeAdErrorEvent(format, data);
                     break;
                 case AdSlotNotice.Shown:
+                    if (_preparedAdGroups.TryGetValue(format, out var shownAdGroup))
+                        AdvertisementPlayerPrefs.RecordShownAdGroup(shownAdGroup);
                     InvokeFormatEvent(format, Events.InvokeOnBannerAdShown, Events.InvokeOnInterstitialAdShown,
                         Events.InvokeOnRewardedAdShown, data);
                     break;
@@ -518,6 +540,7 @@ namespace FlyingAcorn.Soil.Advertisement
                         SetRewardedAdCooldown();
                     InvokeFormatEvent(format, Events.InvokeOnBannerAdClosed, Events.InvokeOnInterstitialAdClosed,
                         Events.InvokeOnRewardedAdClosed, data);
+                    FetchNextAdGroup(format);
                     break;
             }
         }
@@ -796,6 +819,7 @@ namespace FlyingAcorn.Soil.Advertisement
             if (creative == null)
                 MyDebug.Verbose($"[Advertisement] No {adFormat} ad to prepare: {error}");
             _cacheCreatives[adFormat] = creative;
+            _preparedAdGroups[adFormat] = CachedAdGroupOf(adFormat);
 
             SetSlotCreative(adFormat, creative, creative == null ? null : ToAd(adFormat, creative));
         }
@@ -915,45 +939,143 @@ namespace FlyingAcorn.Soil.Advertisement
         }
 
         /// <summary>
-        /// Selects an ad group for a format, applying frequency capping as a best-effort PREFERENCE
-        /// rather than a hard filter. The backend hard-excludes previous_ad_groups/previous_campaigns,
-        /// so with limited inventory an accumulated exclusion list would starve selection and return
-        /// nothing. We therefore try progressively weaker exclusion sets and stop at the first that
-        /// yields an ad group:
-        ///   1. cross-session recent history + this round's already-selected apps (best variety)
-        ///   2. only this round's already-selected apps (still avoids the same app across formats now)
-        ///   3. no exclusions (guarantees an ad whenever any eligible inventory exists)
-        /// Duplicate exclusion sets are skipped so we never issue the same request twice.
+        /// Asks the ad server for a format's ad group, reporting the ad groups and campaigns the
+        /// player saw recently. The server weighs those down, not out, so one request is enough;
+        /// an older server excludes them instead and may answer nothing for them although it has
+        /// ads, so then it is asked once more without any.
         /// </summary>
-        private static async UniTask<AdGroup> SelectAdGroupWithFrequencyCapAsync(
-            AdFormat adFormat,
-            List<string> recentAdGroups, List<string> recentCampaigns,
-            List<string> roundAdGroups, List<string> roundCampaigns)
+        private static async UniTask<AdGroup> ChooseAdGroupAsync(AdFormat adFormat,
+            List<string> seenAdGroups, List<string> seenCampaigns)
         {
-            var attempts = new List<(List<string> adGroups, List<string> campaigns)>
-            {
-                (recentAdGroups.Concat(roundAdGroups).Distinct().ToList(),
-                 recentCampaigns.Concat(roundCampaigns).Distinct().ToList()),
-                (roundAdGroups, roundCampaigns),
-                (new List<string>(), new List<string>()),
-            };
+            var response = await SelectAdGroupAsync(adFormat, seenAdGroups, seenCampaigns);
+            if (!AdRotation.RetryWithoutSeenIds(response?.ad_group != null, seenAdGroups?.Count ?? 0, seenCampaigns?.Count ?? 0))
+                return response?.ad_group;
 
-            var triedSignatures = new HashSet<string>();
-            foreach (var (adGroups, campaigns) in attempts)
+            response = await SelectAdGroupAsync(adFormat, new List<string>(), new List<string>());
+            return response?.ad_group;
+        }
+
+        /// <summary>The ad group whose files the format's cache holds, or null.</summary>
+        private static AdGroup CachedAdGroupOf(AdFormat format)
+        {
+            if (_selectedAdGroups.TryGetValue(format, out var selected) && selected != null) return selected;
+            return AdvertisementPlayerPrefs.CachedAdGroups.TryGetValue(format, out var cached) ? cached : null;
+        }
+
+        #region Rotation
+
+        private static void FetchNextAdGroup(AdFormat format)
+        {
+            if (!HasAdPlayer) return;
+            if (!AdRotation.ShouldFetchNext(format.ToString(), _rotatingFormats.Contains(format),
+                    _stagedRotations.ContainsKey(format)))
+                return;
+            RotateAsync(format).Forget();
+        }
+
+        /// <summary>
+        /// Asks for the format's next ad group and stages its files. The current ad stays when the
+        /// server has nothing else, picks the same ad group again, or any step fails; nothing here
+        /// touches the slot (see <see cref="SwitchStagedRotations"/>).
+        /// </summary>
+        private static async UniTask RotateAsync(AdFormat format)
+        {
+            _rotatingFormats.Add(format);
+            try
             {
-                // Skip an attempt whose exclusion set is identical to one we already tried.
-                var signature = string.Join(",", adGroups.OrderBy(x => x))
-                    + "|" + string.Join(",", campaigns.OrderBy(x => x));
-                if (!triedSignatures.Add(signature))
+                var current = CachedAdGroupOf(format);
+                var adGroup = await ChooseAdGroupAsync(format,
+                    AdRotation.SeenIds(AdvertisementPlayerPrefs.RecentAdGroupIds, new[] { current?.id }),
+                    AdRotation.SeenIds(AdvertisementPlayerPrefs.RecentCampaignIds, new[] { current?.campaign_id }));
+                if (!AdRotation.IsNewAdGroup(CachedAdGroupOf(format)?.id, adGroup?.id))
+                {
+                    MyDebug.Verbose($"[Advertisement] {format} keeps ad group {current?.id}: nothing else was picked");
+                    return;
+                }
+
+                var staged = await AssetCache.StageAdGroupAsync(adGroup, format);
+                if (staged == null) return;
+                if (_slots == null || !_rotatingFormats.Contains(format))
+                {
+                    // The SDK was reset meanwhile.
+                    AssetCache.DiscardStaged(staged);
+                    return;
+                }
+
+                _stagedRotations[format] = (adGroup, staged);
+                MyDebug.Verbose($"[Advertisement] {format} ad group {adGroup.id} staged; switching when the slot has nothing ready");
+            }
+            catch (Exception ex)
+            {
+                MyDebug.Verbose($"[Advertisement] {format} rotation failed, keeping the current ad: {ex.Message}");
+            }
+            finally
+            {
+                _rotatingFormats.Remove(format);
+            }
+        }
+
+        /// <summary>
+        /// Switches each format with a staged ad group to it, on a frame its slot has nothing
+        /// ready or on screen (after a close it is preparing again; a rewarded slot stays not
+        /// ready through its cooldown). The cache flips in one step, then the new ad is prepared;
+        /// its load replaces whatever the player was still decoding.
+        /// </summary>
+        private static void SwitchStagedRotations()
+        {
+            _rotationFormatsBuffer.Clear();
+            _rotationFormatsBuffer.AddRange(_stagedRotations.Keys);
+            foreach (var format in _rotationFormatsBuffer)
+            {
+                var staged = _stagedRotations[format];
+                var slot = SlotFor(format);
+                if (slot == null)
+                {
+                    _stagedRotations.Remove(format);
+                    AssetCache.DiscardStaged(staged.assets);
+                    continue;
+                }
+
+                if (!AdRotation.CanSwitchNow(slot.IsReady, slot.IsShowing, slot.IsCaching || _cachingFormats.Contains(format)))
                     continue;
 
-                var response = await SelectAdGroupAsync(adFormat, adGroups, campaigns);
-                if (response?.ad_group != null)
-                    return response.ad_group;
-            }
+                _stagedRotations.Remove(format);
+                var retired = AssetCache.CommitStaged(staged.assets);
+                if (_retiredFiles.TryGetValue(format, out var earlier))
+                    retired.AddRange(earlier);
+                _retiredFiles[format] = retired;
 
-            return null;
+                _selectedAdGroups[format] = staged.adGroup;
+                var cachedAdGroups = AdvertisementPlayerPrefs.CachedAdGroups;
+                cachedAdGroups[format] = staged.adGroup;
+                AdvertisementPlayerPrefs.CachedAdGroups = cachedAdGroups;
+                _repairAttempts.Remove(format);
+
+                MyDebug.Verbose($"[Advertisement] {format} switched to ad group {staged.adGroup.id}");
+                PrepareFormat(format);
+
+                // Fetched now, so the close of this ad finds the next one ready.
+                if (AdRotation.FetchesAheadAfterSwitch(format.ToString()))
+                    FetchNextAdGroup(format);
+            }
         }
+
+        /// <summary>
+        /// Deletes the files a format switched away from once its slot is done loading the new ad
+        /// (loaded or failed): until then the player may still be reading them.
+        /// </summary>
+        private static void DeleteRetiredFilesOfLoadedSlots()
+        {
+            foreach (var (format, paths) in _retiredFiles.ToList())
+            {
+                var slot = SlotFor(format);
+                if (slot != null && slot.IsPreparing) continue;
+                _retiredFiles.Remove(format);
+                AssetCache.DeleteRetiredFiles(paths);
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Checks if rewarded ads are currently in cooldown period
@@ -1368,6 +1490,7 @@ namespace FlyingAcorn.Soil.Advertisement
             if (_shownNativeAdId != content.AdId)
             {
                 _shownNativeAdId = content.AdId;
+                AdvertisementPlayerPrefs.RecordShownAdGroup(CachedAdGroupOf(AdFormat.native));
                 Events.InvokeOnNativeAdShown(new AdEventData(AdFormat.native));
             }
 

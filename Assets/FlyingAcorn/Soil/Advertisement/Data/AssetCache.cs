@@ -57,6 +57,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
 
         public string DisplayName => $"{AdFormat}_{AssetType}_{Id}";
 
+        internal AssetCacheEntry Clone() => (AssetCacheEntry)MemberwiseClone();
+
         public override string ToString()
         {
             return $"AssetCacheEntry [UUID: {Id}, Type: {AssetType}, Format: {AdFormat}, Valid: {IsValid}]";
@@ -416,6 +418,144 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
+        /// A format's files for another ad group, downloaded next to the format's cache but not in
+        /// it yet: nothing reads them until <see cref="CommitStaged"/> makes them the cache.
+        /// </summary>
+        internal sealed class StagedFormatAssets
+        {
+            public readonly AdFormat Format;
+            public readonly List<(string cacheKey, AssetCacheEntry entry)> Entries = new();
+
+            // The files this staging downloaded, as opposed to cached files it reuses.
+            public readonly List<string> DownloadedPaths = new();
+
+            public StagedFormatAssets(AdFormat format)
+            {
+                Format = format;
+            }
+        }
+
+        /// <summary>
+        /// Downloads the files <paramref name="adGroup"/> needs for <paramref name="adFormat"/>
+        /// (planned as <see cref="CacheAssetsForAdGroupAsync"/> plans them) without touching the
+        /// format's cache, so the ad the format holds keeps its files. A file the format already
+        /// has is reused. All or nothing: returns null, with nothing left behind, if the group has
+        /// nothing for the format or any download fails.
+        /// </summary>
+        internal static async UniTask<StagedFormatAssets> StageAdGroupAsync(AdGroup adGroup, AdFormat adFormat)
+        {
+            if (adGroup == null || !HasAdsForFormat(adGroup, adFormat)) return null;
+            var eligibleAds = GetEligibleAdsForFormat(adGroup, adFormat);
+            if (!eligibleAds.Any()) return null;
+            var plan = PlanFormatAssets(eligibleAds, adFormat);
+            if (plan.Count == 0) return null;
+
+            var staged = new StagedFormatAssets(adFormat);
+            var downloads = new List<UniTask<AssetCacheEntry>>();
+            var downloadKeys = new List<string>();
+            foreach (var (cacheKey, asset, assetType, ad) in plan)
+            {
+                AssetCacheEntry existing;
+                lock (_lockObject)
+                {
+                    _cachedAssets.TryGetValue(cacheKey, out existing);
+                }
+
+                if (existing != null && existing.IsValid)
+                {
+                    var reused = existing.Clone();
+                    ApplyMetadata(reused, asset, adGroup.click_url, ad);
+                    staged.Entries.Add((cacheKey, reused));
+                    continue;
+                }
+
+                downloadKeys.Add(cacheKey);
+                downloads.Add(DownloadEntryOrNullAsync(cacheKey, asset, assetType, adFormat, adGroup.click_url, ad));
+            }
+
+            var downloaded = await UniTask.WhenAll(downloads);
+            for (var i = 0; i < downloaded.Length; i++)
+            {
+                if (downloaded[i] == null) continue;
+                staged.DownloadedPaths.Add(downloaded[i].LocalPath);
+                staged.Entries.Add((downloadKeys[i], downloaded[i]));
+            }
+
+            if (downloaded.Any(entry => entry == null))
+            {
+                MyDebug.Verbose($"[Advertisement] Staging {adFormat} ad group {adGroup.id} failed; keeping the current ad");
+                DiscardStaged(staged);
+                return null;
+            }
+
+            MyDebug.Verbose($"[Advertisement] Staged {staged.Entries.Count} {adFormat} files of ad group {adGroup.id} " +
+                            $"({staged.DownloadedPaths.Count} downloaded)");
+            return staged;
+        }
+
+        private static async UniTask<AssetCacheEntry> DownloadEntryOrNullAsync(string cacheKey, Asset asset,
+            AssetType assetType, AdFormat adFormat, string clickUrl, Ad ad)
+        {
+            try
+            {
+                return await DownloadEntryAsync(cacheKey, asset, assetType, adFormat, clickUrl, ad);
+            }
+            catch (Exception ex)
+            {
+                MyDebug.Verbose($"[Advertisement] Staging {cacheKey} failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Makes staged files the format's whole cache in one step. Returns the files the format
+        /// used before and no longer does; they are not deleted here, because a player may still
+        /// be reading them - see <see cref="DeleteRetiredFiles"/>.
+        /// </summary>
+        internal static List<string> CommitStaged(StagedFormatAssets staged)
+        {
+            if (staged == null) return new List<string>();
+
+            List<string> oldPaths;
+            lock (_lockObject)
+            {
+                var oldKeys = _cachedAssets.Where(kvp => kvp.Value.AdFormat == staged.Format)
+                    .Select(kvp => kvp.Key).ToList();
+                oldPaths = oldKeys.Select(key => _cachedAssets[key].LocalPath).ToList();
+                foreach (var key in oldKeys)
+                    _cachedAssets.Remove(key);
+                foreach (var (cacheKey, entry) in staged.Entries)
+                    _cachedAssets[cacheKey] = entry;
+            }
+
+            PersistCachedAssets();
+            return AssetCachePlan.Retired(oldPaths, staged.Entries.Select(e => e.entry.LocalPath));
+        }
+
+        /// <summary>Deletes the files a staging downloaded, when it will not be committed.</summary>
+        internal static void DiscardStaged(StagedFormatAssets staged)
+        {
+            if (staged == null) return;
+            DeleteRetiredFiles(staged.DownloadedPaths);
+        }
+
+        /// <summary>Deletes files the cache no longer uses; one an entry still points to is kept.</summary>
+        internal static void DeleteRetiredFiles(IEnumerable<string> paths)
+        {
+            if (paths == null) return;
+            HashSet<string> referenced;
+            lock (_lockObject)
+            {
+                referenced = new HashSet<string>(_cachedAssets.Values.Select(e => e.LocalPath)
+                    .Where(p => !string.IsNullOrEmpty(p)), StringComparer.Ordinal);
+            }
+
+            foreach (var path in paths)
+                if (!referenced.Contains(path))
+                    DeleteFileQuietly(path);
+        }
+
+        /// <summary>
         /// Checks if an ad group has ads for the specified format
         /// </summary>
         public static bool HasAdsForFormat(AdGroup adGroup, AdFormat adFormat)
@@ -660,51 +800,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 }
 
                 if (unusable != null) DeleteFileQuietly(unusable.LocalPath);
-                EnsureCacheDirectory();
-
-                // Resolve URL (handle relative URLs)
-                var resolvedUrl = ResolveAssetUrl(asset.url);
-                Analytics.MyDebug.Verbose($"Processing asset {cacheKey} ({assetType}) from URL: {resolvedUrl}");
-
-                // Every file - videos included - is on disk before its ad counts as ready: the
-                // native players only play local files, so a slow network delays an ad instead of
-                // stalling it on screen. Downloads stream straight to disk.
-                // File names never take a server string as is: the id is reduced to [A-Za-z0-9_-]
-                // (or hashed) and the extension to a plain one, so nothing can escape SoilAssets.
-                // A URL without one still gets one: iOS picks the video decoder by extension,
-                // while image decoders read the content and only need a neutral name.
-                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-                var extension = AssetCachePlan.SafeExtension(Path.GetExtension(new Uri(resolvedUrl).AbsolutePath),
-                    assetType == AssetType.video ? ".mp4" : ".img");
-                var baseName = $"{adFormat}_{assetType}_{AssetCachePlan.SafeFileId(asset.id)}";
-                var fileName = $"{baseName}_{timestamp}{extension}";
-                var filePath = Path.Combine(CacheDirectory, fileName);
-
-                // Ensure the file doesn't exist (additional safety check)
-                var counter = 0;
-                while (File.Exists(filePath) && counter < 100)
-                {
-                    fileName = $"{baseName}_{timestamp}_{counter}{extension}";
-                    filePath = Path.Combine(CacheDirectory, fileName);
-                    counter++;
-                }
-
-                // Videos are megabytes where images are kilobytes: both give up only when the
-                // download stalls, but a video may take much longer overall on a slow network.
-                var capSeconds = assetType == AssetType.video ? VideoDownloadCapSeconds : ImageDownloadCapSeconds;
-                await DownloadToFileAsync(resolvedUrl, filePath, capSeconds);
-
-                var cachedAsset = new AssetCacheEntry
-                {
-                    Id = asset.id,
-                    AssetType = assetType,
-                    AdFormat = adFormat,
-                    LocalPath = filePath,
-                    OriginalUrl = resolvedUrl, // Store the resolved URL
-                    CachedAt = DateTime.UtcNow
-                };
-                // The click URL of the ad group and the ad-level data of the ad it was cached for.
-                ApplyMetadata(cachedAsset, asset, clickUrl, ad);
+                var cachedAsset = await DownloadEntryAsync(cacheKey, asset, assetType, adFormat, clickUrl, ad);
 
                 lock (_lockObject)
                 {
@@ -728,6 +824,61 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     _currentlyDownloading.Remove(cacheKey);
                 }
             }
+        }
+
+        /// <summary>
+        /// Downloads one asset to a new file in the cache directory and returns its entry, without
+        /// adding it to the index; throws when the download fails.
+        /// </summary>
+        private static async UniTask<AssetCacheEntry> DownloadEntryAsync(string cacheKey, Asset asset, AssetType assetType,
+            AdFormat adFormat, string clickUrl, Ad ad)
+        {
+            EnsureCacheDirectory();
+
+            // Resolve URL (handle relative URLs)
+            var resolvedUrl = ResolveAssetUrl(asset.url);
+            Analytics.MyDebug.Verbose($"Processing asset {cacheKey} ({assetType}) from URL: {resolvedUrl}");
+
+            // Every file - videos included - is on disk before its ad counts as ready: the
+            // native players only play local files, so a slow network delays an ad instead of
+            // stalling it on screen. Downloads stream straight to disk.
+            // File names never take a server string as is: the id is reduced to [A-Za-z0-9_-]
+            // (or hashed) and the extension to a plain one, so nothing can escape SoilAssets.
+            // A URL without one still gets one: iOS picks the video decoder by extension,
+            // while image decoders read the content and only need a neutral name.
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+            var extension = AssetCachePlan.SafeExtension(Path.GetExtension(new Uri(resolvedUrl).AbsolutePath),
+                assetType == AssetType.video ? ".mp4" : ".img");
+            var baseName = $"{adFormat}_{assetType}_{AssetCachePlan.SafeFileId(asset.id)}";
+            var fileName = $"{baseName}_{timestamp}{extension}";
+            var filePath = Path.Combine(CacheDirectory, fileName);
+
+            // Ensure the file doesn't exist (additional safety check)
+            var counter = 0;
+            while (File.Exists(filePath) && counter < 100)
+            {
+                fileName = $"{baseName}_{timestamp}_{counter}{extension}";
+                filePath = Path.Combine(CacheDirectory, fileName);
+                counter++;
+            }
+
+            // Videos are megabytes where images are kilobytes: both give up only when the
+            // download stalls, but a video may take much longer overall on a slow network.
+            var capSeconds = assetType == AssetType.video ? VideoDownloadCapSeconds : ImageDownloadCapSeconds;
+            await DownloadToFileAsync(resolvedUrl, filePath, capSeconds);
+
+            var entry = new AssetCacheEntry
+            {
+                Id = asset.id,
+                AssetType = assetType,
+                AdFormat = adFormat,
+                LocalPath = filePath,
+                OriginalUrl = resolvedUrl, // Store the resolved URL
+                CachedAt = DateTime.UtcNow
+            };
+            // The click URL of the ad group and the ad-level data of the ad it was cached for.
+            ApplyMetadata(entry, asset, clickUrl, ad);
+            return entry;
         }
 
         /// <summary>

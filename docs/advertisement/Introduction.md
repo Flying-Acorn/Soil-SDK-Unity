@@ -16,6 +16,7 @@ Monetize your game with integrated advertisement solutions. Supports video ads a
 - **Native Ads**: Raw assets (icon, image, headline, body, call to action) delivered to your own UI, so ads match your game's look
 - **Multiple Native Surfaces**: Render one native ad in several places at once, each using the assets that suit it, with independent clicks
 - **Automatic Ad Reload**: A closed interstitial or rewarded ad is prepared again right away
+- **Ad Rotation**: The next interstitial and rewarded ad is downloaded in the background, so each close moves on to a different app
 - **Rewarded Ad Cooldown**: 10-second cooldown between rewarded ads with automatic wait handling
 - **Editor Simulation**: In the Editor a simulated player draws placeholders and follows the same rules, so game flows can be tested without a device
 

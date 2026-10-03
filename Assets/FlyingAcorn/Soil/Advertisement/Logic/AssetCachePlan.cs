@@ -75,6 +75,26 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         }
 
         /// <summary>
+        /// Files a format used before its cache was replaced that the new cache does not use (a
+        /// file both share is kept); they can be deleted once nothing can still read them.
+        /// </summary>
+        public static List<string> Retired(IEnumerable<string> oldPaths, IEnumerable<string> newPaths)
+        {
+            var kept = new HashSet<string>(StringComparer.Ordinal);
+            if (newPaths != null)
+                foreach (var path in newPaths)
+                    if (!string.IsNullOrEmpty(path))
+                        kept.Add(path);
+
+            var retired = new List<string>();
+            if (oldPaths == null) return retired;
+            foreach (var path in oldPaths)
+                if (!string.IsNullOrEmpty(path) && !kept.Contains(path) && !retired.Contains(path))
+                    retired.Add(path);
+            return retired;
+        }
+
+        /// <summary>
         /// A server id as it may appear in a file name: kept when it is only letters, digits, '-'
         /// and '_' (and not too long), otherwise replaced by a hash of it, so an id can never
         /// point a file outside the cache directory.
