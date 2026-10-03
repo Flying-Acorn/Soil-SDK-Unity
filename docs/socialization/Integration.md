@@ -181,6 +181,8 @@ Things to know:
 - **Limits** are set per app on the dashboard (App Settings → Friend limits): friends per player (300),
   requests waiting per player (100) and players blocked per player (500). Sending requests is limited to
   20 a minute and 200 a day, blocking to 30 a minute and 300 a day.
+- **Reading** friends - the lists of both versions and the friend leaderboard - is limited to 120 requests a
+  minute per player, together. Fetch when a screen opens rather than on a timer.
 - **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
   simply never gets an answer. Do not show anything else.
 - **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
