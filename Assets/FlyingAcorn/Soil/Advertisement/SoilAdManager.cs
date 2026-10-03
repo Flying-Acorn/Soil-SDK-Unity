@@ -1,20 +1,21 @@
+using System;
 using FlyingAcorn.Analytics;
-using FlyingAcorn.Soil.Advertisement.Models.AdPlacements;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace FlyingAcorn.Soil.Advertisement
 {
+    /// <summary>
+    /// Scene anchor of Soil ads. Optional: <see cref="Advertisement.InitializeAsync"/> creates one
+    /// when the scene has none. Ads are drawn by native players, so it holds no placements; it
+    /// stays as a persistent MonoBehaviour games can use as a coroutine host.
+    /// </summary>
     public class SoilAdManager : MonoBehaviour
     {
         public static SoilAdManager Instance { get; private set; }
-        [Header("Ad Placement Prefabs")]
-        public BannerAdPlacement bannerAdPlacement;
-        public InterstitialAdPlacement interstitialAdPlacement;
-        public RewardedAdPlacement rewardedAdPlacement;
-        [SerializeField] private Canvas canvasReference;
-        public CanvasReferences canvasReferences;
 
+        /// <summary>Unused: ads are no longer drawn on a Unity canvas. Kept so old code compiles.</summary>
+        [Obsolete("Ads are drawn by native players; the SDK no longer copies a canvas setup. Always null.")]
         public class CanvasReferences
         {
             public Vector2 ReferenceResolution;
@@ -23,49 +24,39 @@ namespace FlyingAcorn.Soil.Advertisement
             public float MatchWidthOrHeight;
             public float ReferencePixelsPerUnit;
             public int Layer;
-
         }
 
-        private void Update()
+        /// <summary>Unused: ads are no longer drawn on a Unity canvas. Always null.</summary>
+        [Obsolete("Ads are drawn by native players; the SDK no longer copies a canvas setup. Always null.")]
+        [NonSerialized]
+        public CanvasReferences canvasReferences;
+
+        internal static SoilAdManager GetOrCreate()
         {
-            // Drive the input blocker failsafe so the game cannot
-            // remain permanently frozen if an ad fails to close.
-            SoilAdInputBlocker.FailsafeTick();
+            if (Instance) return Instance;
+            var existing = FindFirstObjectByType<SoilAdManager>();
+            if (existing) return existing;
+            return new GameObject(nameof(SoilAdManager)).AddComponent<SoilAdManager>();
         }
 
         private void Awake()
         {
             if (Instance && Instance != this)
             {
-                Destroy(this.gameObject);
+                Destroy(gameObject);
                 return;
             }
+
             Instance = this;
             if (transform.parent == null)
-                DontDestroyOnLoad(this.gameObject);
+                DontDestroyOnLoad(gameObject);
             else
                 MyDebug.Info("SoilAdManager is not a root GameObject, expecting you to manage its lifecycle accordingly.");
-            if (canvasReference && canvasReference.TryGetComponent<CanvasScaler>(out var scaler))
-            {
-                canvasReferences = new CanvasReferences
-                {
-                    ReferenceResolution = scaler.referenceResolution,
-                    UIScaleMode = scaler.uiScaleMode,
-                    ScreenMatchMode = scaler.screenMatchMode,
-                    MatchWidthOrHeight = scaler.matchWidthOrHeight,
-                    ReferencePixelsPerUnit = scaler.referencePixelsPerUnit,
-                    Layer = canvasReference.gameObject.layer
-                };
-            }
-            else
-            {
-                MyDebug.Info("Canvas reference is not set. Please assign a Canvas to the SoilAdManager.");
-            }
         }
 
-        private void OnDisable()
+        private void OnDestroy()
         {
-            StopAllCoroutines();
+            if (Instance == this) Instance = null;
         }
     }
 }

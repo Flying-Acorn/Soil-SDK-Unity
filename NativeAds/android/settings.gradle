@@ -1,0 +1,3 @@
+// Test harness for the Android native ad player. It compiles the shipped sources straight from
+// Assets/.../SoilAds.androidlib; nothing here is part of the game build.
+rootProject.name = 'SoilAdsAndroidTests'

@@ -123,7 +123,16 @@ namespace FlyingAcorn.Soil.Core.Data
             return settingForCountry.ApiUrl ?? FallBackApiUrl;
         }
 
-        public static async UniTask ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
+        public static UniTask ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds)
+        {
+            return ExecuteUnityWebRequestWithTimeout(request, timeoutSeconds, false);
+        }
+
+        /// <param name="ignoreTimeScale">
+        /// Count the timeout in unscaled time, so it still runs out while the game is paused with
+        /// Time.timeScale = 0.
+        /// </param>
+        public static async UniTask ExecuteUnityWebRequestWithTimeout(UnityEngine.Networking.UnityWebRequest request, int timeoutSeconds, bool ignoreTimeScale)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (timeoutSeconds <= 0) timeoutSeconds = 1; // sanity clamp
@@ -145,7 +154,7 @@ namespace FlyingAcorn.Soil.Core.Data
 
             // Separate CTS to allow cancellation of the scheduled timeout when request wins.
             using var timeoutCts = new System.Threading.CancellationTokenSource();
-            var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), cancellationToken: timeoutCts.Token);
+            var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), ignoreTimeScale, cancellationToken: timeoutCts.Token);
 
             // UniTask.WhenAny with two tasks returns index (0 => request finished, 1 => timeout)
             int winner;

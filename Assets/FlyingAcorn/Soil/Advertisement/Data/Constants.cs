@@ -1,10 +1,12 @@
-using FlyingAcorn.Soil.Core.Data;
+using System;
 
 namespace FlyingAcorn.Soil.Advertisement.Data
 {
     public class Constants
     {
-        public string AssetsBaseDomain => DataUtils.GetRegionalApiDomain();
+        // Relative asset URLs are served by the same Soil host that answered the ad request, so
+        // the player's region decides where ad media comes from - never one fixed regional domain.
+        public string AssetsBaseDomain => new Uri(Core.Data.Constants.ApiUrl).GetLeftPart(UriPartial.Authority);
         public enum AdFormat
         {
             banner,

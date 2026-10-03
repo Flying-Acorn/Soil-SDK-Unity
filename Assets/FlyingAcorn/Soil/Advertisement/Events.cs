@@ -1,4 +1,6 @@
+using System;
 using FlyingAcorn.Soil.Advertisement.Data;
+using UnityEngine;
 
 namespace FlyingAcorn.Soil.Advertisement
 {
@@ -125,7 +127,9 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <summary>
         /// Fired when a native ad's content is ready to be rendered. Unlike the other formats,
         /// the SDK does not draw a native ad - the game receives this payload and renders the
-        /// title, description, call to action, icon and image in its own UI.
+        /// title, description, call to action, icon and image in its own UI. The textures stay
+        /// valid until a newer content replaces this one and no view registered for this one
+        /// remains (see <see cref="NativeAdContent"/>), or until DestroyNativeAd.
         /// </summary>
         public static event System.Action<NativeAdContent> OnNativeAdContentReady;
 
@@ -134,131 +138,186 @@ namespace FlyingAcorn.Soil.Advertisement
         /// </summary>
         public static event System.Action<Constants.AdFormat> OnAdFormatAssetsLoaded;
 
+        // Every subscriber is called on its own: one that throws is logged and does not stop the
+        // others, nor the ad state machine that raised the event.
+        private static void Raise(Action handlers)
+        {
+            if (handlers == null) return;
+            foreach (var handler in handlers.GetInvocationList())
+            {
+                try { ((Action)handler)(); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
+        }
+
+        private static void Raise<T>(Action<T> handlers, T arg)
+        {
+            if (handlers == null) return;
+            foreach (var handler in handlers.GetInvocationList())
+            {
+                try { ((Action<T>)handler)(arg); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
+        }
+
+        /// <summary>
+        /// Drops every subscriber. Only for a new play session without a domain reload, before any
+        /// game code has subscribed.
+        /// </summary>
+        internal static void ResetSubscribers()
+        {
+            OnInitialized = null;
+            OnInitializeFailed = null;
+            OnBannerAdLoaded = null;
+            OnBannerAdError = null;
+            OnBannerAdShown = null;
+            OnBannerAdClosed = null;
+            OnBannerAdClicked = null;
+            OnInterstitialAdLoaded = null;
+            OnInterstitialAdError = null;
+            OnInterstitialAdShown = null;
+            OnInterstitialAdClosed = null;
+            OnInterstitialAdClicked = null;
+            OnRewardedAdLoaded = null;
+            OnRewardedAdError = null;
+            OnRewardedAdShown = null;
+            OnRewardedAdClosed = null;
+            OnRewardedAdClicked = null;
+            OnRewardedAdRewarded = null;
+            OnNativeAdLoaded = null;
+            OnNativeAdError = null;
+            OnNativeAdShown = null;
+            OnNativeAdClosed = null;
+            OnNativeAdClicked = null;
+            OnNativeAdContentReady = null;
+            OnAdFormatAssetsLoaded = null;
+        }
+
         // Internal methods to safely invoke events
         internal static void InvokeOnInitialized()
         {
-            OnInitialized?.Invoke();
+            Raise(OnInitialized);
         }
 
         internal static void InvokeOnInitializeFailed(string errorMessage)
         {
-            OnInitializeFailed?.Invoke(errorMessage);
+            Raise(OnInitializeFailed, errorMessage);
         }
 
         internal static void InvokeOnBannerAdLoaded(AdEventData data)
         {
-            OnBannerAdLoaded?.Invoke(data);
+            Raise(OnBannerAdLoaded, data);
         }
 
         internal static void InvokeOnBannerAdError(AdEventData data)
         {
-            OnBannerAdError?.Invoke(data);
+            Raise(OnBannerAdError, data);
         }
 
         internal static void InvokeOnBannerAdShown(AdEventData data)
         {
-            OnBannerAdShown?.Invoke(data);
+            Raise(OnBannerAdShown, data);
         }
 
         internal static void InvokeOnBannerAdClosed(AdEventData data)
         {
-            OnBannerAdClosed?.Invoke(data);
+            Raise(OnBannerAdClosed, data);
         }
 
         internal static void InvokeOnBannerAdClicked(AdEventData data)
         {
-            OnBannerAdClicked?.Invoke(data);
+            Raise(OnBannerAdClicked, data);
         }
 
         internal static void InvokeOnInterstitialAdLoaded(AdEventData data)
         {
-            OnInterstitialAdLoaded?.Invoke(data);
+            Raise(OnInterstitialAdLoaded, data);
         }
 
         internal static void InvokeOnInterstitialAdError(AdEventData data)
         {
-            OnInterstitialAdError?.Invoke(data);
+            Raise(OnInterstitialAdError, data);
         }
 
         internal static void InvokeOnInterstitialAdShown(AdEventData data)
         {
-            OnInterstitialAdShown?.Invoke(data);
+            Raise(OnInterstitialAdShown, data);
         }
 
         internal static void InvokeOnInterstitialAdClosed(AdEventData data)
         {
-            OnInterstitialAdClosed?.Invoke(data);
+            Raise(OnInterstitialAdClosed, data);
         }
 
         internal static void InvokeOnInterstitialAdClicked(AdEventData data)
         {
-            OnInterstitialAdClicked?.Invoke(data);
+            Raise(OnInterstitialAdClicked, data);
         }
 
         internal static void InvokeOnRewardedAdLoaded(AdEventData data)
         {
-            OnRewardedAdLoaded?.Invoke(data);
+            Raise(OnRewardedAdLoaded, data);
         }
 
         internal static void InvokeOnRewardedAdError(AdEventData data)
         {
-            OnRewardedAdError?.Invoke(data);
+            Raise(OnRewardedAdError, data);
         }
 
         internal static void InvokeOnRewardedAdShown(AdEventData data)
         {
-            OnRewardedAdShown?.Invoke(data);
+            Raise(OnRewardedAdShown, data);
         }
 
         internal static void InvokeOnRewardedAdClosed(AdEventData data)
         {
-            OnRewardedAdClosed?.Invoke(data);
+            Raise(OnRewardedAdClosed, data);
         }
 
         internal static void InvokeOnRewardedAdClicked(AdEventData data)
         {
-            OnRewardedAdClicked?.Invoke(data);
+            Raise(OnRewardedAdClicked, data);
         }
 
         internal static void InvokeOnRewardedAdRewarded(AdEventData data)
         {
-            OnRewardedAdRewarded?.Invoke(data);
+            Raise(OnRewardedAdRewarded, data);
         }
 
         internal static void InvokeOnNativeAdLoaded(AdEventData data)
         {
-            OnNativeAdLoaded?.Invoke(data);
+            Raise(OnNativeAdLoaded, data);
         }
 
         internal static void InvokeOnNativeAdError(AdEventData data)
         {
-            OnNativeAdError?.Invoke(data);
+            Raise(OnNativeAdError, data);
         }
 
         internal static void InvokeOnNativeAdShown(AdEventData data)
         {
-            OnNativeAdShown?.Invoke(data);
+            Raise(OnNativeAdShown, data);
         }
 
         internal static void InvokeOnNativeAdClosed(AdEventData data)
         {
-            OnNativeAdClosed?.Invoke(data);
+            Raise(OnNativeAdClosed, data);
         }
 
         internal static void InvokeOnNativeAdClicked(AdEventData data)
         {
-            OnNativeAdClicked?.Invoke(data);
+            Raise(OnNativeAdClicked, data);
         }
 
         internal static void InvokeOnNativeAdContentReady(NativeAdContent content)
         {
-            OnNativeAdContentReady?.Invoke(content);
+            Raise(OnNativeAdContentReady, content);
         }
 
         // Internal methods for asset loading events
         internal static void InvokeOnAdFormatAssetsLoaded(Constants.AdFormat adFormat)
         {
-            OnAdFormatAssetsLoaded?.Invoke(adFormat);
+            Raise(OnAdFormatAssetsLoaded, adFormat);
         }
     }
 }

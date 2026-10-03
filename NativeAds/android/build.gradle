@@ -1,0 +1,69 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:9.0.1'
+    }
+}
+
+apply plugin: 'com.android.library'
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+// The shipped plug-in; compiled in place, never copied.
+def androidlib = file('../../Assets/FlyingAcorn/Soil/Advertisement/Plugins/Android/SoilAds.androidlib')
+
+android {
+    namespace = 'com.flyingacorn.soil.ads'
+    compileSdk = 36
+
+    defaultConfig {
+        minSdk = 22
+        testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    // Same language level Unity's generated library project uses.
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile "$androidlib/AndroidManifest.xml"
+            java.srcDirs = ["$androidlib/src/main/java"]
+        }
+    }
+
+    testOptions {
+        targetSdk = 35
+        unitTests.returnDefaultValues = true
+        unitTests.all {
+            testLogging {
+                events 'failed'
+                exceptionFormat 'full'
+            }
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    // android.jar only has stubs for org.json; the JVM tests need the real thing.
+    testImplementation 'org.json:json:20180813'
+
+    androidTestImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:core:1.5.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    // Bumps of transitive versions to ones already in the local Gradle cache, so the build works with
+    // --offline (Google's Maven repository is not always reachable).
+    androidTestImplementation 'androidx.annotation:annotation:1.3.0'
+    androidTestImplementation 'androidx.annotation:annotation-experimental:1.3.0'
+    androidTestImplementation 'androidx.lifecycle:lifecycle-common:2.6.1'
+}
