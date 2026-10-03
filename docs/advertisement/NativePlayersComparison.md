@@ -11,9 +11,10 @@ Banner, interstitial and rewarded ads moved from Unity-drawn canvases (VideoPlay
 | Video delivery | ✅ Downloaded once, played from disk | ❌ Streamed from its URL on every play |
 | Memory and build size | ✅ Smaller: no prefabs, RenderTexture or TMP fonts | ❌ Larger |
 | Notch and system bars | ✅ Handled by the OS, flush, tablet sizes | ❌ Not handled |
-| Persian (right-to-left) text and screen readers | ✅ OS rendering, VoiceOver and TalkBack | ❌ Needs RTLTMPro and fonts, no accessibility |
+| Persian (right-to-left) text and screen readers | ✅ OS rendering, layout mirrored for Persian ads, VoiceOver and TalkBack | ❌ Needs RTLTMPro and fonts, no accessibility |
+| Image ads and off-shape media | ✅ Blurred copy of the image behind it, no black bars | ❌ Black bars |
 | Video robustness | ✅ Checked at load, image fallback, exact resume, mute | ⚠️ Basic |
-| Close-button wait | ✅ Only time on screen, same rule on both platforms, unit-tested | ⚠️ One-second ticks in Unity, similar in practice |
+| Close-button wait | ✅ Only time on screen, same rule on both platforms, unit-tested; interstitials closable by 15 s (Google Play) | ⚠️ One-second ticks in Unity; a long interstitial video could lock past 15 s |
 | Events | ✅ AdMob-like order, exactly one close, watchdogs | ⚠️ No ordering guarantee or watchdogs |
 | Click safety | ✅ Browsable links only, device-action links blocked | ❌ Any link opened |
 | Downloads and cache | ✅ Reuse, retries, self-repair, iCloud-excluded | ⚠️ Images only |

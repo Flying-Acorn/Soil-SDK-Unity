@@ -11,7 +11,7 @@ The native players make **no network requests** and depend on **nothing but the 
 |---|---|---|
 | Language | Java 8, `android.*` only (no AndroidX, no Google Play services, no Kotlin) | Objective-C, system frameworks only (UIKit, AVFoundation) |
 | Video | `MediaPlayer` on a `TextureView` | `AVPlayer` + `AVPlayerLayer` |
-| Min OS | API 22 (Unity 2022.3 minimum) | iOS 12 (Unity 2022.3 minimum) |
+| Min OS | API 22 (Unity 2022.3 minimum); compiled against API 33+ (Target API Level Automatic or 33+) | iOS 12 (Unity 2022.3 minimum) |
 | Ships as | `Plugins/Android/SoilAds.androidlib` (sources) | `Plugins/iOS/SoilAds/*.h/*.m` (sources) |
 
 Every file is compiled from source by the game's own build. Nothing is downloaded at build time
@@ -137,17 +137,21 @@ Fullscreen (interstitial and rewarded; C# always sends every field):
   "imageLockSeconds": 5,
   "videoLockFraction": 0.8,
   "minVideoLockSeconds": 5,
+  "maxLockSeconds": 15,
   "startMuted": false
 }
 ```
-Defaults C# sends: interstitial `5 / 0.8 / 5`, rewarded `20 / 1.0 / 0`.
+Defaults C# sends: interstitial `5 / 0.8 / 5 / max 15`, rewarded `20 / 1.0 / 0 / max 0` (no cap).
+A missing field takes the format's default.
 
 ## Fullscreen lock policy (identical on all platforms, unit-tested on all)
 
 The close button is **locked** for a while, then unlocks. Rewarded ads grant the reward at the
 moment they unlock. The timing is the one the Unity-drawn ads always had - interstitial: 5 s, or
 80% of a video but never under 5 s; rewarded: 20 s, or the whole video - except that only time
-the ad is on screen counts.
+the ad is on screen counts, and an interstitial is always closable by 15 s (`maxLockSeconds`):
+Google Play does not allow interstitials that cannot be closed after 15 s. Rewarded ads are
+opt-in and have no cap.
 
 Inputs: media (`video`/`image`), video duration `D` seconds, `visibleSeconds` (time the ad has been
 on screen while the app was in the foreground — does not advance while backgrounded or while the
@@ -155,8 +159,9 @@ user is away after a click), `positionSeconds` (video playback position), `video
 `videoFailed`.
 
 ```
-videoLock  = max(minVideoLockSeconds, videoLockFraction * D)      // may outlast a short video
-screenLock = media == video ? max(videoLock, imageLockSeconds) : imageLockSeconds
+cap(x)     = maxLockSeconds > 0 ? min(x, maxLockSeconds) : x
+videoLock  = cap(max(minVideoLockSeconds, videoLockFraction * D))   // may outlast a short video
+screenLock = cap(media == video ? max(videoLock, imageLockSeconds) : imageLockSeconds)
 playing    = media == video && !videoFailed && D > 0
 progress   = videoEnded ? max(D, visibleSeconds) : positionSeconds
 
@@ -169,7 +174,7 @@ secondsRemaining = max(0, ceil(min(screenLock - visibleSeconds,
 
 | | Image | Video of D seconds |
 |---|---|---|
-| Interstitial | 5 s | 0.8·D on screen or of playback, at least 5 s (a 3 s video: 5 s) |
+| Interstitial | 5 s | 0.8·D on screen or of playback, at least 5 s and at most 15 s (a 3 s video: 5 s; a 30 s video: 15 s) |
 | Rewarded | 20 s | end of the video; a stalled video: max(20, D) s on screen |
 
 There is no other cap. Once unlocked it stays unlocked; `videoEnded` and `videoFailed` are sticky.
@@ -200,25 +205,43 @@ was first shown.
   sent once the ad is off screen, or after the last retry. Known limitations: while the ad holds
   Unity paused, backgrounding the app does not reach the game's `OnApplicationPause`; ad audio
   follows the ringer/silent switch (Unity owns the audio session).
-- Black background; media aspect-fit and centered; tapping media = click.
-- Top-left: small "Ad" badge. Top-right: round close button (44 pt on iOS) showing the countdown
-  number while locked, `✕` when unlocked. Android back button closes only when unlocked.
+- Background: when the ad has an image (an image ad, or a video's poster), that image
+  aspect-filled edge to edge, blurred and darkened (iOS: `UIBlurEffectStyleDark` plus 35% black;
+  Android: shrunk to 40 px, box-blurred 3 times and dimmed to 50% at load, then scaled up), so a
+  4:5 cover image or a letterboxed video sits on its own colors. Black without an image. Media
+  aspect-fit and centered on it; tapping media = click.
+- Image-only ads (interstitial or rewarded with no usable video) show the image with the image
+  lock (`imageLockSeconds`: 5 s interstitial, 20 s rewarded); with no texts, logo or call to
+  action they have no info card and the image takes the whole safe area.
+- Top-left: the ad badge, `تبلیغ` ("ad"), black on yellow, on every format. Top-right: round
+  close button (44 pt on iOS) showing the countdown number while locked, `✕` when unlocked.
+  Android back button closes only when unlocked.
 - Video ads: a mute toggle next to the badge; sound on unless `startMuted`. The video pauses
   when the app goes to background or after a click, and resumes when the ad is visible again.
   When the video ends its player is released and never reopened; the ad keeps showing its image,
   or a copy of the last frame if there is no image, also after backgrounding. A resumed video
   continues from where it was left (Android API 26+ seeks to the exact position, not the previous
   key frame); playback progress never moves backwards.
-- Bottom bar (when any of logo/title/description/callToAction exists): logo (rounded, square),
-  title (bold, 1 line) and description (2 lines), then a call-to-action button. Text alignment is
-  natural and follows the text's first strong character, so right-to-left text lines up right.
+- Info card under the media (when any of logo/title/description/callToAction exists): a rounded
+  dark card, at most 520 dp/pt wide, 12 dp/pt from the safe-area edges. A row with the logo
+  (56, rounded, square), the title (bold 18, up to 2 lines) and the description (14, up to 3
+  lines); under it the call to action as a full-width button (at least 50 tall). No call to action
+  in the creative means no button (the media and texts stay clickable through the media).
+- Text direction: each label is aligned by its own first strong character, so Persian lines up
+  right and English left, and mixed text keeps its order. Rows (logo, texts, button) follow the
+  creative's direction: the title's, else the description's, else the call to action's; for a
+  right-to-left creative the logo is on the right. Android lays these rows out by hand, because a
+  game's manifest rarely declares `supportsRtl`. Wrapped lines get a little extra spacing so
+  Persian marks do not touch the line above. Fonts are the system's (no bundled fonts).
 - Click: open `clickUrl` with the system (Android `Intent.ACTION_VIEW` + `CATEGORY_BROWSABLE` +
   `FLAG_ACTIVITY_NEW_TASK`, catching `ActivityNotFoundException`; iOS
   `-[UIApplication openURL:options:completionHandler:]`). `clicked` is sent even if nothing opens.
   See *Click links* for which links are opened.
 - Accessibility identifiers / content descriptions: `soil_ad_close`, `soil_ad_cta`,
-  `soil_ad_media`, `soil_ad_mute`, `soil_ad_banner` (used by UI automation tests).
-- Accessibility (iOS): the banner and the fullscreen media read "Ad" or "Ad, <title>". While
+  `soil_ad_media`, `soil_ad_mute`, `soil_ad_banner`, and on Android `soil_ad_info` (the card) and
+  `soil_ad_backdrop` (used by UI automation tests).
+- Accessibility: the badge reads "Ad". On iOS the banner and the fullscreen media read "Ad" or
+  "Ad, <title>". While
   locked, the close button is marked not enabled and its value is the countdown; when it unlocks
   it becomes a plain "Close" button and screen-reader focus moves to it.
 
@@ -252,8 +275,12 @@ scheme is never opened.
 - Android: `activity.addContentView(view, FrameLayout.LayoutParams(MATCH_PARENT, h, gravity))`,
   top/bottom margins from the display cutout and visible system-bar insets. iOS: subview of Unity's root view
   controller view, Auto Layout against `safeAreaLayoutGuide`.
-- With an image: the image aspect-fit on a dark background. Without: logo, title/description and
-  call-to-action laid out in a row. Small "Ad" badge in a corner. The whole banner is clickable.
+- With an image: the image aspect-fit and centered at the banner's height, with the `تبلیغ`
+  badge on the image's top-left corner. The rest of the banner (the sides of a 320x50 image on a
+  wider screen) shows the same image filled, blurred and darkened, as behind fullscreen ads; the
+  banner's size never changes. Without: logo, title/description and call-to-action laid out in a row that follows the
+  creative's direction (logo on the right for Persian), with the badge before the title on its
+  line, clear of the logo and button. The whole banner is clickable.
 - The banner never steals touches outside its own rectangle.
 
 ## Unity-side watchdogs

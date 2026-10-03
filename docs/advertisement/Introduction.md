@@ -30,8 +30,10 @@ Demo scene: `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample
 - Android 5.1 (API 22) or newer — no extra Gradle dependencies.
 - iOS 12 or newer — no CocoaPods.
 - Android builds with minification (R8) keep the player automatically: the SDK adds its keep rule to Unity's `proguard-unity.txt`.
+- Android Target API Level must be Automatic or 33+ (the player is compiled against Android 13 APIs; it still runs on API 22+). The build logs an error if it is set lower.
 - Desktop, WebGL and consoles: no banner, interstitial or rewarded ads (they answer no fill); native ads work.
 - How the native players work, and the contract between C# and them: [`NativeAds/PROTOCOL.md`](../../NativeAds/PROTOCOL.md).
+- The whole picture for maintainers (architecture, libraries, testing, debugging): [`NativePlayersOverview.md`](NativePlayersOverview.md).
 
 ## Dependencies
 

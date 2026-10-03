@@ -248,7 +248,7 @@ Advertisement.ShowAd(AdFormat.banner);
 Advertisement.ShowBanner(AdPosition.BottomCenter);
 ```
 
-A banner with an image shows the image; one without shows the advertiser's logo, title and call to action. Tapping anywhere on it opens the ad.
+A banner with an image shows the image centered, at the banner's height. On screens wider than the image, the sides show a blurred copy of it instead of black bars. A banner without an image shows the advertiser's logo, title and call to action. Tapping anywhere on it opens the ad. Every banner carries the `تبلیغ` ("ad") badge: on the image's corner, or before the title. The banner's size is the standard one either way.
 
 ### Interstitial Ads
 
@@ -260,6 +260,17 @@ if (Advertisement.IsFormatReady(AdFormat.interstitial))
     Advertisement.ShowAd(AdFormat.interstitial);
 }
 ```
+
+### How Fullscreen Ads Look
+
+Interstitial and rewarded ads look the same. The ad's video, or its image for image-only ads, fills the screen above an info card. Behind it is a blurred, darkened copy of the image, so the 4:5 cover image or a video that doesn't match the screen's shape never sits on black bars.
+
+- **Badge and controls.** The `تبلیغ` badge is top-left; the close button with its countdown is top-right. Video ads also get a mute button.
+- **Info card.** It holds the advertiser's logo, title and description, plus a full-width call-to-action button. The card is left out when the ad has none of these, so an image-only ad shows just its image. An ad without call-to-action text has no button; tapping the media still opens the ad.
+- **Persian and English.** Ad texts may be in either language. Each line aligns itself by its own text: Persian right, English left, and mixed text keeps its order. A Persian ad also puts its logo on the right.
+- **Fonts and layout.** Fonts are the system's. The layout is the same on Android and iOS.
+
+<img src="../images/AdPlayers.jpg" width="900" alt="Soil ads on iOS and Android: fullscreen image-only, Persian and English info cards, video; image and text banners" />
 
 ### Rewarded Ads
 
@@ -291,10 +302,10 @@ Fullscreen ads keep their close button locked for a moment, showing a countdown;
 
 | | Image ad | Video ad |
 |---|---|---|
-| Interstitial | after 5 s on screen | at 80% of the video, never under 5 s (a 3 s video still waits 5 s) |
+| Interstitial | after 5 s on screen | at 80% of the video, never under 5 s and never over 15 s (a 3 s video still waits 5 s; a 30 s video unlocks at 15 s) |
 | Rewarded | after 20 s on screen | at the end of the video (a 3 s video rewards at 3 s) |
 
-These are the same times the SDK always used. Only time the ad is actually visible counts: the countdown stops while the app is in the background or the player has left to the advertiser's page. If a video stalls or fails, the ad shows its image and the close button still unlocks when the countdown ends (interstitial: 5 s or 80% of the video; rewarded: 20 s or the video's length, whichever is longer). Android's back button closes an ad only once it is unlocked. Video ads have a mute button and start with sound on (on iOS the device's silent switch is respected, as for the game).
+These are the times the SDK always used, with one change: an interstitial can always be closed after 15 s, as Google Play requires; rewarded ads are opt-in and keep the whole video. Only time the ad is actually visible counts: the countdown stops while the app is in the background or the player has left to the advertiser's page. If a video stalls or fails, the ad shows its image and the close button still unlocks when the countdown ends (interstitial: 5 s or 80% of the video, at most 15 s; rewarded: 20 s or the video's length, whichever is longer). Android's back button closes an ad only once it is unlocked. Video ads have a mute button and start with sound on (on iOS the device's silent switch is respected, as for the game).
 
 ### Native Ads
 
