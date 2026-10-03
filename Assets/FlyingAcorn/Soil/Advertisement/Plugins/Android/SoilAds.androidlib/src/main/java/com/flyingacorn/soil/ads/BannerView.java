@@ -127,50 +127,74 @@ final class BannerView extends FrameLayout {
 
     private void buildContent() {
         if (ad.image != null) {
+            // Behind the image: the same image, filled, blurred and darkened (see Backdrop), so a
+            // 320x50 picture on a wider screen does not sit between black bars.
+            if (ad.backdrop != null) {
+                ImageView backdrop = new ImageView(getContext());
+                backdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                backdrop.setImageBitmap(ad.backdrop);
+                backdrop.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+                addView(backdrop, new LayoutParams(-1, -1));
+            }
+            // The image itself, aspect-fit and centered, with the badge on its corner.
+            FrameLayout framed = new FrameLayout(getContext());
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setAdjustViewBounds(true); // as wide as the image at the banner's height
             image.setImageBitmap(ad.image);
-            addView(image, new LayoutParams(-1, -1));
+            framed.addView(image, new LayoutParams(-2, -1));
+            LayoutParams badgeParams = new LayoutParams(-2, -2, Gravity.TOP | Gravity.LEFT);
+            badgeParams.setMargins(Ui.dp(getContext(), 2), Ui.dp(getContext(), 2), 0, 0);
+            framed.addView(Ui.badge(getContext(), 9 * scale), badgeParams);
+            addView(framed, new LayoutParams(-2, -1, Gravity.CENTER));
         } else {
-            addView(buildRow(), new LayoutParams(-1, -1));
+            addView(buildRow(), new LayoutParams(-1, -1)); // the badge goes before the title
         }
-        LayoutParams badgeParams = new LayoutParams(-2, -2, Gravity.TOP | Gravity.LEFT);
-        badgeParams.setMargins(Ui.dp(getContext(), 2), Ui.dp(getContext(), 2), 0, 0);
-        addView(Ui.badge(getContext(), 8 * scale), badgeParams);
     }
 
     private View buildRow() {
         AdCreative creative = ad.creative;
+        boolean rtl = Ui.creativeIsRightToLeft(creative);
         int padding = Ui.dp(getContext(), 6 * scale);
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(padding * 2, padding, padding, padding);
+        int side = Ui.dp(getContext(), 8 * scale);
+        row.setPadding(side, padding, side, padding);
 
+        View logo = null;
+        int logoSide = 0;
         if (ad.logo != null) {
-            int size = Ui.dp(getContext(), (isTablet() ? 90 : 50) - 12 * scale);
-            LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(size, size);
-            logoParams.setMarginEnd(padding);
-            row.addView(Ui.roundedImage(getContext(), ad.logo, 6 * scale), logoParams);
+            logoSide = Ui.dp(getContext(), (isTablet() ? 90 : 50) - 12 * scale);
+            logo = Ui.roundedImage(getContext(), ad.logo, 6 * scale);
         }
         LinearLayout texts = new LinearLayout(getContext());
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.setGravity(Gravity.CENTER_VERTICAL);
-        if (creative.title != null) {
-            texts.addView(Ui.naturalText(getContext(), creative.title, 14 * scale, 0xFFFFFFFF, true, 1),
-                    new LinearLayout.LayoutParams(-1, -2));
-        }
+        LinearLayout headline = new LinearLayout(getContext());
+        headline.setOrientation(LinearLayout.HORIZONTAL);
+        headline.setGravity(Gravity.CENTER_VERTICAL);
+        View title = creative.title == null ? new View(getContext())
+                : Ui.naturalText(getContext(), creative.title, 14 * scale, 0xFFFFFFFF, true, 1);
+        Ui.addInReadingOrder(headline, rtl, Ui.dp(getContext(), 6 * scale),
+                new View[]{Ui.badge(getContext(), 9 * scale), title},
+                new LinearLayout.LayoutParams[]{
+                        new LinearLayout.LayoutParams(-2, -2),
+                        new LinearLayout.LayoutParams(0, -2, 1f)});
+        texts.addView(headline, new LinearLayout.LayoutParams(-1, -2));
         if (creative.description != null) {
-            texts.addView(Ui.naturalText(getContext(), creative.description, 11 * scale, 0xCCFFFFFF, false, 1),
+            texts.addView(Ui.naturalText(getContext(), creative.description, 11 * scale, 0xB8FFFFFF, false, 1),
                     new LinearLayout.LayoutParams(-1, -2));
         }
-        row.addView(texts, new LinearLayout.LayoutParams(0, -1, 1f));
-        if (creative.callToAction != null) {
-            // Not clickable itself: the tap falls through to the banner, which handles it.
-            LinearLayout.LayoutParams ctaParams = new LinearLayout.LayoutParams(-2, -2);
-            ctaParams.setMarginStart(padding);
-            row.addView(Ui.ctaButton(getContext(), creative.callToAction, 13 * scale), ctaParams);
-        }
+        // Not clickable itself: the tap falls through to the banner, which handles it.
+        View cta = creative.callToAction == null ? null
+                : Ui.compactCtaButton(getContext(), creative.callToAction, 13 * scale);
+        // Logo, texts and button run in the text's direction: the logo on the right for Persian.
+        Ui.addInReadingOrder(row, rtl, padding, new View[]{logo, texts, cta},
+                new LinearLayout.LayoutParams[]{
+                        new LinearLayout.LayoutParams(logoSide, logoSide),
+                        new LinearLayout.LayoutParams(0, -1, 1f),
+                        new LinearLayout.LayoutParams(-2, -2)});
         return row;
     }
 

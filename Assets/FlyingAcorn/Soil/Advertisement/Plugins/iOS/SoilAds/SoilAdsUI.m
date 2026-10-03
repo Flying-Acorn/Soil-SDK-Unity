@@ -5,6 +5,24 @@ NSString *const SoilAdsIdCallToAction = @"soil_ad_cta";
 NSString *const SoilAdsIdMedia = @"soil_ad_media";
 NSString *const SoilAdsIdMute = @"soil_ad_mute";
 NSString *const SoilAdsIdBanner = @"soil_ad_banner";
+NSString *const SoilAdsBadgeText = @"\u062A\u0628\u0644\u06CC\u063A"; // تبلیغ
+
+/// A label with padding around its text, for the badge.
+@interface SoilAdsBadgeLabel : UILabel
+@property (nonatomic) UIEdgeInsets insets;
+@end
+
+@implementation SoilAdsBadgeLabel
+- (CGSize)intrinsicContentSize
+{
+    CGSize size = [super intrinsicContentSize];
+    return CGSizeMake(ceil(size.width + _insets.left + _insets.right), ceil(size.height + _insets.top + _insets.bottom));
+}
+- (void)drawTextInRect:(CGRect)rect
+{
+    [super drawTextInRect:UIEdgeInsetsInsetRect(rect, _insets)];
+}
+@end
 
 /// Unicode blocks whose letters are strong right-to-left (bidi classes R / AL).
 static BOOL SoilAdsIsRightToLeftCodePoint(UTF32Char c)
@@ -47,8 +65,11 @@ void SoilAdsSetDirectionalText(UILabel *label, NSString *text)
     style.alignment = rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
     style.baseWritingDirection = rtl ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
     style.lineBreakMode = NSLineBreakByTruncatingTail;
+    UIFont *font = label.font ? label.font : [UIFont systemFontOfSize:14];
+    // Wrapped lines get some air: Persian's tall marks crowd the line above at the default spacing.
+    if (label.numberOfLines != 1) style.lineSpacing = round(font.pointSize * 0.2);
     NSDictionary *attributes = @{
-        NSFontAttributeName: label.font ? label.font : [UIFont systemFontOfSize:14],
+        NSFontAttributeName: font,
         NSForegroundColorAttributeName: label.textColor ? label.textColor : [UIColor whiteColor],
         NSParagraphStyleAttributeName: style,
     };
@@ -59,6 +80,21 @@ void SoilAdsSetDirectionalText(UILabel *label, NSString *text)
     label.hidden = text.length == 0;
 }
 
+BOOL SoilAdsCreativeIsRightToLeft(NSString *title, NSString *adDescription, NSString *callToAction)
+{
+    NSString *texts[] = {title, adDescription, callToAction};
+    for (size_t i = 0; i < sizeof(texts) / sizeof(texts[0]); i++) {
+        NSString *text = texts[i];
+        if ([text isKindOfClass:[NSString class]] && text.length > 0) return SoilAdsTextIsRightToLeft(text);
+    }
+    return NO;
+}
+
+UISemanticContentAttribute SoilAdsSemanticAttribute(BOOL rightToLeft)
+{
+    return rightToLeft ? UISemanticContentAttributeForceRightToLeft : UISemanticContentAttributeForceLeftToRight;
+}
+
 NSString *SoilAdsAccessibilityLabel(NSString *title)
 {
     if (![title isKindOfClass:[NSString class]] || title.length == 0) return @"Ad";
@@ -67,16 +103,20 @@ NSString *SoilAdsAccessibilityLabel(NSString *title)
 
 UILabel *SoilAdsMakeBadge(CGFloat fontSize)
 {
-    UILabel *badge = [[UILabel alloc] init];
+    SoilAdsBadgeLabel *badge = [[SoilAdsBadgeLabel alloc] init];
     badge.translatesAutoresizingMaskIntoConstraints = NO;
-    badge.text = @" Ad ";
-    badge.font = [UIFont boldSystemFontOfSize:fontSize];
+    badge.insets = UIEdgeInsetsMake(round(fontSize * 0.15), round(fontSize * 0.5),
+                                    round(fontSize * 0.15), round(fontSize * 0.5));
+    badge.text = SoilAdsBadgeText;
+    badge.font = [UIFont systemFontOfSize:fontSize weight:UIFontWeightBold];
     badge.textColor = [UIColor blackColor];
     badge.backgroundColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.2 alpha:1.0];
-    badge.layer.cornerRadius = 3;
+    badge.layer.cornerRadius = round(fontSize * 0.4);
     badge.layer.masksToBounds = YES;
     badge.textAlignment = NSTextAlignmentCenter;
     badge.accessibilityLabel = @"Ad";
+    [badge setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [badge setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     return badge;
 }
 
@@ -89,18 +129,29 @@ void SoilAdsSetButtonPadding(UIButton *button, UIEdgeInsets insets)
 #pragma clang diagnostic pop
 }
 
+UIColor *SoilAdsCallToActionColor(void)
+{
+    return [UIColor colorWithRed:0.04 green:0.52 blue:1.0 alpha:1.0];
+}
+
 UIButton *SoilAdsMakeCallToActionButton(NSString *title, CGFloat fontSize)
 {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     [button setTitle:title forState:UIControlStateNormal];
     [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont boldSystemFontOfSize:fontSize];
+    button.titleLabel.font = [UIFont systemFontOfSize:fontSize weight:UIFontWeightSemibold];
     button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    button.backgroundColor = [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0];
+    button.backgroundColor = SoilAdsCallToActionColor();
     button.layer.cornerRadius = 8;
     SoilAdsSetButtonPadding(button, UIEdgeInsetsMake(8, 14, 8, 14));
     button.accessibilityIdentifier = SoilAdsIdCallToAction;
+    return button;
+}
+
+UIButton *SoilAdsMakeCompactCallToActionButton(NSString *title, CGFloat fontSize)
+{
+    UIButton *button = SoilAdsMakeCallToActionButton(title, fontSize);
     [button setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [button setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh + 1
                                             forAxis:UILayoutConstraintAxisHorizontal];

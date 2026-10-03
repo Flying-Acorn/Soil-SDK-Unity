@@ -13,15 +13,22 @@ final class LoadedAd {
     final long durationMs;
     final Bitmap image;
     final Bitmap logo;
+    /** The blurred image behind the media (see {@link Backdrop}); null without an image. */
+    final Bitmap backdrop;
 
     private int references = 1;
 
     LoadedAd(AdCreative creative, String media, long durationMs, Bitmap image, Bitmap logo) {
+        this(creative, media, durationMs, image, logo, null);
+    }
+
+    LoadedAd(AdCreative creative, String media, long durationMs, Bitmap image, Bitmap logo, Bitmap backdrop) {
         this.creative = creative;
         this.media = media;
         this.durationMs = durationMs;
         this.image = image;
         this.logo = logo;
+        this.backdrop = backdrop;
     }
 
     boolean isVideo() {
@@ -37,6 +44,7 @@ final class LoadedAd {
         if (--references > 0) return;
         if (image != null) image.recycle();
         if (logo != null) logo.recycle();
+        if (backdrop != null) backdrop.recycle();
     }
 
     boolean isReleased() {

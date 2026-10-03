@@ -281,6 +281,8 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         #region Drawing
 
         private const string VideoLabel = "▶ Video ad (simulated 6 s in the Editor)";
+        /// <summary>The badge every Soil ad carries, as the native players draw it: Persian for "ad".</summary>
+        internal const string BadgeText = "تبلیغ";
 
         // Built once per Game view size, never per GUI call.
         private GUIStyle _text, _title, _button, _badge, _textRtl, _titleLine, _titleLineRtl, _videoTitle;
@@ -357,13 +359,16 @@ namespace FlyingAcorn.Soil.Advertisement.Player
 
             var bar = new Rect(0, Screen.height - barHeight, Screen.width, barHeight);
             Fill(bar, new Color(0.07f, 0.07f, 0.07f));
+            // Like the native players: a call-to-action button only when the ad has one.
+            var hasCallToAction = !string.IsNullOrEmpty(creative.CallToAction);
             var cta = new Rect(bar.xMax - Unit * 7.5f, bar.y + (barHeight - Unit * 2.2f) / 2, Unit * 6.5f, Unit * 2.2f);
-            DrawTexts(new Rect(bar.x + Unit, bar.y + Unit * 0.6f, cta.x - bar.x - Unit * 2, barHeight - Unit * 1.2f),
+            var textsRight = hasCallToAction ? cta.x - Unit : bar.xMax - Unit;
+            DrawTexts(new Rect(bar.x + Unit, bar.y + Unit * 0.6f, textsRight - bar.x - Unit, barHeight - Unit * 1.2f),
                 creative, 2);
-            if (GUI.Button(cta, Shape(string.IsNullOrEmpty(creative.CallToAction) ? "Open" : creative.CallToAction), _button))
+            if (hasCallToAction && GUI.Button(cta, Shape(creative.CallToAction), _button))
                 PressCallToAction();
 
-            Badge(new Vector2(Unit, Unit), "Ad (Editor)");
+            Badge(new Vector2(Unit, Unit), Shape(BadgeText) + "  (Editor)");
             var size = Unit * 2.2f;
             var close = new Rect(Screen.width - size - Unit, Unit, size, size);
             if (p.Unlocked)
@@ -396,8 +401,9 @@ namespace FlyingAcorn.Soil.Advertisement.Player
                 Shape(creative.Description), text);
         }
 
-        private void Badge(Vector2 at, string label = "Ad")
+        private void Badge(Vector2 at, string label = null)
         {
+            label ??= Shape(BadgeText);
             if (!_badgeContents.TryGetValue(label, out var content))
                 _badgeContents[label] = content = new GUIContent(label);
             var size = _badge.CalcSize(content);

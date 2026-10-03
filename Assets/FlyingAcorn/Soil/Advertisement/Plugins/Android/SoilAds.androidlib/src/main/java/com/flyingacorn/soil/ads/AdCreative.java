@@ -30,10 +30,6 @@ final class AdCreative {
         return o == null ? null : new AdCreative(o);
     }
 
-    boolean hasBottomBarText() {
-        return title != null || description != null || callToAction != null;
-    }
-
     private static String string(JSONObject o, String key) {
         if (o.isNull(key)) return null;
         String value = o.optString(key, "").trim();

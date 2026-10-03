@@ -51,6 +51,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     private TextureView textureView;
     private ImageView imageView;
     private ImageView logoView;
+    private ImageView backdropView;
     private TextView closeButton;
     private TextView muteButton;
 
@@ -123,6 +124,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         }
         if (imageView != null) imageView.setImageDrawable(null);
         if (logoView != null) logoView.setImageDrawable(null);
+        if (backdropView != null) backdropView.setImageDrawable(null);
         unregisterBackCallback();
         FullscreenSession current = session;
         session = null;
@@ -186,6 +188,15 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     private View buildLayout() {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
+        if (session.ad.backdrop != null) {
+            // Edge to edge, under the cutout and bars too; see Backdrop.
+            backdropView = new ImageView(this);
+            backdropView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            backdropView.setImageBitmap(session.ad.backdrop);
+            backdropView.setContentDescription("soil_ad_backdrop");
+            backdropView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            root.addView(backdropView, new FrameLayout.LayoutParams(-1, -1));
+        }
         content = new FrameLayout(this);
         root.addView(content, new FrameLayout.LayoutParams(-1, -1));
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -203,8 +214,14 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         column.setOrientation(LinearLayout.VERTICAL);
         content.addView(column, new FrameLayout.LayoutParams(-1, -1));
         column.addView(buildMedia(), new LinearLayout.LayoutParams(-1, 0, 1f));
-        View bottomBar = buildBottomBar();
-        if (bottomBar != null) column.addView(bottomBar, new LinearLayout.LayoutParams(-1, -2));
+        View infoCard = buildInfoCard();
+        if (infoCard != null) {
+            int cardMargin = Ui.dp(this, 12);
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+            cardParams.gravity = Gravity.CENTER_HORIZONTAL;
+            cardParams.setMargins(cardMargin, cardMargin, cardMargin, cardMargin);
+            column.addView(infoCard, cardParams);
+        }
 
         int margin = Ui.dp(this, 12);
         LinearLayout topLeft = new LinearLayout(this);
@@ -258,6 +275,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         // An ended video is never reopened: its last frame (or the image) stays on screen.
         if (session.ad.isVideo() && !session.videoFailed && !session.videoEnded) {
             textureView = new TextureView(this);
+            textureView.setOpaque(false); // the backdrop shows around an aspect-fit video
             textureView.setSurfaceTextureListener(this);
             textureView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
                 @Override
@@ -275,46 +293,86 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         return media;
     }
 
-    private View buildBottomBar() {
+    /**
+     * A rounded card: logo, title and description in a row that follows the text's direction (the
+     * logo on the right for Persian), and the call to action as a full-width button under it.
+     * Null when the ad has none of them.
+     */
+    private View buildInfoCard() {
         AdCreative creative = session.ad.creative;
-        if (session.ad.logo == null && !creative.hasBottomBarText()) return null;
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(0xFF121212);
-        int padding = Ui.dp(this, 12);
-        bar.setPadding(padding, padding, padding, padding);
+        boolean hasText = creative.title != null || creative.description != null;
+        boolean hasHeader = hasText || session.ad.logo != null;
+        if (!hasHeader && creative.callToAction == null) return null;
+        boolean rtl = Ui.creativeIsRightToLeft(creative);
 
-        if (session.ad.logo != null) {
-            logoView = Ui.roundedImage(this, session.ad.logo, 10);
-            LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48));
-            logoParams.setMarginEnd(padding);
-            bar.addView(logoView, logoParams);
+        LinearLayout card = new MaxWidthLinearLayout(this, Ui.dp(this, 520));
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(Ui.rounded(0xF01C1C1F, Ui.dp(this, 18)));
+        int padding = Ui.dp(this, 16);
+        card.setPadding(padding, padding, padding, padding);
+        card.setContentDescription("soil_ad_info");
+
+        if (hasHeader) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            View logo = null;
+            if (session.ad.logo != null) {
+                logoView = Ui.roundedImage(this, session.ad.logo, 12);
+                logo = logoView;
+            }
+            LinearLayout texts = null;
+            if (hasText) {
+                texts = new LinearLayout(this);
+                texts.setOrientation(LinearLayout.VERTICAL);
+                if (creative.title != null) {
+                    texts.addView(Ui.naturalText(this, creative.title, 18, 0xFFFFFFFF, true, 2),
+                            new LinearLayout.LayoutParams(-1, -2));
+                }
+                if (creative.description != null) {
+                    LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+                    if (creative.title != null) bodyParams.topMargin = Ui.dp(this, 4);
+                    texts.addView(Ui.naturalText(this, creative.description, 14, 0xB8FFFFFF, false, 3), bodyParams);
+                }
+            }
+            int logoSide = Ui.dp(this, 56);
+            Ui.addInReadingOrder(row, rtl, Ui.dp(this, 12), new View[]{logo, texts},
+                    new LinearLayout.LayoutParams[]{
+                            new LinearLayout.LayoutParams(logoSide, logoSide),
+                            new LinearLayout.LayoutParams(0, -2, 1f)});
+            card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
-        LinearLayout texts = new LinearLayout(this);
-        texts.setOrientation(LinearLayout.VERTICAL);
-        if (creative.title != null) {
-            texts.addView(Ui.naturalText(this, creative.title, 16, 0xFFFFFFFF, true, 1),
-                    new LinearLayout.LayoutParams(-1, -2));
-        }
-        if (creative.description != null) {
-            texts.addView(Ui.naturalText(this, creative.description, 13, 0xCCFFFFFF, false, 2),
-                    new LinearLayout.LayoutParams(-1, -2));
-        }
-        bar.addView(texts, new LinearLayout.LayoutParams(0, -2, 1f));
         if (creative.callToAction != null) {
-            TextView cta = Ui.ctaButton(this, creative.callToAction, 15);
+            TextView cta = Ui.ctaButton(this, creative.callToAction, 17);
+            cta.setMinHeight(Ui.dp(this, 50));
             cta.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     onAdClicked();
                 }
             });
-            LinearLayout.LayoutParams ctaParams = new LinearLayout.LayoutParams(-2, -2);
-            ctaParams.setMarginStart(padding);
-            bar.addView(cta, ctaParams);
+            LinearLayout.LayoutParams ctaParams = new LinearLayout.LayoutParams(-1, -2);
+            if (hasHeader) ctaParams.topMargin = Ui.dp(this, 14);
+            card.addView(cta, ctaParams);
         }
-        return bar;
+        return card;
+    }
+
+    /** A LinearLayout no wider than {@code maxWidthPx}: a readable card on tablets and in landscape. */
+    private static final class MaxWidthLinearLayout extends LinearLayout {
+        private final int maxWidthPx;
+
+        MaxWidthLinearLayout(android.content.Context context, int maxWidthPx) {
+            super(context);
+            this.maxWidthPx = maxWidthPx;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int width = MeasureSpec.getSize(widthMeasureSpec);
+            if (width > maxWidthPx) widthMeasureSpec = MeasureSpec.makeMeasureSpec(maxWidthPx, MeasureSpec.EXACTLY);
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
     }
 
     private TextView roundButton(String text, float sp) {

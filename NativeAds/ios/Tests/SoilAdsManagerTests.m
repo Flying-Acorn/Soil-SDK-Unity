@@ -307,7 +307,7 @@ static UILabel *FindLabel(UIView *view, NSString *text)
 
 #pragma mark - Fullscreen
 
-- (void)testLongCallToActionLeavesRoomForTheTitle
+- (void)testLongCallToActionGetsItsOwnRow
 {
     NSMutableDictionary *fields = [[self imageAd] mutableCopy];
     fields[@"callToAction"] = @"دانلود و نصب رایگان همین حالا با تخفیف ویژه امروز";
@@ -316,13 +316,21 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
     [vc.view layoutIfNeeded];
 
-    XCTAssertLessThanOrEqual(vc.callToActionButton.frame.size.width, 160.5);
+    UIView *card = vc.infoCard;
+    CGRect button = [vc.callToActionButton convertRect:vc.callToActionButton.bounds toView:card];
+    XCTAssertEqualWithAccuracy(button.size.width, card.bounds.size.width - 32, 0.5, @"full width inside the card");
+    XCTAssertGreaterThanOrEqual(button.size.height, 50);
     UILabel *title = FindLabel(vc.view, @"Word Master");
     XCTAssertNotNil(title);
-    XCTAssertGreaterThan(title.frame.size.width, 80, @"the title keeps readable room");
+    CGRect titleFrame = [title convertRect:title.bounds toView:card];
+    XCTAssertLessThanOrEqual(CGRectGetMaxY(titleFrame), CGRectGetMinY(button), @"the button sits under the texts");
+    XCTAssertGreaterThan(title.frame.size.width, 150, @"the title keeps the row");
+    CGRect safe = vc.view.safeAreaLayoutGuide.layoutFrame;
+    XCTAssertTrue(CGRectContainsRect(safe, card.frame), @"the card stays on screen: %@ in %@",
+                  NSStringFromCGRect(card.frame), NSStringFromCGRect(safe));
 }
 
-- (void)testMediaFillsTheScreenAndTheBottomBarHugsItsContent
+- (void)testMediaFillsTheScreenAndTheInfoCardHugsItsContent
 {
     [self load:@"interstitial" fields:[self imageAd]];
     [self showFullscreen:@"interstitial" options:[self fullscreenOptions:5 fraction:0.8 minVideo:5]];
@@ -330,12 +338,122 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     [vc.view layoutIfNeeded];
 
     CGFloat screen = vc.view.safeAreaLayoutGuide.layoutFrame.size.height;
-    CGFloat bar = vc.callToActionButton.superview.superview.frame.size.height;
-    XCTAssertGreaterThan(bar, 0);
-    XCTAssertLessThan(bar, 120, @"the bar is as tall as its content, not stretched");
-    XCTAssertGreaterThan(vc.mediaView.frame.size.height, screen * 0.7, @"the media takes the rest of the screen");
+    CGFloat card = vc.infoCard.frame.size.height;
+    XCTAssertGreaterThan(card, 0);
+    XCTAssertLessThan(card, 200, @"the card is as tall as its content, not stretched");
+    XCTAssertGreaterThan(vc.mediaView.frame.size.height, screen * 0.6, @"the media takes the rest of the screen");
 }
 
+- (void)testInfoCardFollowsTheTextDirection
+{
+    NSMutableDictionary *fields = [[self imageAd] mutableCopy];
+    fields[@"title"] = @"واژه‌باف";
+    fields[@"description"] = @"بازی حدس کلمه";
+    fields[@"callToAction"] = @"نصب";
+    [self load:@"interstitial" fields:fields];
+    [self showFullscreen:@"interstitial" options:[self fullscreenOptions:5 fraction:0.8 minVideo:5]];
+    SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
+    [vc.view layoutIfNeeded];
+
+    UILabel *title = FindLabel(vc.view, @"واژه‌باف");
+    UIImageView *logo = nil;
+    for (UIView *view in title.superview.superview.subviews) {
+        if ([view isKindOfClass:[UIImageView class]]) logo = (UIImageView *)view;
+    }
+    XCTAssertNotNil(logo);
+    CGRect titleFrame = [title convertRect:title.bounds toView:vc.infoCard];
+    CGRect logoFrame = [logo convertRect:logo.bounds toView:vc.infoCard];
+    XCTAssertGreaterThan(CGRectGetMinX(logoFrame), CGRectGetMaxX(titleFrame), @"Persian: the logo is on the right");
+    XCTAssertEqual(title.textAlignment, NSTextAlignmentRight);
+}
+
+- (void)testInfoCardLeftToRightForEnglish
+{
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:[self fullscreenOptions:5 fraction:0.8 minVideo:5]];
+    SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
+    [vc.view layoutIfNeeded];
+
+    UILabel *title = FindLabel(vc.view, @"Word Master");
+    UIImageView *logo = nil;
+    for (UIView *view in title.superview.superview.subviews) {
+        if ([view isKindOfClass:[UIImageView class]]) logo = (UIImageView *)view;
+    }
+    XCTAssertNotNil(logo);
+    CGRect titleFrame = [title convertRect:title.bounds toView:vc.infoCard];
+    CGRect logoFrame = [logo convertRect:logo.bounds toView:vc.infoCard];
+    XCTAssertLessThan(CGRectGetMaxX(logoFrame), CGRectGetMinX(titleFrame), @"English: the logo is on the left");
+    XCTAssertEqual(title.textAlignment, NSTextAlignmentLeft);
+}
+
+- (void)testImageOnlyAdHasNoCardAndABlurredBackdrop
+{
+    [self load:@"rewarded" fields:@{@"imagePath": SoilAdsResource(@"image.png")}];
+    [self showFullscreen:@"rewarded" options:nil];
+    SoilAdsFullscreenViewController *vc = self.manager.fullscreenController;
+    [vc.view layoutIfNeeded];
+
+    XCTAssertNil(vc.infoCard);
+    XCTAssertNil(vc.callToActionButton);
+    XCTAssertNotNil(vc.backdropView);
+    XCTAssertEqual(vc.backdropView.contentMode, UIViewContentModeScaleAspectFill);
+    XCTAssertTrue(CGRectEqualToRect(vc.backdropView.frame, vc.view.bounds), @"the backdrop fills the screen");
+    CGFloat safeHeight = vc.view.safeAreaLayoutGuide.layoutFrame.size.height;
+    XCTAssertEqualWithAccuracy(vc.mediaView.frame.size.height, safeHeight, 0.5, @"no card: the media takes it all");
+    XCTAssertFalse(vc.lockPolicy.isVideo);
+    XCTAssertEqualWithAccuracy(vc.lockPolicy.settings.imageLockSeconds, 20, 0.001, @"rewarded image: 20 s");
+    XCTAssertGreaterThanOrEqual(vc.lockPolicy.secondsRemaining, 19);
+}
+
+- (void)testVideoWithoutImageHasNoBackdrop
+{
+    [self load:@"interstitial" fields:@{@"videoPath": SoilAdsResource(@"video.mp4")}];
+    [self showFullscreen:@"interstitial" options:nil];
+    XCTAssertNil(self.manager.fullscreenController.backdropView);
+}
+
+- (void)testImageBannerKeepsTheStandardSizeWithABlurredFillAndTheBadgeOnTheImage
+{
+    [self load:@"banner" fields:@{@"imagePath": SoilAdsResource(@"image.png"), @"title": @"Word Master"}];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    SoilAdsBannerView *banner = self.manager.bannerView;
+    [self.root.view layoutIfNeeded];
+    XCTAssertEqualWithAccuracy(banner.frame.size.height, [SoilAdsBannerView heightForHostView:self.root.view], 0.5);
+    XCTAssertEqualWithAccuracy(banner.frame.size.width, self.root.view.safeAreaLayoutGuide.layoutFrame.size.width, 0.5);
+    UIImageView *image = nil;
+    BOOL blurred = NO;
+    for (UIView *view in banner.subviews) {
+        if ([view isKindOfClass:[UIVisualEffectView class]]) blurred = YES;
+        if ([view isKindOfClass:[UIImageView class]] && ((UIImageView *)view).contentMode == UIViewContentModeScaleAspectFit)
+            image = (UIImageView *)view;
+    }
+    XCTAssertTrue(blurred, @"the sides are a blurred copy, not black bars");
+    XCTAssertNotNil(image);
+    XCTAssertLessThanOrEqual(image.frame.size.height, banner.bounds.size.height + 0.5);
+    XCTAssertEqualWithAccuracy(image.frame.size.width / image.frame.size.height, 640.0 / 960.0, 0.01, @"aspect-fit");
+    XCTAssertEqualWithAccuracy(CGRectGetMidX(image.frame), CGRectGetMidX(banner.bounds), 0.5, @"centered");
+    UILabel *badge = FindLabel(banner, @"تبلیغ");
+    XCTAssertNotNil(badge);
+    XCTAssertTrue(CGRectContainsRect(image.frame, badge.frame), @"the badge sits on the image");
+}
+
+- (void)testBadgeSaysAdInPersian
+{
+    XCTAssertEqualObjects(SoilAdsBadgeText, @"تبلیغ");
+    UILabel *badge = SoilAdsMakeBadge(12);
+    XCTAssertEqualObjects(badge.text, @"تبلیغ");
+    XCTAssertEqualObjects(badge.accessibilityLabel, @"Ad");
+    CGSize size = badge.intrinsicContentSize;
+    CGSize text = [@"تبلیغ" sizeWithAttributes:@{NSFontAttributeName: badge.font}];
+    XCTAssertGreaterThan(size.width, text.width + 8, @"padded");
+
+    [self load:@"interstitial" fields:[self imageAd]];
+    [self showFullscreen:@"interstitial" options:nil];
+    XCTAssertNotNil(FindLabel(self.manager.fullscreenController.view, @"تبلیغ"));
+    [self load:@"banner" fields:@{@"title": @"Word Master"}];
+    [self.manager showFormat:@"banner" optionsJSON:nil];
+    XCTAssertNotNil(FindLabel(self.manager.bannerView, @"تبلیغ"));
+}
 
 - (void)testFullscreenShowPresentsAndConsumesTheSlot
 {
@@ -886,6 +1004,8 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     XCTAssertEqualObjects([SoilAdsManager clickURLFromString:@"\u00a0https://example.com/x\u2003"].absoluteString,
                           @"https://example.com/x", @"Unicode spaces are trimmed too");
     XCTAssertNil([SoilAdsManager clickURLFromString:@"https://exa\nmple.com"], @"control characters are refused");
+    for (NSString *bare in @[@"https:", @"https://", @"itms-apps:", @"http:///"])
+        XCTAssertNil([SoilAdsManager clickURLFromString:bare], @"nothing after the scheme: %@", bare);
     NSString *bell = [NSString stringWithFormat:@"https://example.com/%C", (unichar)7];
     XCTAssertNil([SoilAdsManager clickURLFromString:bell]);
 }

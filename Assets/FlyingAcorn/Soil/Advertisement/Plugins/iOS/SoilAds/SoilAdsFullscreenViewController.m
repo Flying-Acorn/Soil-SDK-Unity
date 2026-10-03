@@ -74,10 +74,11 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    [self addBackdrop];
 
     _mediaView = [[UIView alloc] init];
     _mediaView.translatesAutoresizingMaskIntoConstraints = NO;
-    _mediaView.backgroundColor = [UIColor blackColor];
+    _mediaView.backgroundColor = [UIColor clearColor];
     _mediaView.clipsToBounds = YES;
     _mediaView.isAccessibilityElement = YES;
     _mediaView.accessibilityIdentifier = SoilAdsIdMedia;
@@ -102,19 +103,25 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     }
     [self observeNotifications];
 
-    UIView *bottomBar = [self makeBottomBar];
+    _infoCard = [self makeInfoCard];
     NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray arrayWithArray:@[
         [_mediaView.topAnchor constraintEqualToAnchor:safe.topAnchor],
         [_mediaView.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
         [_mediaView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
     ]];
-    if (bottomBar) {
-        [self.view addSubview:bottomBar];
+    if (_infoCard) {
+        [self.view addSubview:_infoCard];
+        // At most a readable width, centered, on tablets and in landscape.
+        NSLayoutConstraint *fill = [_infoCard.widthAnchor constraintEqualToAnchor:safe.widthAnchor constant:-24];
+        fill.priority = UILayoutPriorityDefaultHigh;
         [constraints addObjectsFromArray:@[
-            [bottomBar.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12],
-            [bottomBar.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12],
-            [bottomBar.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-12],
-            [_mediaView.bottomAnchor constraintEqualToAnchor:bottomBar.topAnchor constant:-8],
+            fill,
+            // Never wider than the screen: a long call to action truncates instead.
+            [_infoCard.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor constant:-24],
+            [_infoCard.widthAnchor constraintLessThanOrEqualToConstant:520],
+            [_infoCard.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
+            [_infoCard.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-12],
+            [_mediaView.bottomAnchor constraintEqualToAnchor:_infoCard.topAnchor constant:-12],
         ]];
     } else {
         [constraints addObject:[_mediaView.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor]];
@@ -183,80 +190,109 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     return button;
 }
 
-- (nullable UIView *)makeBottomBar
+/// The ad's image, aspect-filled, blurred and dimmed behind everything: a 4:5 cover image or a
+/// letterboxed video then sits on its own colors instead of black bars.
+- (void)addBackdrop
+{
+    if (!_content.image) return;
+    _backdropView = [[UIImageView alloc] initWithImage:_content.image];
+    _backdropView.contentMode = UIViewContentModeScaleAspectFill;
+    _backdropView.clipsToBounds = YES;
+    [self pin:_backdropView inside:self.view];
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+    [self pin:blur inside:self.view];
+    UIView *dim = [[UIView alloc] init];
+    dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35];
+    [self pin:dim inside:self.view];
+}
+
+/// A rounded card: logo, title and description in a row that follows the text's direction (the
+/// logo on the right for Persian), and the call to action as a full-width button under it.
+- (nullable UIView *)makeInfoCard
 {
     SoilAdsCreative *creative = _content.creative;
     BOOL hasText = creative.title.length > 0 || creative.adDescription.length > 0;
-    if (!_content.logo && !hasText && creative.callToAction.length == 0) return nil;
+    BOOL hasHeader = hasText || _content.logo != nil;
+    if (!hasHeader && creative.callToAction.length == 0) return nil;
+    BOOL rtl = SoilAdsCreativeIsRightToLeft(creative.title, creative.adDescription, creative.callToAction);
 
-    UIView *bar = [[UIView alloc] init];
-    bar.translatesAutoresizingMaskIntoConstraints = NO;
-    bar.backgroundColor = [UIColor colorWithWhite:1 alpha:0.1];
-    bar.layer.cornerRadius = 12;
+    UIView *card = [[UIView alloc] init];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:0.94];
+    card.layer.cornerRadius = 18;
+    if (@available(iOS 13.0, *)) card.layer.cornerCurve = kCACornerCurveContinuous;
+    card.semanticContentAttribute = SoilAdsSemanticAttribute(rtl);
 
-    UIStackView *row = [[UIStackView alloc] init];
-    row.translatesAutoresizingMaskIntoConstraints = NO;
-    row.axis = UILayoutConstraintAxisHorizontal;
-    row.alignment = UIStackViewAlignmentCenter;
-    row.spacing = 12;
-    [bar addSubview:row];
-    // The bar is as short as its content allows; the media view takes the rest. Neither has an
+    UIStackView *column = [[UIStackView alloc] init];
+    column.translatesAutoresizingMaskIntoConstraints = NO;
+    column.axis = UILayoutConstraintAxisVertical;
+    column.spacing = 14;
+    [card addSubview:column];
+    // The card is as short as its content allows; the media view takes the rest. Neither has an
     // intrinsic height (a stack view reports none), so without this Auto Layout may stretch the
-    // bar over half the screen. Low priority: the labels' compression resistance still wins.
-    NSLayoutConstraint *shortest = [bar.heightAnchor constraintEqualToConstant:0];
+    // card over half the screen. Low priority: the labels' compression resistance still wins.
+    NSLayoutConstraint *shortest = [card.heightAnchor constraintEqualToConstant:0];
     shortest.priority = UILayoutPriorityDefaultLow;
     shortest.active = YES;
     [NSLayoutConstraint activateConstraints:@[
-        [row.topAnchor constraintEqualToAnchor:bar.topAnchor constant:10],
-        [row.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor constant:-10],
-        [row.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:10],
-        [row.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-10],
+        [column.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
+        [column.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16],
+        [column.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [column.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
     ]];
 
-    if (_content.logo) {
-        UIImageView *logo = [[UIImageView alloc] initWithImage:_content.logo];
-        logo.translatesAutoresizingMaskIntoConstraints = NO;
-        logo.contentMode = UIViewContentModeScaleAspectFill;
-        logo.layer.cornerRadius = 10;
-        logo.clipsToBounds = YES;
-        [NSLayoutConstraint activateConstraints:@[
-            [logo.widthAnchor constraintEqualToConstant:48],
-            [logo.heightAnchor constraintEqualToConstant:48],
-        ]];
-        [row addArrangedSubview:logo];
-    }
-
-    if (hasText) {
-        UIStackView *texts = [[UIStackView alloc] init];
-        texts.axis = UILayoutConstraintAxisVertical;
-        texts.spacing = 2;
-        UILabel *title = [[UILabel alloc] init];
-        title.font = [UIFont boldSystemFontOfSize:16];
-        title.textColor = [UIColor whiteColor];
-        title.numberOfLines = 1;
-        SoilAdsSetDirectionalText(title, creative.title);
-        UILabel *body = [[UILabel alloc] init];
-        body.font = [UIFont systemFontOfSize:13];
-        body.textColor = [UIColor colorWithWhite:0.8 alpha:1];
-        body.numberOfLines = 2;
-        SoilAdsSetDirectionalText(body, creative.adDescription);
-        [texts addArrangedSubview:title];
-        [texts addArrangedSubview:body];
-        [texts setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
-        [texts setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
-        [row addArrangedSubview:texts];
-    } else {
-        UIView *spacer = [[UIView alloc] init];
-        [spacer setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
-        [row addArrangedSubview:spacer];
+    if (hasHeader) {
+        UIStackView *row = [[UIStackView alloc] init];
+        row.axis = UILayoutConstraintAxisHorizontal;
+        row.alignment = UIStackViewAlignmentCenter;
+        row.spacing = 12;
+        row.semanticContentAttribute = SoilAdsSemanticAttribute(rtl);
+        if (_content.logo) {
+            UIImageView *logo = [[UIImageView alloc] initWithImage:_content.logo];
+            logo.translatesAutoresizingMaskIntoConstraints = NO;
+            logo.contentMode = UIViewContentModeScaleAspectFill;
+            logo.layer.cornerRadius = 12;
+            if (@available(iOS 13.0, *)) logo.layer.cornerCurve = kCACornerCurveContinuous;
+            logo.clipsToBounds = YES;
+            [NSLayoutConstraint activateConstraints:@[
+                [logo.widthAnchor constraintEqualToConstant:56],
+                [logo.heightAnchor constraintEqualToConstant:56],
+            ]];
+            [row addArrangedSubview:logo];
+        }
+        if (hasText) {
+            UIStackView *texts = [[UIStackView alloc] init];
+            texts.axis = UILayoutConstraintAxisVertical;
+            texts.spacing = 4;
+            UILabel *title = [[UILabel alloc] init];
+            title.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+            title.textColor = [UIColor whiteColor];
+            title.numberOfLines = 2;
+            SoilAdsSetDirectionalText(title, creative.title);
+            UILabel *body = [[UILabel alloc] init];
+            body.font = [UIFont systemFontOfSize:14];
+            body.textColor = [UIColor colorWithWhite:1 alpha:0.72];
+            body.numberOfLines = 3;
+            SoilAdsSetDirectionalText(body, creative.adDescription);
+            [texts addArrangedSubview:title];
+            [texts addArrangedSubview:body];
+            [texts setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+            [texts setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+            [row addArrangedSubview:texts];
+        }
+        [column addArrangedSubview:row];
     }
 
     if (creative.callToAction.length > 0) {
-        _callToActionButton = SoilAdsMakeCallToActionButton(creative.callToAction, 15);
+        UIButton *cta = SoilAdsMakeCallToActionButton(creative.callToAction, 17);
+        cta.layer.cornerRadius = 14;
+        if (@available(iOS 13.0, *)) cta.layer.cornerCurve = kCACornerCurveContinuous;
+        [cta.heightAnchor constraintGreaterThanOrEqualToConstant:50].active = YES;
+        [column addArrangedSubview:cta];
+        _callToActionButton = cta;
         [_callToActionButton addTarget:self action:@selector(clickTapped) forControlEvents:UIControlEventTouchUpInside];
-        [row addArrangedSubview:_callToActionButton];
     }
-    return bar;
+    return card;
 }
 
 #pragma mark - Lifecycle

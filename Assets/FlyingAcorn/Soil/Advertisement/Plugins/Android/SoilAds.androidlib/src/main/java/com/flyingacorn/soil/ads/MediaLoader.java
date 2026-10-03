@@ -132,7 +132,8 @@ final class MediaLoader implements SoilAdsManager.Loader {
         if (videoPath != null && durationMs <= 0) {
             Log.w(SoilAdsBridge.TAG, "Video unusable, falling back to the image: " + videoPath);
         }
-        return new Result(new LoadedAd(creative, media, Math.max(durationMs, 0), image, logo), null, null);
+        Bitmap backdrop = Backdrop.from(image);
+        return new Result(new LoadedAd(creative, media, Math.max(durationMs, 0), image, logo, backdrop), null, null);
     }
 
     /**

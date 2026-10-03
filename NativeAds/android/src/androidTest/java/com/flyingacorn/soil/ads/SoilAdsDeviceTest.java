@@ -127,6 +127,7 @@ public class SoilAdsDeviceTest {
         json.put("imageLockSeconds", imageLock);
         json.put("videoLockFraction", videoFraction);
         json.put("minVideoLockSeconds", 0);
+        json.put("maxLockSeconds", 0); // exactly the lock asked for: no 15 s interstitial cap
         json.put("startMuted", false);
         return json.toString();
     }
@@ -497,17 +498,106 @@ public class SoilAdsDeviceTest {
     }
 
     @Test
-    public void longCallToActionLeavesRoomForTheTitle() throws Exception {
+    public void longCallToActionGetsItsOwnRow() throws Exception {
         load("interstitial", creative("imagePath", "image.png", "title", "Word Master",
                 "callToAction", "دانلود و نصب رایگان همین حالا با تخفیف ویژه امروز"));
         SoilAdActivity ad = showFullscreen("interstitial", lockOptions(20, 1.0));
         View cta = find(ad, "soil_ad_cta");
+        View card = find(ad, "soil_ad_info");
         instrumentation.waitForIdleSync();
         float density = ad.getResources().getDisplayMetrics().density;
-        assertTrue("cta " + cta.getWidth() + "px", cta.getWidth() <= Math.ceil(160 * density));
+        assertEquals("full width inside the card", card.getWidth() - card.getPaddingLeft() - card.getPaddingRight(),
+                cta.getWidth());
+        assertTrue("cta " + cta.getHeight() + "px", cta.getHeight() >= Math.floor(50 * density));
         View title = findText(ad.getWindow().getDecorView(), "Word Master");
         assertNotNull(title);
-        assertTrue("title " + title.getWidth() + "px", title.getWidth() > 80 * density);
+        assertTrue("title " + title.getWidth() + "px", title.getWidth() > 150 * density);
+        assertTrue("the button sits under the texts", windowRect(title)[3] <= windowRect(cta)[1]);
+    }
+
+    @Test
+    public void infoCardFollowsTheTextDirection() throws Exception {
+        load("interstitial", creative("imagePath", "image.png", "logoPath", "logo.png", "title", "واژه‌باف",
+                "description", "بازی حدس کلمه", "callToAction", "نصب"));
+        SoilAdActivity persian = showFullscreen("interstitial", lockOptions(1, 1.0));
+        instrumentation.waitForIdleSync();
+        View title = findText(persian.getWindow().getDecorView(), "واژه‌باف");
+        View logo = ((android.view.ViewGroup) title.getParent().getParent()).getChildAt(1);
+        assertTrue("Persian: the logo is on the right", windowRect(logo)[0] >= windowRect(title)[2]);
+        assertTrue("Persian is right aligned", ((android.widget.TextView) title).getLayout().getLineLeft(0) > 0);
+    }
+
+    @Test
+    public void infoCardIsLeftToRightForEnglish() throws Exception {
+        load("interstitial", creative("imagePath", "image.png", "logoPath", "logo.png", "title", "Word Master",
+                "callToAction", "Install"));
+        SoilAdActivity english = showFullscreen("interstitial", lockOptions(1, 1.0));
+        instrumentation.waitForIdleSync();
+        View englishTitle = findText(english.getWindow().getDecorView(), "Word Master");
+        View englishLogo = ((android.view.ViewGroup) englishTitle.getParent().getParent()).getChildAt(0);
+        assertTrue("English: the logo is on the left", windowRect(englishLogo)[2] <= windowRect(englishTitle)[0]);
+    }
+
+    @Test
+    public void imageOnlyAdHasNoCardAndABlurredBackdrop() throws Exception {
+        load("rewarded", creative("imagePath", "image.png"));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0));
+        instrumentation.waitForIdleSync();
+        assertNull(find(ad, "soil_ad_info"));
+        assertNull(find(ad, "soil_ad_cta"));
+        View backdrop = find(ad, "soil_ad_backdrop");
+        assertNotNull(backdrop);
+        View root = ad.getWindow().getDecorView();
+        assertEquals("the backdrop fills the window", root.getWidth(), backdrop.getWidth());
+        assertEquals(root.getHeight(), backdrop.getHeight());
+        assertTrue("locked for the rewarded image time",
+                Integer.parseInt(text(find(ad, "soil_ad_close"))) >= 19);
+    }
+
+    @Test
+    public void videoWithoutImageHasNoBackdrop() throws Exception {
+        load("interstitial", creative("videoPath", "video_3s.mp4"));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(5, 0.8));
+        assertNull(find(ad, "soil_ad_backdrop"));
+    }
+
+    @Test
+    public void imageBannerKeepsTheStandardSizeWithABlurredFillAndTheBadgeOnTheImage() throws Exception {
+        load("banner", creative("imagePath", "image.png"));
+        SoilAdsBridge.show("banner", "{\"position\":\"bottom\"}");
+        events.await("banner", "shown");
+        instrumentation.waitForIdleSync();
+        View banner = find(host, "soil_ad_banner");
+        float density = host.getResources().getDisplayMetrics().density;
+        assertEquals(Math.round(50 * density), banner.getHeight());
+        View badge = findText(banner, "تبلیغ");
+        assertNotNull(badge);
+        android.view.ViewGroup framed = (android.view.ViewGroup) badge.getParent();
+        View image = framed.getChildAt(0);
+        assertTrue("the image is aspect-fit: " + image.getWidth() + "x" + image.getHeight(),
+                Math.abs(image.getWidth() - image.getHeight() * 320f / 480f) <= 2);
+        int[] imageRect = windowRect(image);
+        int[] badgeRect = windowRect(badge);
+        assertTrue("the badge sits on the image", badgeRect[0] >= imageRect[0] && badgeRect[1] >= imageRect[1]
+                && badgeRect[2] <= imageRect[2] && badgeRect[3] <= imageRect[3]);
+        View backdrop = ((android.view.ViewGroup) banner).getChildAt(0);
+        assertTrue("a blurred fill behind it", backdrop instanceof ImageView && backdrop.getWidth() == banner.getWidth());
+    }
+
+    @Test
+    public void interstitialIsClosableBy15SecondsByDefault() throws Exception {
+        load("interstitial", creative("imagePath", "image.png"));
+        // C# leaves maxLockSeconds out only in older SDKs; the player still applies the 15 s default.
+        SoilAdActivity ad = showFullscreen("interstitial", "{\"imageLockSeconds\":30}");
+        int remaining = Integer.parseInt(text(find(ad, "soil_ad_close")));
+        assertTrue("countdown " + remaining, remaining <= 15 && remaining >= 13);
+    }
+
+    @Test
+    public void badgeSaysAdInPersian() throws Exception {
+        load("interstitial", creative("imagePath", "image.png"));
+        SoilAdActivity ad = showFullscreen("interstitial", lockOptions(5, 0.8));
+        assertNotNull(findText(ad.getWindow().getDecorView(), "تبلیغ"));
     }
 
     private static View findText(View view, String text) {

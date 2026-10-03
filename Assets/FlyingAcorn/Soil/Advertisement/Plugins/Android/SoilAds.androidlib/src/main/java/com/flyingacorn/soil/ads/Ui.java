@@ -16,11 +16,15 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /** Small view-building helpers shared by the banner and the fullscreen player. */
 final class Ui {
-    static final int CTA_COLOR = 0xFF1E88E5;
+    static final int CTA_COLOR = 0xFF0A85FF;
+    static final int BADGE_COLOR = 0xFFFFCC33;
+    /** The text of the ad badge on every format: Persian for "ad". */
+    static final String BADGE_TEXT = "\u062A\u0628\u0644\u06CC\u063A"; // تبلیغ
 
     private Ui() {
     }
@@ -55,23 +59,76 @@ final class Ui {
         if (bold) view.setTypeface(Typeface.DEFAULT_BOLD);
         view.setMaxLines(maxLines);
         view.setEllipsize(TextUtils.TruncateAt.END);
+        // Wrapped lines get some air: Persian's tall marks crowd the line above at the default spacing.
+        if (maxLines > 1) view.setLineSpacing(0, 1.12f);
         view.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
         view.setTextAlignment(View.TEXT_ALIGNMENT_TEXT_START);
         view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         return view;
     }
 
+    /**
+     * Whether {@code text} reads right to left: its first strong directional character belongs to
+     * a right-to-left script. Digits, punctuation, spaces and symbols are skipped.
+     */
+    static boolean isRightToLeft(String text) {
+        if (text == null) return false;
+        for (int i = 0; i < text.length(); ) {
+            int c = text.codePointAt(i);
+            i += Character.charCount(c);
+            byte direction = Character.getDirectionality(c);
+            if (direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT
+                    || direction == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) return true;
+            if (direction == Character.DIRECTIONALITY_LEFT_TO_RIGHT) return false;
+        }
+        return false;
+    }
+
+    /**
+     * Whether an ad's text block reads right to left: the direction of its title, else of its
+     * description, else of its call to action. Logos and buttons are laid out to match.
+     */
+    static boolean creativeIsRightToLeft(AdCreative creative) {
+        if (creative.title != null) return isRightToLeft(creative.title);
+        if (creative.description != null) return isRightToLeft(creative.description);
+        return isRightToLeft(creative.callToAction);
+    }
+
+    /**
+     * Adds {@code views} to a horizontal row in reading order: left to right, or right to left (the
+     * logo on the right for Persian). Done by hand because a game's manifest rarely declares
+     * {@code supportsRtl}, without which Android lays every row out left to right. {@code gapPx}
+     * goes between neighbours; null views are skipped.
+     */
+    static void addInReadingOrder(LinearLayout row, boolean rightToLeft, int gapPx, View[] views,
+                                  LinearLayout.LayoutParams[] params) {
+        boolean first = true;
+        for (int k = 0; k < views.length; k++) {
+            int i = rightToLeft ? views.length - 1 - k : k;
+            if (views[i] == null) continue;
+            if (!first) params[i].leftMargin = gapPx;
+            first = false;
+            row.addView(views[i], params[i]);
+        }
+    }
+
     static TextView badge(Context context, float sp) {
         TextView view = new TextView(context);
-        view.setText("Ad");
+        view.setText(BADGE_TEXT);
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        view.setTextColor(0xFFFFFFFF);
+        view.setTextColor(0xFF000000);
         view.setTypeface(Typeface.DEFAULT_BOLD);
-        view.setBackground(rounded(0x99000000, dp(context, 3)));
-        view.setPadding(dp(context, 5), dp(context, 1), dp(context, 5), dp(context, 1));
+        view.setIncludeFontPadding(false);
+        view.setGravity(Gravity.CENTER);
+        view.setBackground(rounded(BADGE_COLOR, dp(context, sp * 0.4f)));
+        int horizontal = dp(context, sp * 0.5f);
+        int vertical = dp(context, sp * 0.12f);
+        view.setPadding(horizontal, vertical, horizontal, vertical);
+        view.setContentDescription("Ad");
         return view;
     }
 
+    /** Rounded call-to-action button that takes the width it is given (fullscreen). */
     static TextView ctaButton(Context context, String text, float sp) {
         TextView view = new TextView(context);
         view.setText(text);
@@ -80,12 +137,20 @@ final class Ui {
         view.setTypeface(Typeface.DEFAULT_BOLD);
         view.setMaxLines(1);
         view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setGravity(Gravity.CENTER);
+        view.setBackground(rounded(CTA_COLOR, dp(context, 14)));
+        view.setPadding(dp(context, 16), dp(context, 8), dp(context, 16), dp(context, 8));
+        view.setContentDescription("soil_ad_cta");
+        return view;
+    }
+
+    /** Rounded call-to-action button as wide as its title, at most 160dp (banner row). */
+    static TextView compactCtaButton(Context context, String text, float sp) {
+        TextView view = ctaButton(context, text, sp);
         // A long call to action must not squeeze the title and description away.
         view.setMaxWidth(dp(context, 160));
-        view.setGravity(Gravity.CENTER);
-        view.setBackground(rounded(CTA_COLOR, dp(context, 20)));
+        view.setBackground(rounded(CTA_COLOR, dp(context, 8)));
         view.setPadding(dp(context, 14), dp(context, 8), dp(context, 14), dp(context, 8));
-        view.setContentDescription("soil_ad_cta");
         return view;
     }
 

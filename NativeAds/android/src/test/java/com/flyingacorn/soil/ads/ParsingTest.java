@@ -25,7 +25,6 @@ public class ParsingTest {
         assertEquals("Train", c.description);
         assertEquals("Install", c.callToAction);
         assertEquals("https://example.com/c?x=1", c.clickUrl);
-        assertTrue(c.hasBottomBarText());
     }
 
     @Test
@@ -39,7 +38,6 @@ public class ParsingTest {
         assertNull(c.description);
         assertNull(c.callToAction);
         assertNull(c.clickUrl);
-        assertFalse(c.hasBottomBarText());
     }
 
     @Test

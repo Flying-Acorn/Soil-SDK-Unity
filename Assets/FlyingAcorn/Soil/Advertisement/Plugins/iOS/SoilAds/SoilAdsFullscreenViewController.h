@@ -36,6 +36,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) UIButton *muteButton;
 @property (nonatomic, readonly, nullable) UIButton *callToActionButton;
 @property (nonatomic, readonly) UIView *mediaView;
+/// Logo, title, description and call to action under the media; nil when the ad has none of them.
+@property (nonatomic, readonly, nullable) UIView *infoCard;
+/// The blurred, screen-filling copy of the ad's image behind the media; nil without an image.
+@property (nonatomic, readonly, nullable) UIImageView *backdropView;
 /// Video only.
 @property (nonatomic, readonly, nullable) AVPlayer *player;
 
