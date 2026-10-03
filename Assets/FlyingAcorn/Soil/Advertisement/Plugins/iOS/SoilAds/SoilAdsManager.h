@@ -42,6 +42,10 @@ typedef void (^SoilAdsEventSink)(NSString *json);
 /// C# has received `shown` for this fullscreen format: the game can be paused now.
 - (void)acknowledgeShownFormat:(nullable NSString *)format;
 
+/// After an unexpected exception: ends the fullscreen ad, if any, the way a close does (`closed`,
+/// or `showFailed` if it never appeared), takes it off screen and resumes the game. Never throws.
+- (void)recoverFromFailure;
+
 /// Any thread.
 - (BOOL)isReady:(nullable NSString *)format;
 

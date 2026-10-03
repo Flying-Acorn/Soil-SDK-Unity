@@ -84,6 +84,7 @@ public class SoilAdsDeviceTest {
 
     @After
     public void tearDown() {
+        SoilAdActivity.failAtForTests = null;
         for (String format : new String[]{"banner", "interstitial", "rewarded"}) SoilAdsBridge.destroy(format);
         instrumentation.waitForIdleSync();
         SystemClock.sleep(300);
@@ -591,6 +592,30 @@ public class SoilAdsDeviceTest {
         SoilAdActivity ad = showFullscreen("interstitial", "{\"imageLockSeconds\":30}");
         int remaining = Integer.parseInt(text(find(ad, "soil_ad_close")));
         assertTrue("countdown " + remaining, remaining <= 15 && remaining >= 13);
+    }
+
+    @Test
+    public void adScreenThatFailsToOpenReportsShowFailedAndKeepsTheAd() throws Exception {
+        load("interstitial", creative("imagePath", "image.png"));
+        SoilAdActivity.failAtForTests = "create";
+        SoilAdsBridge.show("interstitial", lockOptions(5, 0.8));
+        JSONObject failed = events.awaitAny("interstitial", "showFailed", "shown");
+        assertEquals("showFailed", failed.getString("event"));
+        SystemClock.sleep(500);
+        assertEquals(Arrays.asList("interstitial:showFailed"), events.names());
+        assertTrue("the ad goes back to its slot", SoilAdsBridge.isReady("interstitial"));
+    }
+
+    @Test
+    public void adScreenThatFailsOnScreenClosesOnceAndTheGameCarriesOn() throws Exception {
+        load("rewarded", creative("imagePath", "image.png"));
+        SoilAdActivity ad = showFullscreen("rewarded", lockOptions(20, 1.0));
+        SoilAdActivity.failAtForTests = "tick";
+        events.await("rewarded", "closed");
+        awaitGone(ad);
+        SystemClock.sleep(300);
+        assertEquals(Arrays.asList("rewarded:shown", "rewarded:closed"), events.names());
+        assertTrue("the game's activity is back", !host.isFinishing());
     }
 
     @Test

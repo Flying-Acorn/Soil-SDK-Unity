@@ -61,7 +61,7 @@ final class MediaLoader implements SoilAdsManager.Loader {
             public void run() {
                 if (cancelled.get()) return;
                 final Result result = decodeSafely(format, creative);
-                main.post(new Runnable() {
+                main.post(Guard.wrap("Delivering the " + format + " load result", new Runnable() {
                     @Override
                     public void run() {
                         if (cancelled.get()) {
@@ -72,7 +72,7 @@ final class MediaLoader implements SoilAdsManager.Loader {
                             callback.onFailed(result.error, result.message);
                         }
                     }
-                });
+                }));
             }
         });
         return new SoilAdsManager.Cancellable() {

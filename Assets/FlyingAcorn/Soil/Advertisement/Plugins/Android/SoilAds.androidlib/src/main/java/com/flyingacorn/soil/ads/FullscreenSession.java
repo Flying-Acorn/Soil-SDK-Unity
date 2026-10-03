@@ -44,14 +44,14 @@ final class FullscreenSession {
     private boolean ended;
     private boolean adReleased;
 
-    private final Runnable attachTimeout = new Runnable() {
+    private final Runnable attachTimeout = Guard.wrap("The ad activity's start timeout", new Runnable() {
         @Override
         public void run() {
             if (attachedOnce) return;
             Log.w(SoilAdsBridge.TAG, "The ad activity did not start; giving up on this show");
             end();
         }
-    };
+    });
 
     /** Package-private for tests; the game goes through {@link #start}. */
     FullscreenSession(String format, LoadedAd ad, ShowOptions options,

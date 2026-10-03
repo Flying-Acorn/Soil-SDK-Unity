@@ -35,12 +35,27 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         [Preserve]
         public void OnNativeAdEvent(string json)
         {
-            MessageReceived?.Invoke(json);
+            // An exception here must not reach the native player that sent the event.
+            try
+            {
+                MessageReceived?.Invoke(json);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
         }
 
         private void Update()
         {
-            Ticked?.Invoke();
+            try
+            {
+                Ticked?.Invoke();
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
         }
 
         private void OnDestroy()

@@ -45,3 +45,14 @@ BOOL SoilAdsFormatIsFullscreen(SoilAdsFormat format)
 {
     return format == SoilAdsFormatInterstitial || format == SoilAdsFormatRewarded;
 }
+
+BOOL SoilAdsGuard(NSString *what, dispatch_block_t block)
+{
+    @try {
+        if (block) block();
+        return YES;
+    } @catch (NSException *exception) {
+        SoilAdsLog(@"%@ failed: %@ (%@)", what, exception.name, exception.reason);
+        return NO;
+    }
+}

@@ -81,6 +81,7 @@ static UILabel *FindLabel(UIView *view, NSString *text)
 
 - (void)tearDown
 {
+    SoilAdsFullscreenViewController.failAtForTests = nil;
     for (NSString *format in @[@"banner", @"interstitial", @"rewarded"]) [self.manager destroyFormat:format];
     SoilAdsWaitUntil(Timeout, ^BOOL { return self.root.presentedViewController == nil; });
     self.window.hidden = YES;
@@ -435,6 +436,47 @@ static UILabel *FindLabel(UIView *view, NSString *text)
     UILabel *badge = FindLabel(banner, @"تبلیغ");
     XCTAssertNotNil(badge);
     XCTAssertTrue(CGRectContainsRect(image.frame, badge.frame), @"the badge sits on the image");
+}
+
+#pragma mark - Failures
+
+- (void)testGuardCatchesExceptions
+{
+    __block NSInteger calls = 0;
+    XCTAssertFalse(SoilAdsGuard(@"test", ^{
+        calls++;
+        @throw [NSException exceptionWithName:@"Boom" reason:@"test" userInfo:nil];
+    }));
+    XCTAssertTrue(SoilAdsGuard(@"test", ^{ calls++; }));
+    XCTAssertEqual(calls, 2);
+}
+
+- (void)testScreenThatFailsToBuildReportsShowFailedAndKeepsTheAd
+{
+    [self load:@"interstitial" fields:[self imageAd]];
+    SoilAdsFullscreenViewController.failAtForTests = @"create";
+    [self.manager showFormat:@"interstitial" optionsJSON:[self fullscreenOptions:5 fraction:0.8 minVideo:5]];
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return [self.recorder countOf:@"showFailed"] == 1; }));
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return self.root.presentedViewController == nil; }),
+                  @"the broken screen is taken down");
+    SoilAdsSpin(0.5);
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"interstitial"], @"loaded,showFailed");
+    XCTAssertTrue([self.manager isReady:@"interstitial"], @"the ad goes back to its slot");
+    XCTAssertEqual(self.host.pauseCalls.count, 0u, @"the game was never paused");
+    XCTAssertNil(self.manager.fullscreenController);
+}
+
+- (void)testScreenThatFailsOnScreenClosesOnceAndResumesTheGame
+{
+    [self load:@"rewarded" fields:[self imageAd]];
+    [self showFullscreen:@"rewarded" options:[self fullscreenOptions:20 fraction:1 minVideo:0]];
+    [self.manager acknowledgeShownFormat:@"rewarded"];
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return self.host.pauseCalls.count == 1; }), @"paused under the ad");
+    SoilAdsFullscreenViewController.failAtForTests = @"tick";
+    [self waitForClosed:1];
+    XCTAssertTrue(SoilAdsWaitUntil(Timeout, ^BOOL { return self.root.presentedViewController == nil; }));
+    XCTAssertEqualObjects([self.recorder sequenceForFormat:@"rewarded"], @"loaded,shown,closed");
+    XCTAssertEqualObjects(self.host.pauseCalls, (@[@YES, @NO]), @"the game is resumed");
 }
 
 - (void)testBadgeSaysAdInPersian

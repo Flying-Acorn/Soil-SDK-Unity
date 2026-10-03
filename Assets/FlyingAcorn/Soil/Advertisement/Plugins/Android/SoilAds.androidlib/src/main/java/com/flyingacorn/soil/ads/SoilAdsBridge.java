@@ -27,7 +27,11 @@ public final class SoilAdsBridge {
     }
 
     public static void initialize(final Activity activity, String receiverObject, String receiverMethod) {
-        unitySink.setReceiver(receiverObject, receiverMethod);
+        try {
+            unitySink.setReceiver(receiverObject, receiverMethod);
+        } catch (Throwable t) {
+            Log.e(TAG, "initialize failed", t);
+        }
         post(new Runnable() {
             @Override
             public void run() {
@@ -74,8 +78,13 @@ public final class SoilAdsBridge {
     }
 
     public static boolean isReady(String format) {
-        SoilAdsManager current = manager;
-        return current != null && current.isReady(format);
+        try {
+            SoilAdsManager current = manager;
+            return current != null && current.isReady(format);
+        } catch (Throwable t) {
+            Log.e(TAG, "isReady failed", t);
+            return false;
+        }
     }
 
     /**
@@ -84,6 +93,15 @@ public final class SoilAdsBridge {
      * host activity. Returns whether the link is going to be opened.
      */
     public static boolean openLink(final String url) {
+        try {
+            return openLinkUnguarded(url);
+        } catch (Throwable t) {
+            Log.e(TAG, "openLink failed", t);
+            return false;
+        }
+    }
+
+    private static boolean openLinkUnguarded(final String url) {
         if (!Ui.isOpenableClickUrl(url)) {
             Log.w(TAG, "Not opening a click URL that is not a web or app link: " + url);
             return false;

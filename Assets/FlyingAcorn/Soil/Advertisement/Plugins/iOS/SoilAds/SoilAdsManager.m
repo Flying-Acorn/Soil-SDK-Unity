@@ -125,13 +125,15 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     [SoilAdsMediaLoader loadCreative:creative format:format completion:^(SoilAdsLoadedMedia *media, NSString *error, NSString *message) {
         SoilAdsManager *self_ = weakSelf;
         if (!self_ || self_->_generation[format] != generation) return; // replaced or destroyed meanwhile
-        if (media) {
-            [self_ setContent:media format:format];
-            [self_ emitFormat:name event:@"loaded"
-                        extra:@{@"media": SoilAdsMediaName(media.media), @"durationMs": @(media.durationMs)}];
-        } else {
-            [self_ emitFormat:name failure:@"loadFailed" error:error message:message];
-        }
+        [self_ guarded:@"delivering a load result" block:^{
+            if (media) {
+                [self_ setContent:media format:format];
+                [self_ emitFormat:name event:@"loaded"
+                            extra:@{@"media": SoilAdsMediaName(media.media), @"durationMs": @(media.durationMs)}];
+            } else {
+                [self_ emitFormat:name failure:@"loadFailed" error:error message:message];
+            }
+        }];
     }];
 }
 
@@ -238,7 +240,7 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     SoilAdsBannerView *banner = [[SoilAdsBannerView alloc] initWithContent:content];
     __weak __typeof__(self) weakSelf = self;
     __weak SoilAdsBannerView *weakBanner = banner;
-    banner.onClick = ^{ [weakSelf bannerClicked:weakBanner]; };
+    banner.onClick = ^{ [weakSelf guarded:@"banner click" block:^{ [weakSelf bannerClicked:weakBanner]; }]; };
     [banner attachToView:hostView position:options.position];
     _banner = banner;
     [self emitFormat:name event:@"shown" extra:nil];
@@ -297,6 +299,13 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     [self presentSession:session];
 }
 
+/// Runs a callback UIKit or the loader invokes later; an exception in it ends the fullscreen ad
+/// (see -recoverFromFailure) instead of the app.
+- (void)guarded:(NSString *)what block:(dispatch_block_t)block
+{
+    if (!SoilAdsGuard(what, block)) [self recoverFromFailure];
+}
+
 - (BOOL)appIsActive
 {
     if ([_host respondsToSelector:@selector(soilAdsAppIsActive)]) return [_host soilAdsAppIsActive];
@@ -319,7 +328,7 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
                 addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:[NSOperationQueue mainQueue]
                         usingBlock:^(NSNotification *note) {
                 SoilAdsSession *waiting = weakSession;
-                if (waiting) [weakSelf presentSession:waiting];
+                if (waiting) [weakSelf guarded:@"presenting" block:^{ [weakSelf presentSession:waiting]; }];
             }];
         }
         return;
@@ -338,7 +347,7 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     // UIKit refuses to present from a controller that is being presented or dismissed: wait for it.
     id<UIViewControllerTransitionCoordinator> transition = presenter.transitionCoordinator;
     if (transition && [transition animateAlongsideTransition:nil completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
-            [weakSelf presentSession:session];
+            [weakSelf guarded:@"presenting" block:^{ [weakSelf presentSession:session]; }];
         }]) {
         return;
     }
@@ -348,7 +357,7 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     session.presenting = YES;
     SoilAdsFullscreenViewController *controller = session.controller;
     [presenter presentViewController:controller animated:YES completion:^{
-        [weakSelf sessionPresented:session];
+        [weakSelf guarded:@"finishing the presentation" block:^{ [weakSelf sessionPresented:session]; }];
     }];
 
     if (!controller.presentingViewController) {
@@ -366,7 +375,14 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
 
 - (void)sessionPresented:(SoilAdsSession *)session
 {
-    if (session != _session || session.finished || session.presented) return;
+    if (session.finished) {
+        // The show ended (e.g. it failed) while UIKit was still presenting it: take it down.
+        UIViewController *presenting = session.controller.presentingViewController;
+        if (presenting && !session.controller.isBeingDismissed)
+            [presenting dismissViewControllerAnimated:NO completion:nil];
+        return;
+    }
+    if (session != _session || session.presented) return;
     session.presented = YES;
     NSString *name = SoilAdsFormatName(session.format);
     [self emitFormat:name event:@"shown" extra:nil];
@@ -379,7 +395,7 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     __weak __typeof__(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SoilAdsShownAckTimeout * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [weakSelf pauseGameForSession:session];
+        [weakSelf guarded:@"pausing the game" block:^{ [weakSelf pauseGameForSession:session]; }];
     });
 }
 
@@ -404,7 +420,7 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
                 addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:[NSOperationQueue mainQueue]
                         usingBlock:^(NSNotification *note) {
                 SoilAdsSession *waiting = weakSession;
-                if (waiting) [weakSelf pauseGameForSession:waiting];
+                if (waiting) [weakSelf guarded:@"pausing the game" block:^{ [weakSelf pauseGameForSession:waiting]; }];
             }];
         }
         return;
@@ -454,11 +470,11 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     }
     __weak __typeof__(self) weakSelf = self;
     [presenting dismissViewControllerAnimated:YES completion:^{
-        [weakSelf finishSession:session];
+        [weakSelf guarded:@"ending the show" block:^{ [weakSelf finishSession:session]; }];
     }];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SoilAdsDismissTimeout * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [weakSelf checkDismissal:session attempt:0];
+        [weakSelf guarded:@"checking the dismissal" block:^{ [weakSelf checkDismissal:session attempt:0]; }];
     });
 }
 
@@ -480,11 +496,11 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     SoilAdsLog(@"dismissal did not complete in time, retrying");
     __weak __typeof__(self) weakSelf = self;
     [presenting dismissViewControllerAnimated:NO completion:^{
-        [weakSelf finishSession:session];
+        [weakSelf guarded:@"ending the show" block:^{ [weakSelf finishSession:session]; }];
     }];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SoilAdsDismissRetryInterval * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        [weakSelf checkDismissal:session attempt:attempt + 1];
+        [weakSelf guarded:@"checking the dismissal" block:^{ [weakSelf checkDismissal:session attempt:attempt + 1]; }];
     });
 }
 
@@ -517,6 +533,31 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     [self emitFormat:name failure:@"showFailed" error:error message:message];
 }
 
+- (void)recoverFromFailure
+{
+    SoilAdsSession *session = _session;
+    if (!session || session.finished) return;
+    SoilAdsLog(@"recovering: ending the %@ ad after a failure", SoilAdsFormatName(session.format));
+    SoilAdsGuard(@"taking the failed ad off screen", ^{
+        SoilAdsFullscreenViewController *controller = session.controller;
+        [controller teardown];
+        UIViewController *presenting = controller.presentingViewController;
+        if (presenting && !controller.isBeingPresented && !controller.isBeingDismissed)
+            [presenting dismissViewControllerAnimated:NO completion:nil];
+    });
+    BOOL ended = SoilAdsGuard(@"ending the failed ad", ^{
+        [self finishSession:session error:SoilAdsErrorInternal message:@"the ad player failed"];
+    });
+    if (ended) return;
+    // Last resort: whatever else failed, the game must not stay paused under a dead ad.
+    session.finished = YES;
+    if (self->_session == session) self->_session = nil;
+    if (session.gamePaused) {
+        session.gamePaused = NO;
+        SoilAdsGuard(@"resuming the game", ^{ [self->_host soilAdsSetGamePaused:NO]; });
+    }
+}
+
 - (SoilAdsSession *)sessionFor:(SoilAdsFullscreenViewController *)controller
 {
     return (_session && _session.controller == controller && !_session.finished) ? _session : nil;
@@ -541,13 +582,13 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
     __weak SoilAdsFullscreenViewController *weakController = controller;
     [self openClickURL:controller.content.creative.clickUrl completion:^(BOOL opened) {
         if (!opened) {
-            [weakController resumeAfterClick];
+            SoilAdsGuard(@"resuming after a click", ^{ [weakController resumeAfterClick]; });
             return;
         }
         // Normally the app resigns active and the controller resumes on return; if it never left, resume anyway.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive)
-                [weakController resumeAfterClick];
+                SoilAdsGuard(@"resuming after a click", ^{ [weakController resumeAfterClick]; });
         });
     }];
 }
@@ -562,6 +603,11 @@ static const NSTimeInterval SoilAdsShownAckTimeout = 0.5;
 {
     SoilAdsSession *session = [self sessionFor:controller];
     if (session) [self finishSession:session];
+}
+
+- (void)fullscreenControllerDidFail:(SoilAdsFullscreenViewController *)controller
+{
+    if ([self sessionFor:controller]) [self recoverFromFailure];
 }
 
 @end
