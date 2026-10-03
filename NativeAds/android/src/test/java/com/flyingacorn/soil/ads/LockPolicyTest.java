@@ -12,7 +12,7 @@ import org.junit.Test;
  */
 public class LockPolicyTest {
     private static final double EPS = 1e-9;
-    private static final ShowOptions INTERSTITIAL = ShowOptions.defaults("interstitial"); // 5 / 0.8 / 5
+    private static final ShowOptions INTERSTITIAL = ShowOptions.defaults("interstitial"); // 5 / 0.8 / 5 / max 15
     private static final ShowOptions REWARDED = ShowOptions.defaults("rewarded");         // 20 / 1.0 / 0
 
     private static boolean unlocked(ShowOptions o, boolean video, double duration, double visible, double position,
@@ -39,9 +39,30 @@ public class LockPolicyTest {
 
     @Test
     public void interstitialVideoUnlocksAtEightyPercent() {
-        assertEquals(16, LockPolicy.videoLockSeconds(INTERSTITIAL, 20), EPS);
-        assertFalse(unlocked(INTERSTITIAL, true, 20, 15.9, 15.9, false, false));
-        assertTrue(unlocked(INTERSTITIAL, true, 20, 16, 16, false, false));
+        assertEquals(12, LockPolicy.videoLockSeconds(INTERSTITIAL, 15), EPS);
+        assertFalse(unlocked(INTERSTITIAL, true, 15, 11.9, 11.9, false, false));
+        assertTrue(unlocked(INTERSTITIAL, true, 15, 12, 12, false, false));
+    }
+
+    @Test
+    public void interstitialIsAlwaysClosableBy15Seconds() {
+        // Google Play: interstitials must be closable after 15 s. 80% of a 30 s video would be 24 s.
+        assertEquals(15, LockPolicy.videoLockSeconds(INTERSTITIAL, 30), EPS);
+        assertEquals(15, LockPolicy.screenLockSeconds(INTERSTITIAL, true, 30), EPS);
+        assertFalse(unlocked(INTERSTITIAL, true, 30, 14.9, 14.9, false, false));
+        assertTrue(unlocked(INTERSTITIAL, true, 30, 15, 15, false, false));
+        assertTrue("a stalled video too", unlocked(INTERSTITIAL, true, 30, 15, 2, false, false));
+        assertEquals(15, remaining(INTERSTITIAL, true, 30, 0, 0, false, false));
+        ShowOptions longImage = ShowOptions.parse("interstitial", "{\"imageLockSeconds\":20}");
+        assertTrue("the cap holds for any interstitial", unlocked(longImage, false, 0, 15, 0, false, false));
+    }
+
+    @Test
+    public void rewardedIsNotCappedAndNoCapMeansTheFullLock() {
+        assertEquals(30, LockPolicy.videoLockSeconds(REWARDED, 30), EPS);
+        assertFalse(unlocked(REWARDED, true, 30, 29, 29, false, false));
+        ShowOptions uncapped = ShowOptions.parse("interstitial", "{\"maxLockSeconds\":0}");
+        assertEquals(24, LockPolicy.videoLockSeconds(uncapped, 30), EPS);
     }
 
     @Test
@@ -90,9 +111,9 @@ public class LockPolicyTest {
 
     @Test
     public void countdownFollowsWhicheverRuleIsCloser() {
-        assertEquals(16, remaining(INTERSTITIAL, true, 20, 0, 0, false, false));
-        assertEquals(1, remaining(INTERSTITIAL, true, 20, 15.5, 15.5, false, false));
-        assertEquals(0, remaining(INTERSTITIAL, true, 20, 17, 17, false, false));
+        assertEquals(12, remaining(INTERSTITIAL, true, 15, 0, 0, false, false));
+        assertEquals(1, remaining(INTERSTITIAL, true, 15, 11.5, 11.5, false, false));
+        assertEquals(0, remaining(INTERSTITIAL, true, 15, 13, 13, false, false));
         assertEquals(5, remaining(REWARDED, true, 15, 10, 10, false, false));
         assertEquals(5, remaining(REWARDED, true, 15, 15, 1, false, false));
         assertEquals(20, remaining(REWARDED, true, 30, 10, 0, false, true));

@@ -8,8 +8,8 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
     /// this copy drives the Editor simulation and is the reference the native tests mirror.
     ///
     /// It reproduces the Unity-drawn ads the SDK used to have - interstitial: 5 s, or 80% of a
-    /// video but never under 5 s; rewarded: 20 s, or the whole video - with one change: only time
-    /// the ad is actually on screen counts.
+    /// video but never under 5 s; rewarded: 20 s, or the whole video - with two changes: only time
+    /// the ad is actually on screen counts, and no lock outlasts MaxLockSeconds (interstitial 15 s).
     /// </summary>
     public static class FullscreenLockPolicy
     {
@@ -17,8 +17,11 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         public static float VideoLockSeconds(FullscreenShowOptions options, float durationSeconds)
         {
             var duration = Math.Max(0f, durationSeconds);
-            return Math.Max(0f, Math.Max(options.MinVideoLockSeconds, options.VideoLockFraction * duration));
+            return Capped(options, Math.Max(0f, Math.Max(options.MinVideoLockSeconds, options.VideoLockFraction * duration)));
         }
+
+        private static float Capped(FullscreenShowOptions options, float seconds) =>
+            options.MaxLockSeconds > 0 ? Math.Min(seconds, options.MaxLockSeconds) : seconds;
 
         /// <summary>
         /// On-screen time that unlocks regardless of playback: the countdown the SDK always ran. It
@@ -26,9 +29,9 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         /// </summary>
         public static float ScreenLockSeconds(FullscreenShowOptions options, bool isVideo, float durationSeconds)
         {
-            return isVideo
+            return Capped(options, isVideo
                 ? Math.Max(VideoLockSeconds(options, durationSeconds), options.ImageLockSeconds)
-                : options.ImageLockSeconds;
+                : options.ImageLockSeconds);
         }
 
         /// <param name="isVideo">The ad plays a video (not an image).</param>

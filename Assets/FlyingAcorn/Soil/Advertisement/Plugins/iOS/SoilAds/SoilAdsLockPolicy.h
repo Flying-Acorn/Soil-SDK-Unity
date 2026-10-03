@@ -1,6 +1,7 @@
 // Fullscreen close-button lock ("Fullscreen lock policy" in NativeAds/PROTOCOL.md): the timing the
 // Unity-drawn ads always had (interstitial 5 s, or 80% of a video but never under 5 s; rewarded
-// 20 s, or the whole video), counting only time the ad is on screen. Pure logic, no UIKit.
+// 20 s, or the whole video), counting only time the ad is on screen and never longer than
+// maxLockSeconds (interstitial 15 s). Pure logic, no UIKit.
 // Mirrors Logic/FullscreenLockPolicy.cs on the C# side.
 #import <Foundation/Foundation.h>
 #import "SoilAdsTypes.h"
@@ -11,6 +12,8 @@ typedef struct {
     double imageLockSeconds;
     double videoLockFraction;
     double minVideoLockSeconds;
+    /// No lock lasts longer than this; 0 for no cap.
+    double maxLockSeconds;
 } SoilAdsLockSettings;
 
 /// Playback needed to unlock a video: max(minVideoLockSeconds, videoLockFraction * D); may outlast a short video.

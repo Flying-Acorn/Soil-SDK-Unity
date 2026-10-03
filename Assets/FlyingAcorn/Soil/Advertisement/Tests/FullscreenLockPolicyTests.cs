@@ -39,9 +39,34 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         [Test]
         public void InterstitialVideo_UnlocksAtEightyPercent()
         {
-            Assert.AreEqual(16f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 20f), 1e-4);
-            Assert.IsFalse(Unlocked(Interstitial, true, 20f, 15.9f, 15.9f));
-            Assert.IsTrue(Unlocked(Interstitial, true, 20f, 16f, 16f));
+            Assert.AreEqual(12f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 15f), 1e-4);
+            Assert.IsFalse(Unlocked(Interstitial, true, 15f, 11.9f, 11.9f));
+            Assert.IsTrue(Unlocked(Interstitial, true, 15f, 12f, 12f));
+        }
+
+        [Test]
+        public void Interstitial_IsAlwaysClosableBy15Seconds()
+        {
+            // Google Play: interstitials must be closable after 15 s. 80% of a 30 s video would be 24 s.
+            Assert.AreEqual(15f, FullscreenLockPolicy.VideoLockSeconds(Interstitial, 30f), 1e-4);
+            Assert.AreEqual(15f, FullscreenLockPolicy.ScreenLockSeconds(Interstitial, true, 30f), 1e-4);
+            Assert.IsFalse(Unlocked(Interstitial, true, 30f, 14.9f, 14.9f));
+            Assert.IsTrue(Unlocked(Interstitial, true, 30f, 15f, 15f));
+            Assert.IsTrue(Unlocked(Interstitial, true, 30f, 15f, 2f), "a stalled video too");
+            Assert.AreEqual(15, Remaining(Interstitial, true, 30f, 0f, 0f));
+            var longImage = FullscreenShowOptions.InterstitialDefaults();
+            longImage.ImageLockSeconds = 20f;
+            Assert.IsTrue(Unlocked(longImage, false, 0f, 15f, 0f), "the cap holds for any interstitial");
+        }
+
+        [Test]
+        public void Rewarded_IsNotCapped_AndNoCapMeansTheFullLock()
+        {
+            Assert.AreEqual(30f, FullscreenLockPolicy.VideoLockSeconds(Rewarded, 30f), 1e-4);
+            Assert.IsFalse(Unlocked(Rewarded, true, 30f, 29f, 29f));
+            var uncapped = FullscreenShowOptions.InterstitialDefaults();
+            uncapped.MaxLockSeconds = 0f;
+            Assert.AreEqual(24f, FullscreenLockPolicy.VideoLockSeconds(uncapped, 30f), 1e-4);
         }
 
         [Test]
@@ -99,9 +124,9 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         [Test]
         public void Countdown_FollowsWhicheverRuleIsCloser()
         {
-            Assert.AreEqual(16, Remaining(Interstitial, true, 20f, 0f, 0f));
-            Assert.AreEqual(1, Remaining(Interstitial, true, 20f, 15.5f, 15.5f));
-            Assert.AreEqual(0, Remaining(Interstitial, true, 20f, 17f, 17f));
+            Assert.AreEqual(12, Remaining(Interstitial, true, 15f, 0f, 0f));
+            Assert.AreEqual(1, Remaining(Interstitial, true, 15f, 11.5f, 11.5f));
+            Assert.AreEqual(0, Remaining(Interstitial, true, 15f, 13f, 13f));
             Assert.AreEqual(5, Remaining(Rewarded, true, 15f, 10f, 10f), "playback: 5 s to the end");
             Assert.AreEqual(5, Remaining(Rewarded, true, 15f, 15f, 1f), "stalled: 5 s to the 20 s countdown");
             Assert.AreEqual(20, Remaining(Rewarded, true, 30f, 10f, 0f, failed: true), "failed: the 30 s countdown");

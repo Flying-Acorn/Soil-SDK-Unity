@@ -3,7 +3,8 @@ package com.flyingacorn.soil.ads;
 /**
  * When the close button of a fullscreen ad unlocks ("Fullscreen lock policy" in PROTOCOL.md): the
  * same timing the Unity-drawn ads always had (interstitial 5 s, or 80% of a video but never under
- * 5 s; rewarded 20 s, or the whole video), counting only time the ad is on screen. Mirrors
+ * 5 s; rewarded 20 s, or the whole video), counting only time the ad is on screen, and never
+ * longer than {@code maxLockSeconds} (interstitial 15 s). Mirrors
  * Logic/FullscreenLockPolicy.cs. Pure Java so it runs in plain JVM unit tests.
  */
 final class LockPolicy {
@@ -49,14 +50,18 @@ final class LockPolicy {
     /** Playback needed to unlock a video: max(min, fraction x duration); may outlast a short video. */
     static double videoLockSeconds(ShowOptions options, double durationSeconds) {
         double duration = Math.max(0, durationSeconds);
-        return Math.max(0, Math.max(options.minVideoLockSeconds, options.videoLockFraction * duration));
+        return capped(options, Math.max(0, Math.max(options.minVideoLockSeconds, options.videoLockFraction * duration)));
+    }
+
+    private static double capped(ShowOptions options, double seconds) {
+        return options.maxLockSeconds > 0 ? Math.min(seconds, options.maxLockSeconds) : seconds;
     }
 
     /** On-screen time that unlocks regardless of playback; also the net under a stalled or failed video. */
     static double screenLockSeconds(ShowOptions options, boolean video, double durationSeconds) {
-        return video
+        return capped(options, video
                 ? Math.max(videoLockSeconds(options, durationSeconds), options.imageLockSeconds)
-                : options.imageLockSeconds;
+                : options.imageLockSeconds);
     }
 
     static boolean isUnlocked(ShowOptions options, boolean video, double durationSeconds, double visibleSeconds,

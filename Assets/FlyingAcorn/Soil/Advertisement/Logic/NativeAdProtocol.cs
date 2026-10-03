@@ -117,16 +117,22 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         [JsonProperty("videoLockFraction")] public float VideoLockFraction;
         [JsonProperty("minVideoLockSeconds")] public float MinVideoLockSeconds;
         [JsonProperty("startMuted")] public bool StartMuted;
+        /// <summary>No lock lasts longer than this; 0 for no cap.</summary>
+        [JsonProperty("maxLockSeconds")] public float MaxLockSeconds;
 
-        /// <summary>Interstitial: closable after 5 s, or 80% of a video but never under 5 s.</summary>
+        /// <summary>
+        /// Interstitial: closable after 5 s, or 80% of a video but never under 5 s, and always by
+        /// 15 s (Google Play does not allow interstitials that cannot be closed after 15 s).
+        /// </summary>
         public static FullscreenShowOptions InterstitialDefaults() => new()
         {
             ImageLockSeconds = 5f,
             VideoLockFraction = 0.8f,
-            MinVideoLockSeconds = 5f
+            MinVideoLockSeconds = 5f,
+            MaxLockSeconds = 15f
         };
 
-        /// <summary>Rewarded: closable (and rewarded) after 20 s, or the whole video.</summary>
+        /// <summary>Rewarded: closable (and rewarded) after 20 s, or the whole video; no cap (opt-in).</summary>
         public static FullscreenShowOptions RewardedDefaults() => new()
         {
             ImageLockSeconds = 20f,

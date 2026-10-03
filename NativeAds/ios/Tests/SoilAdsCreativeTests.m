@@ -84,19 +84,24 @@
     XCTAssertEqual(i.imageLockSeconds, 5);
     XCTAssertEqual(i.videoLockFraction, 0.8);
     XCTAssertEqual(i.minVideoLockSeconds, 5);
+    XCTAssertEqual(i.maxLockSeconds, 15);
+    XCTAssertEqual(i.lockSettings.maxLockSeconds, 15);
     XCTAssertFalse(i.startMuted);
     SoilAdsShowOptions *r = [SoilAdsShowOptions defaultsForFormat:SoilAdsFormatRewarded];
     XCTAssertEqual(r.imageLockSeconds, 20);
     XCTAssertEqual(r.videoLockFraction, 1.0);
     XCTAssertEqual(r.minVideoLockSeconds, 0);
+    XCTAssertEqual(r.maxLockSeconds, 0, @"rewarded is opt-in: no cap");
     XCTAssertEqual([SoilAdsShowOptions defaultsForFormat:SoilAdsFormatBanner].position, SoilAdsBannerPositionBottom);
 }
 
 - (void)testFullOptions
 {
     SoilAdsShowOptions *o = [SoilAdsShowOptions optionsWithJSON:
-        @"{\"imageLockSeconds\":3,\"videoLockFraction\":0.5,\"minVideoLockSeconds\":2,\"startMuted\":true}"
+        @"{\"imageLockSeconds\":3,\"videoLockFraction\":0.5,\"minVideoLockSeconds\":2,\"startMuted\":true,\"maxLockSeconds\":9}"
                                                          format:SoilAdsFormatRewarded];
+    XCTAssertEqual(o.maxLockSeconds, 9);
+    XCTAssertEqual(o.lockSettings.maxLockSeconds, 9);
     XCTAssertEqual(o.imageLockSeconds, 3);
     XCTAssertEqual(o.videoLockFraction, 0.5);
     XCTAssertEqual(o.minVideoLockSeconds, 2);

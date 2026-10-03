@@ -6,17 +6,23 @@ static double SoilAdsFiniteOrZero(double value)
     return isfinite(value) ? value : 0;
 }
 
+static double SoilAdsCapped(SoilAdsLockSettings settings, double seconds)
+{
+    double cap = SoilAdsFiniteOrZero(settings.maxLockSeconds);
+    return cap > 0 ? fmin(seconds, cap) : seconds;
+}
+
 double SoilAdsVideoLockSeconds(SoilAdsLockSettings settings, double durationSeconds)
 {
     double duration = fmax(0, SoilAdsFiniteOrZero(durationSeconds));
-    return fmax(0, fmax(SoilAdsFiniteOrZero(settings.minVideoLockSeconds),
-                        SoilAdsFiniteOrZero(settings.videoLockFraction) * duration));
+    return SoilAdsCapped(settings, fmax(0, fmax(SoilAdsFiniteOrZero(settings.minVideoLockSeconds),
+                                                SoilAdsFiniteOrZero(settings.videoLockFraction) * duration)));
 }
 
 double SoilAdsScreenLockSeconds(SoilAdsLockSettings settings, BOOL isVideo, double durationSeconds)
 {
     double image = SoilAdsFiniteOrZero(settings.imageLockSeconds);
-    return isVideo ? fmax(SoilAdsVideoLockSeconds(settings, durationSeconds), image) : image;
+    return SoilAdsCapped(settings, isVideo ? fmax(SoilAdsVideoLockSeconds(settings, durationSeconds), image) : image);
 }
 
 /// A video of unknown length cannot be followed; it is timed like a failed one.

@@ -10,7 +10,12 @@ static SoilAdsLockSettings S(double image, double fraction, double minVideo)
     return s;
 }
 
-static SoilAdsLockSettings Interstitial(void) { return S(5, 0.8, 5); }
+static SoilAdsLockSettings Interstitial(void)
+{
+    SoilAdsLockSettings s = S(5, 0.8, 5);
+    s.maxLockSeconds = 15;
+    return s;
+}
 static SoilAdsLockSettings Rewarded(void) { return S(20, 1.0, 0); }
 
 static BOOL Unlocked(SoilAdsLockSettings s, BOOL video, double duration, double visible, double position,
@@ -44,9 +49,32 @@ static NSInteger Remaining(SoilAdsLockSettings s, BOOL video, double duration, d
 
 - (void)testInterstitialVideoUnlocksAtEightyPercent
 {
-    XCTAssertEqualWithAccuracy(SoilAdsVideoLockSeconds(Interstitial(), 20), 16, 1e-9);
-    XCTAssertFalse(Unlocked(Interstitial(), YES, 20, 15.9, 15.9, NO, NO));
-    XCTAssertTrue(Unlocked(Interstitial(), YES, 20, 16, 16, NO, NO));
+    XCTAssertEqualWithAccuracy(SoilAdsVideoLockSeconds(Interstitial(), 15), 12, 1e-9);
+    XCTAssertFalse(Unlocked(Interstitial(), YES, 15, 11.9, 11.9, NO, NO));
+    XCTAssertTrue(Unlocked(Interstitial(), YES, 15, 12, 12, NO, NO));
+}
+
+- (void)testInterstitialIsAlwaysClosableBy15Seconds
+{
+    // Google Play: interstitials must be closable after 15 s. 80% of a 30 s video would be 24 s.
+    XCTAssertEqualWithAccuracy(SoilAdsVideoLockSeconds(Interstitial(), 30), 15, 1e-9);
+    XCTAssertEqualWithAccuracy(SoilAdsScreenLockSeconds(Interstitial(), YES, 30), 15, 1e-9);
+    XCTAssertFalse(Unlocked(Interstitial(), YES, 30, 14.9, 14.9, NO, NO));
+    XCTAssertTrue(Unlocked(Interstitial(), YES, 30, 15, 15, NO, NO));
+    XCTAssertTrue(Unlocked(Interstitial(), YES, 30, 15, 2, NO, NO), @"a stalled video too");
+    XCTAssertEqual(Remaining(Interstitial(), YES, 30, 0, 0, NO, NO), 15);
+    SoilAdsLockSettings longImage = Interstitial();
+    longImage.imageLockSeconds = 20;
+    XCTAssertTrue(Unlocked(longImage, NO, 0, 15, 0, NO, NO), @"the cap holds for any interstitial");
+}
+
+- (void)testRewardedIsNotCappedAndNoCapMeansTheFullLock
+{
+    XCTAssertEqualWithAccuracy(SoilAdsVideoLockSeconds(Rewarded(), 30), 30, 1e-9);
+    XCTAssertFalse(Unlocked(Rewarded(), YES, 30, 29, 29, NO, NO));
+    SoilAdsLockSettings uncapped = Interstitial();
+    uncapped.maxLockSeconds = 0;
+    XCTAssertEqualWithAccuracy(SoilAdsVideoLockSeconds(uncapped, 30), 24, 1e-9);
 }
 
 - (void)testInterstitialVideoShorterThanFiveSecondsStillLocksFiveSeconds
@@ -96,9 +124,9 @@ static NSInteger Remaining(SoilAdsLockSettings s, BOOL video, double duration, d
 
 - (void)testCountdownFollowsWhicheverRuleIsCloser
 {
-    XCTAssertEqual(Remaining(Interstitial(), YES, 20, 0, 0, NO, NO), 16);
-    XCTAssertEqual(Remaining(Interstitial(), YES, 20, 15.5, 15.5, NO, NO), 1);
-    XCTAssertEqual(Remaining(Interstitial(), YES, 20, 17, 17, NO, NO), 0);
+    XCTAssertEqual(Remaining(Interstitial(), YES, 15, 0, 0, NO, NO), 12);
+    XCTAssertEqual(Remaining(Interstitial(), YES, 15, 11.5, 11.5, NO, NO), 1);
+    XCTAssertEqual(Remaining(Interstitial(), YES, 15, 13, 13, NO, NO), 0);
     XCTAssertEqual(Remaining(Rewarded(), YES, 15, 10, 10, NO, NO), 5);
     XCTAssertEqual(Remaining(Rewarded(), YES, 15, 15, 1, NO, NO), 5);
     XCTAssertEqual(Remaining(Rewarded(), YES, 30, 10, 0, NO, YES), 20);

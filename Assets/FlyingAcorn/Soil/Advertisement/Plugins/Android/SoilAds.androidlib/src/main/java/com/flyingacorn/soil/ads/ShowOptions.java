@@ -13,20 +13,23 @@ final class ShowOptions {
     final double videoLockFraction;
     final double minVideoLockSeconds;
     final boolean startMuted;
+    /** No lock lasts longer than this; 0 for no cap. */
+    final double maxLockSeconds;
 
     ShowOptions(double imageLockSeconds, double videoLockFraction, double minVideoLockSeconds,
-                boolean startMuted) {
+                boolean startMuted, double maxLockSeconds) {
         this.imageLockSeconds = imageLockSeconds;
         this.videoLockFraction = videoLockFraction;
         this.minVideoLockSeconds = minVideoLockSeconds;
         this.startMuted = startMuted;
+        this.maxLockSeconds = maxLockSeconds;
     }
 
-    /** The values C# sends by default, used for any field that is missing or not a number. */
+    /** The values C# sends by default, used for any field that is missing, not a number or negative. */
     static ShowOptions defaults(String format) {
         return AdFormats.REWARDED.equals(format)
-                ? new ShowOptions(20, 1.0, 0, false)
-                : new ShowOptions(5, 0.8, 5, false);
+                ? new ShowOptions(20, 1.0, 0, false, 0)
+                : new ShowOptions(5, 0.8, 5, false, 15);
     }
 
     static ShowOptions parse(String format, String json) {
@@ -37,7 +40,8 @@ final class ShowOptions {
                 number(o, "imageLockSeconds", d.imageLockSeconds),
                 number(o, "videoLockFraction", d.videoLockFraction),
                 number(o, "minVideoLockSeconds", d.minVideoLockSeconds),
-                o.optBoolean("startMuted", d.startMuted));
+                o.optBoolean("startMuted", d.startMuted),
+                number(o, "maxLockSeconds", d.maxLockSeconds));
     }
 
     /** {@code bottom} (default), {@code top} or {@code center}. */
@@ -48,9 +52,10 @@ final class ShowOptions {
         return POSITION_BOTTOM;
     }
 
+    /** Missing, non-numeric, infinite or negative values keep the default, as on iOS. */
     private static double number(JSONObject o, String key, double fallback) {
         double value = o.optDouble(key, Double.NaN);
-        return Double.isNaN(value) || Double.isInfinite(value) ? fallback : value;
+        return Double.isNaN(value) || Double.isInfinite(value) || value < 0 ? fallback : value;
     }
 
     static JSONObject parseObject(String json) {
