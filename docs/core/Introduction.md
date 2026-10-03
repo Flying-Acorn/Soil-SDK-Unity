@@ -20,6 +20,8 @@ Demo scene: `Assets/FlyingAcorn/Soil/Core/Demo/SoilExample.unity`
 
 ## Dependencies
 * [Newtonsoft JSON](https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html)
-* [TextMeshPro](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html)
-* Internal Analytics
-* <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>
+* Internal Analytics (included in the packages)
+* <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a> (included in the packages)
+* [TextMeshPro](https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html), for the demo scenes only
+
+See [Step 2 of the installation](../Installation.md#step-2-ensure-dependencies) for details.

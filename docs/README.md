@@ -2,7 +2,7 @@
 
 Welcome to the Soil SDK for Unity documentation.
 
-For installation instructions, see [Installation](./Installation.md).
+For installation instructions, see [Installation](./Installation.md). To move to a new version, see [Upgrading](./Installation.md#upgrading).
 
 ## Services
 - Development Booster Pack

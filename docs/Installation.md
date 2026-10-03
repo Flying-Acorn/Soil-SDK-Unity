@@ -28,14 +28,17 @@ The Soil SDK officially supports **Android** and **iOS** platforms. While the SD
 
 ## Step 2: Ensure Dependencies
 
-Ensure the following are present in your project:
-- <a href="https://github.com/googlesamples/unity-jar-resolver" target="_blank">External Dependency Manager for Unity</a> (EDM4U): required when using Social Authentication on Android, to resolve its Android libraries. Use one copy only — the UPM package or the `Assets/ExternalDependencyManager` folder.
-- <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a>: Within Package Manager, import `com.unity.nuget.newtonsoft-json` package by name
-- <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a> - Embedded within Unity
-- <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>(Embedded within downloaded packages)
-- <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a>(Embedded within downloaded packages)
+Install these from the Package Manager:
+- <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a> (`com.unity.nuget.newtonsoft-json`): required by every package. Add it by name.
+- Unity UI (`com.unity.ugui`): installed in new projects by default.
+- <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a> (`com.unity.textmeshpro` before Unity 6, part of `com.unity.ugui` from Unity 6): only the demo scenes use it. To open them, also import the TextMeshPro Essential Resources from `Window > TextMeshPro > Import TMP Essential Resources`.
 
-**Note for Demo Scenes**: If you plan to use the demo scenes included with the SDK, you must import the TextMeshPro Essential Resources. Go to `Window > TextMeshPro > Import TMP Essential Resources` in the Unity Editor.
+These come inside the downloaded packages. When your project already has one of them, untick its folder in Unity's *Import Unity Package* window, so the package does not overwrite your copy. Importing never deletes files but does overwrite them, including with older versions:
+- <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a> in `Assets/FlyingAcorn/Analytics` (every package except the SocialAuthentication extension). The packages carry only the core of the middleware. A game that uses the full middleware, with its `Services` folder for analytics providers, must keep its own copy.
+- <a href="https://github.com/Cysharp/UniTask" target="_blank">Cysharp/UniTask</a> in `Assets/Plugins/UniTask` (every package except the SocialAuthentication extension).
+- <a href="https://github.com/googlesamples/unity-jar-resolver" target="_blank">External Dependency Manager for Unity</a> (EDM4U) in `Assets/ExternalDependencyManager` (the SocialAuthentication extension). Social Authentication on Android needs it to resolve its Android libraries. When you use the EDM4U UPM package instead, untick this folder when importing.
+
+The packages need nothing else: they ship no tests, so the Unity Test Framework is not required, and Advertisement no longer needs RTL Text Mesh Pro (it shipped with Advertisement up to 2.3.0).
 
 ## Step 3: Create SDKSettings File
 
@@ -65,3 +68,22 @@ Inside your `Assets/Resources/` create a `FA_Build_Settings.asset` using the fol
 ## Installation Complete
 
 Your Soil SDK is now installed and configured! You can start integrating services. We recommend beginning with the [Core module](./core/Integration.md) for basic setup, then add other modules as needed. See the [Services overview](./README.md#services) for all available integrations.
+
+## Upgrading
+
+Importing a `.unitypackage` adds and overwrites files but never deletes any. When a new version removes or renames a file, the old one stays in your project. Stale scripts can break compilation, because they still use types the new version no longer has, and stale libraries can clash at build time.
+
+To upgrade cleanly:
+
+1. Commit or back up your project.
+2. In Unity's Project window, delete the folders the Soil packages installed:
+    - `Assets/FlyingAcorn/Soil`
+    - `Assets/FlyingAcorn/Analytics`, only when it came from the Soil packages. Keep it when your game uses the full Analytics middleware (it has a `Services` folder), and untick it when importing.
+    - `Assets/Plugins/UniTask`, only when it came from the Soil packages
+    - `Assets/ExternalDependencyManager` (when you use SocialAuthentication and have this folder rather than the EDM4U UPM package)
+    - `Assets/RTLTMPro`, when upgrading Advertisement from 2.3.0 or earlier and your game does not use RTL Text Mesh Pro itself. Newer versions do not ship or need it.
+3. Import the new version of every package you use, as in [Step 1](#step-1-download-and-import-the-sdk), unticking the folders you kept. When you use SocialAuthentication, import `Soil-X.Y.Z-SocialAuthentication_Extension.unitypackage` too, since it lives inside `Assets/FlyingAcorn/Soil`.
+
+Your settings live in `Assets/Resources/` (`SDKSettings.asset`, `FA_Build_Settings.asset` and the `ThirdParties` settings), outside these folders, so they are kept. Keep your own files out of these folders too. The new files keep the same asset GUIDs, so your scenes and prefabs still reference any SDK asset that exists in the new version.
+
+The release notes of each version list the files it removed.
