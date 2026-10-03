@@ -150,6 +150,9 @@ The screenshots above were made this way, from real cached Soil creatives.
 - **iOS sources must compile under strict C11:** no `?:` shorthand and no `typeof`. Guard any API
   newer than iOS 12 with `@available`. The harness builds with warnings as errors to catch this.
 - **Android:** stay on Java 8 and `android.*`, and check every API against minSdk 22.
+- **Nothing may throw out of a player.** Run every new callback the OS makes into the player
+  through the guard (Android `Guard`, iOS `SoilAdsGuard`); a failure ends the show cleanly instead
+  of ending the game. The device tests inject a fault (`failAtForTests`) to prove it.
 - **Behavior lives in `PROTOCOL.md`.** Change it there first, then on both platforms, then the
   tests on both.
 - Keep Android and iOS looking and behaving the same. The comparison screenshots are the easiest

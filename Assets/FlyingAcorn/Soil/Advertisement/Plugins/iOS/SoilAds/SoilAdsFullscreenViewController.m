@@ -28,6 +28,7 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     BOOL _videoFailed;
     BOOL _tornDown;
     BOOL _closeShownUnlocked;
+    BOOL _failed;
     SoilAdsPlayerView *_playerView;
     UIImageView *_imageView;
     NSMutableArray<id> *_observers;
@@ -69,10 +70,39 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     return _orientations != 0 ? _orientations : UIInterfaceOrientationMaskAllButUpsideDown;
 }
 
+static NSString *SoilAdsFailAtForTests;
+
++ (NSString *)failAtForTests { return SoilAdsFailAtForTests; }
++ (void)setFailAtForTests:(NSString *)where { SoilAdsFailAtForTests = [where copy]; }
+
+static void SoilAdsFaultForTests(NSString *where)
+{
+    if ([where isEqualToString:SoilAdsFailAtForTests])
+        @throw [NSException exceptionWithName:@"SoilAdsInjectedFault" reason:where userInfo:nil];
+}
+
+/// Runs one of the screen's callbacks; an exception in it is reported once to the delegate, which
+/// ends the show (`closed`, or `showFailed` if it never appeared) instead of letting it end the app.
+- (void)guard:(NSString *)what block:(dispatch_block_t)block
+{
+    if (SoilAdsGuard(what, block) || _failed) return;
+    _failed = YES;
+    id<SoilAdsFullscreenDelegate> delegate = self.delegate;
+    SoilAdsGuard(@"reporting the failure", ^{ [delegate fullscreenControllerDidFail:self]; });
+}
+
 - (void)viewDidLoad
 {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
+    [self guard:@"building the ad" block:^{
+        SoilAdsFaultForTests(@"create");
+        [self buildView];
+    }];
+}
+
+- (void)buildView
+{
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [self addBackdrop];
 
@@ -300,31 +330,36 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
 - (void)viewDidAppear:(BOOL)animated
 {
     [super viewDidAppear:animated];
-    if (_tornDown) return;
-    _appeared = YES;
-    _appActive = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
-    _lastTick = CACurrentMediaTime();
-    if (!_timer) {
-        __weak __typeof__(self) weakSelf = self;
-        _timer = [NSTimer timerWithTimeInterval:SoilAdsTickInterval repeats:YES block:^(NSTimer *timer) {
-            [weakSelf tick];
-        }];
-        [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
-    }
-    [self updatePlayback];
-    [self tick];
+    [self guard:@"appearing" block:^{
+        if (_tornDown) return;
+        _appeared = YES;
+        _appActive = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+        _lastTick = CACurrentMediaTime();
+        if (!_timer) {
+            __weak __typeof__(self) weakSelf = self;
+            _timer = [NSTimer timerWithTimeInterval:SoilAdsTickInterval repeats:YES block:^(NSTimer *timer) {
+                __typeof__(self) self_ = weakSelf;
+                [self_ guard:@"tick" block:^{ [self_ tick]; }];
+            }];
+            [[NSRunLoop mainRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
+        }
+        [self updatePlayback];
+        [self tick];
+    }];
 }
 
 - (void)viewDidDisappear:(BOOL)animated
 {
     [super viewDidDisappear:animated];
-    if (_tornDown) return;
-    [self tick];
-    _appeared = NO;
-    [self updatePlayback];
-    BOOL dismissed = self.isBeingDismissed || self.presentingViewController == nil
-        || self.presentingViewController.isBeingDismissed;
-    if (dismissed) [self.delegate fullscreenControllerDidDisappear:self];
+    [self guard:@"disappearing" block:^{
+        if (_tornDown) return;
+        [self tick];
+        _appeared = NO;
+        [self updatePlayback];
+        BOOL dismissed = self.isBeingDismissed || self.presentingViewController == nil
+            || self.presentingViewController.isBeingDismissed;
+        if (dismissed) [self.delegate fullscreenControllerDidDisappear:self];
+    }];
 }
 
 - (void)teardown
@@ -347,15 +382,27 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
     NSOperationQueue *main = [NSOperationQueue mainQueue];
     __weak __typeof__(self) weakSelf = self;
     [_observers addObject:[center addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:main
-                                          usingBlock:^(NSNotification *note) { [weakSelf appWillResignActive]; }]];
+                                          usingBlock:^(NSNotification *note) {
+        __typeof__(self) self_ = weakSelf;
+        [self_ guard:@"appWillResignActive" block:^{ [self_ appWillResignActive]; }];
+    }]];
     [_observers addObject:[center addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:main
-                                          usingBlock:^(NSNotification *note) { [weakSelf appDidBecomeActive]; }]];
+                                          usingBlock:^(NSNotification *note) {
+        __typeof__(self) self_ = weakSelf;
+        [self_ guard:@"appDidBecomeActive" block:^{ [self_ appDidBecomeActive]; }];
+    }]];
     AVPlayerItem *item = _player.currentItem;
     if (!item) return;
     [_observers addObject:[center addObserverForName:AVPlayerItemDidPlayToEndTimeNotification object:item queue:main
-                                          usingBlock:^(NSNotification *note) { [weakSelf videoDidEnd]; }]];
+                                          usingBlock:^(NSNotification *note) {
+        __typeof__(self) self_ = weakSelf;
+        [self_ guard:@"videoDidEnd" block:^{ [self_ videoDidEnd]; }];
+    }]];
     [_observers addObject:[center addObserverForName:AVPlayerItemFailedToPlayToEndTimeNotification object:item queue:main
-                                          usingBlock:^(NSNotification *note) { [weakSelf videoDidFail]; }]];
+                                          usingBlock:^(NSNotification *note) {
+        __typeof__(self) self_ = weakSelf;
+        [self_ guard:@"videoDidFail" block:^{ [self_ videoDidFail]; }];
+    }]];
 }
 
 - (void)appWillResignActive
@@ -430,6 +477,7 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
 - (void)tick
 {
     if (_tornDown) return;
+    SoilAdsFaultForTests(@"tick");
     CFTimeInterval now = CACurrentMediaTime();
     double elapsed = now - _lastTick;
     _lastTick = now;
@@ -487,32 +535,38 @@ static const NSTimeInterval SoilAdsTickInterval = 0.25;
 
 - (void)muteTapped
 {
-    if (_tornDown || !_player) return;
-    _player.muted = !_player.muted;
-    [self refreshMuteButton];
+    [self guard:@"mute" block:^{
+        if (_tornDown || !_player) return;
+        _player.muted = !_player.muted;
+        [self refreshMuteButton];
+    }];
 }
 
 - (void)closeTapped
 {
-    if (_tornDown) {
-        // The session already ended but UIKit never dismissed the ad (the player gave up
-        // retrying): the button still takes it off screen, with no further events.
-        if (self.presentingViewController.presentedViewController == self && !self.isBeingDismissed)
-            [self.presentingViewController dismissViewControllerAnimated:NO completion:nil];
-        return;
-    }
-    [self tick];
-    if (_tornDown || !_lockPolicy.unlocked) return;
-    [self.delegate fullscreenControllerDidRequestClose:self];
+    [self guard:@"close" block:^{
+        if (_tornDown) {
+            // The session already ended but UIKit never dismissed the ad (the player gave up
+            // retrying): the button still takes it off screen, with no further events.
+            if (self.presentingViewController.presentedViewController == self && !self.isBeingDismissed)
+                [self.presentingViewController dismissViewControllerAnimated:NO completion:nil];
+            return;
+        }
+        [self tick];
+        if (_tornDown || !_lockPolicy.unlocked) return;
+        [self.delegate fullscreenControllerDidRequestClose:self];
+    }];
 }
 
 - (void)clickTapped
 {
-    if (_tornDown) return;
-    [self tick];
-    _awayAfterClick = YES;
-    [self updatePlayback];
-    [self.delegate fullscreenControllerDidClick:self];
+    [self guard:@"click" block:^{
+        if (_tornDown) return;
+        [self tick];
+        _awayAfterClick = YES;
+        [self updatePlayback];
+        [self.delegate fullscreenControllerDidClick:self];
+    }];
 }
 
 @end

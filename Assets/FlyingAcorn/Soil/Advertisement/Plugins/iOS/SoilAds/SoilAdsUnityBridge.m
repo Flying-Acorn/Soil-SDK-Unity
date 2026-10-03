@@ -69,7 +69,9 @@ static SoilAdsManager *SoilAdsSharedManager(void)
             NSString *object = SoilAdsReceiverObject;
             NSString *method = SoilAdsReceiverMethod;
             if (object.length == 0 || method.length == 0) return; // no receiver yet: dropped
-            UnitySendMessage(object.UTF8String, method.UTF8String, json.UTF8String);
+            SoilAdsGuard(@"sending an event to Unity", ^{
+                UnitySendMessage(object.UTF8String, method.UTF8String, json.UTF8String);
+            });
         };
     });
     return manager;
@@ -89,11 +91,21 @@ static void SoilAdsOnMain(dispatch_block_t block)
     else dispatch_async(dispatch_get_main_queue(), block);
 }
 
+/// Runs a call from Unity on the main thread; an exception in it ends any fullscreen ad cleanly
+/// (the game resumes) instead of ending the app.
+static void SoilAdsRun(NSString *what, dispatch_block_t block)
+{
+    SoilAdsOnMain(^{
+        if (SoilAdsGuard(what, block)) return;
+        SoilAdsGuard(@"recovering", ^{ [SoilAdsSharedManager() recoverFromFailure]; });
+    });
+}
+
 void SoilAds_Initialize(const char *receiverObject, const char *receiverMethod)
 {
     NSString *object = SoilAdsCopyString(receiverObject);
     NSString *method = SoilAdsCopyString(receiverMethod);
-    SoilAdsOnMain(^{
+    SoilAdsRun(@"initialize", ^{
         SoilAdsReceiverObject = object;
         SoilAdsReceiverMethod = method;
         SoilAdsSharedManager();
@@ -104,35 +116,38 @@ void SoilAds_Load(const char *format, const char *creativeJson)
 {
     NSString *formatName = SoilAdsCopyString(format);
     NSString *json = SoilAdsCopyString(creativeJson);
-    SoilAdsOnMain(^{ [SoilAdsSharedManager() loadFormat:formatName creativeJSON:json]; });
+    SoilAdsRun(@"load", ^{ [SoilAdsSharedManager() loadFormat:formatName creativeJSON:json]; });
 }
 
 void SoilAds_Show(const char *format, const char *optionsJson)
 {
     NSString *formatName = SoilAdsCopyString(format);
     NSString *json = SoilAdsCopyString(optionsJson);
-    SoilAdsOnMain(^{ [SoilAdsSharedManager() showFormat:formatName optionsJSON:json]; });
+    SoilAdsRun(@"show", ^{ [SoilAdsSharedManager() showFormat:formatName optionsJSON:json]; });
 }
 
 void SoilAds_Hide(const char *format)
 {
     NSString *formatName = SoilAdsCopyString(format);
-    SoilAdsOnMain(^{ [SoilAdsSharedManager() hideFormat:formatName]; });
+    SoilAdsRun(@"hide", ^{ [SoilAdsSharedManager() hideFormat:formatName]; });
 }
 
 void SoilAds_Destroy(const char *format)
 {
     NSString *formatName = SoilAdsCopyString(format);
-    SoilAdsOnMain(^{ [SoilAdsSharedManager() destroyFormat:formatName]; });
+    SoilAdsRun(@"destroy", ^{ [SoilAdsSharedManager() destroyFormat:formatName]; });
 }
 
 void SoilAds_ShownReceived(const char *format)
 {
     NSString *formatName = SoilAdsCopyString(format);
-    SoilAdsOnMain(^{ [SoilAdsSharedManager() acknowledgeShownFormat:formatName]; });
+    SoilAdsRun(@"shown received", ^{ [SoilAdsSharedManager() acknowledgeShownFormat:formatName]; });
 }
 
 bool SoilAds_IsReady(const char *format)
 {
-    return [SoilAdsSharedManager() isReady:SoilAdsCopyString(format)] ? true : false;
+    NSString *formatName = SoilAdsCopyString(format);
+    __block BOOL ready = NO;
+    SoilAdsGuard(@"isReady", ^{ ready = [SoilAdsSharedManager() isReady:formatName]; });
+    return ready ? true : false;
 }
