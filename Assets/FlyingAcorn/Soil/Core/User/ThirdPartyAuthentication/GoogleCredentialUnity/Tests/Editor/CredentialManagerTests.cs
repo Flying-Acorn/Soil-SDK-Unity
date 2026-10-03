@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
+using System.Linq;
 using CredentialBridge;
 using FlyingAcorn.Soil.Core.Data;
 using FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
@@ -21,10 +20,16 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
         private readonly List<string> _startedRequestIds = new();
         private readonly List<CredentialUserData> _successes = new();
         private readonly List<CredentialExceptionData> _failures = new();
+        private readonly CapturingLogHandler _logs = new();
+        private ILogHandler _originalLogHandler;
 
         [SetUp]
         public void SetUp()
         {
+            // Expected errors would otherwise still print to the Console even when LogAssert accepts them.
+            _logs.Entries.Clear();
+            _originalLogHandler = Debug.unityLogger.logHandler;
+            Debug.unityLogger.logHandler = _logs;
             CredentialManager.ResetForTests();
             CredentialManager.BridgeInvoker = (_, requestId) => _startedRequestIds.Add(requestId);
             _startedRequestIds.Clear();
@@ -35,10 +40,23 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
         [TearDown]
         public void TearDown()
         {
+            Debug.unityLogger.logHandler = _originalLogHandler;
             CredentialManager.ResetForTests();
             var bridge = GameObject.Find("JavaBridge");
             if (bridge != null)
                 Object.DestroyImmediate(bridge);
+
+            // Same rule LogAssert enforced: an error or exception no test expected fails the test.
+            var unexpected = _logs.Entries.Where(e => e.type is LogType.Error or LogType.Exception or LogType.Assert)
+                .Select(e => $"{e.type}: {e.message}").ToList();
+            Assert.IsEmpty(unexpected, "Unexpected logs");
+        }
+
+        private void ExpectLog(LogType type, Func<string, bool> matches)
+        {
+            var index = _logs.Entries.FindIndex(e => e.type == type && matches(e.message));
+            Assert.GreaterOrEqual(index, 0, $"Expected a {type} log");
+            _logs.Entries.RemoveAt(index);
         }
 
         private string Start()
@@ -85,8 +103,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
             CredentialManager.StartCredentialProcess(secondSuccesses.Add, _failures.Add);
             var second = _startedRequestIds[^1];
 
-            LogAssert.Expect(LogType.Warning, $"[CredentialManager] Ignoring result of superseded request {first}");
             DeliverSuccess(first);
+            ExpectLog(LogType.Warning, m => m == $"[CredentialManager] Ignoring result of superseded request {first}");
             Assert.IsEmpty(secondSuccesses);
 
             DeliverSuccess(second);
@@ -112,8 +130,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
         {
             var requestId = Start();
 
-            LogAssert.Expect(LogType.Error, UtilStrings.ErrorCredentialDataNull);
             DeliverSuccess(requestId, id: "");
+            ExpectLog(LogType.Error, m => m == UtilStrings.ErrorCredentialDataNull);
 
             Assert.IsEmpty(_successes);
             Assert.AreEqual(1, _failures.Count);
@@ -125,9 +143,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
         {
             Start();
 
-            LogAssert.ignoreFailingMessages = true;
             Handler.OnLogin("{not json");
-            LogAssert.ignoreFailingMessages = false;
+            ExpectLog(LogType.Error, m => m.StartsWith(UtilStrings.ErrorCredentialDataNull + ": "));
 
             Assert.IsEmpty(_successes);
             Assert.AreEqual(1, _failures.Count);
@@ -139,8 +156,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
         {
             CredentialManager.BridgeInvoker = (_, _) => throw new InvalidOperationException("no bridge");
 
-            LogAssert.Expect(LogType.Exception, new Regex("no bridge"));
             CredentialManager.StartCredentialProcess(_successes.Add, _failures.Add);
+            ExpectLog(LogType.Exception, m => m.Contains("no bridge"));
 
             Assert.AreEqual(1, _failures.Count);
             Assert.AreEqual(CredentialManager.BridgeErrorType, _failures[0].type);
@@ -152,8 +169,9 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
             var requestId = Start();
             DeliverSuccess(requestId);
 
-            LogAssert.Expect(LogType.Warning, $"[CredentialManager] Ignoring result of superseded request {requestId}");
             DeliverFailure(requestId, "android.credentials.GetCredentialException.TYPE_UNKNOWN");
+            ExpectLog(LogType.Warning,
+                m => m == $"[CredentialManager] Ignoring result of superseded request {requestId}");
 
             Assert.AreEqual(1, _successes.Count);
             Assert.IsEmpty(_failures);
@@ -171,8 +189,8 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
                     _failures.Add);
                 var requestId = _startedRequestIds[^1];
 
-                LogAssert.Expect(LogType.Exception, new Regex("caller bug"));
                 DeliverSuccess(requestId);
+                ExpectLog(LogType.Exception, m => m.Contains("caller bug"));
 
                 Assert.AreEqual(1, shared);
             }
@@ -213,6 +231,17 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.Tests
             public string requestId;
             public string type;
             public string message;
+        }
+
+        private class CapturingLogHandler : ILogHandler
+        {
+            public readonly List<(LogType type, string message)> Entries = new();
+
+            public void LogFormat(LogType logType, Object context, string format, params object[] args) =>
+                Entries.Add((logType, args is { Length: > 0 } ? string.Format(format, args) : format));
+
+            public void LogException(Exception exception, Object context) =>
+                Entries.Add((LogType.Exception, exception.ToString()));
         }
     }
 }
