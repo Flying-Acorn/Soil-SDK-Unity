@@ -29,6 +29,7 @@ The Soil SDK officially supports **Android** and **iOS** platforms. While the SD
 ## Step 2: Ensure Dependencies
 
 Ensure the following are present in your project:
+- <a href="https://github.com/googlesamples/unity-jar-resolver" target="_blank">External Dependency Manager for Unity</a> (EDM4U): required when using Social Authentication on Android, to resolve its Android libraries. Use one copy only — the UPM package or the `Assets/ExternalDependencyManager` folder.
 - <a href="https://docs.unity3d.com/Packages/com.unity.nuget.newtonsoft-json@3.2/manual/index.html" target="_blank">Newtonsoft JSON</a>: Within Package Manager, import `com.unity.nuget.newtonsoft-json` package by name
 - <a href="https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/TextMeshPro/index.html" target="_blank">TextMeshPro</a> - Embedded within Unity
 - <a href="https://github.com/Flying-Acorn/Analytics-Middleware-for-Unity" target="_blank">FlyingAcorn/Analytics-Middleware-for-Unity</a>(Embedded within downloaded packages)

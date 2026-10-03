@@ -2,7 +2,9 @@
 
 Before integrating, ensure you have completed the [Installation](../Installation.md) and understand the [Introduction](Introduction.md).
 
-> Important: Google authentication on Android requires Android API level 34 (Android 14) or higher. Some dependency libraries used by the SDK indicate a minimum API level of 28 — verify your Android project's minSdkVersion/targetSdkVersion and plan for device compatibility.
+> Important: Google authentication on Android needs a compile SDK of API level 34 or higher (required by `androidx.credentials`) and runs on devices with API level 28 (Android 9) or higher — verify your Android project's minSdkVersion and compile/target SDK.
+
+> Android dependencies: Google sign-in on Android resolves `androidx.credentials:credentials`, `androidx.credentials:credentials-play-services-auth` and `com.google.android.libraries.identity.googleid:googleid` through [External Dependency Manager for Unity](https://github.com/googlesamples/unity-jar-resolver) (EDM4U), so EDM4U must be in your project — without it the Android build fails to compile the sign-in bridge. Keep a single copy of EDM4U: either the UPM package or the `Assets/ExternalDependencyManager` folder, not both. The SDK does not add `androidx.appcompat` or `kotlinx-serialization-json`; if your project uses them, declare them yourself.
 
 **Service Enablement**: Ensure the Social Authentication service is enabled for your account. Reach out to your Soil contact to enable the service for you.
 
