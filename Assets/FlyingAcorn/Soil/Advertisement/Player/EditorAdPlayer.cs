@@ -281,11 +281,14 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         #region Drawing
 
         private const string VideoLabel = "▶ Video ad (simulated 6 s in the Editor)";
-        /// <summary>The badge every Soil ad carries, as the native players draw it: Persian for "ad".</summary>
-        internal const string BadgeText = "تبلیغ";
+        /// <summary>
+        /// The badge, in English: IMGUI cannot join Persian letters, so the Editor placeholder shows
+        /// English where devices show «تبلیغ» and the ad's own Persian texts.
+        /// </summary>
+        internal const string BadgeText = "Ad";
 
         // Built once per Game view size, never per GUI call.
-        private GUIStyle _text, _title, _button, _badge, _textRtl, _titleLine, _titleLineRtl, _videoTitle;
+        private GUIStyle _text, _title, _button, _badge, _titleLine, _videoTitle;
         private float _styledFor;
         private readonly Dictionary<string, GUIContent> _badgeContents = new();
         private int _countdownShown = -1;
@@ -312,9 +315,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             _badge = new GUIStyle(GUI.skin.box) { fontSize = Mathf.RoundToInt(size * 0.8f), normal = { textColor = Color.black } };
             _badge.normal.background = Texture2D.whiteTexture;
             _text.alignment = TextAnchor.UpperLeft;
-            _textRtl = new GUIStyle(_text) { alignment = TextAnchor.UpperRight };
             _titleLine = new GUIStyle(_title) { alignment = TextAnchor.UpperLeft, wordWrap = false };
-            _titleLineRtl = new GUIStyle(_title) { alignment = TextAnchor.UpperRight, wordWrap = false };
             _videoTitle = new GUIStyle(_title) { alignment = TextAnchor.MiddleCenter };
         }
 
@@ -353,8 +354,6 @@ namespace FlyingAcorn.Soil.Advertisement.Player
                 GUI.DrawTexture(media, p.Ad.Image, ScaleMode.ScaleToFit);
             if (p.Ad.IsVideo)
                 GUI.Label(new Rect(media.x, media.center.y - Unit * 3, media.width, Unit * 2), VideoLabel, _videoTitle);
-            if (GUI.Button(media, GUIContent.none, GUIStyle.none))
-                PressCallToAction();
 
             var bar = new Rect(0, Screen.height - barHeight, Screen.width, barHeight);
             Fill(bar, new Color(0.07f, 0.07f, 0.07f));
@@ -364,7 +363,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
             var textsRight = hasCallToAction ? cta.x - Unit : bar.xMax - Unit;
             DrawTexts(new Rect(bar.x + Unit, bar.y + Unit * 0.6f, textsRight - bar.x - Unit, barHeight - Unit * 1.2f),
                 creative, 2);
-            if (hasCallToAction && GUI.Button(cta, creative.CallToAction ?? "", _button))
+            if (hasCallToAction && GUI.Button(cta, Readable(creative.CallToAction, "Install"), _button))
                 PressCallToAction();
 
             Badge(new Vector2(Unit, Unit), BadgeText + "  (Editor)");
@@ -387,18 +386,26 @@ namespace FlyingAcorn.Soil.Advertisement.Player
                 }
                 GUI.Box(close, _countdownText, _button);
             }
+
+            // Last: IMGUI hands a click to the first control drawn under it, so the media's tap
+            // target must come after the close and call-to-action buttons it covers.
+            if (GUI.Button(media, GUIContent.none, GUIStyle.none))
+                PressCallToAction();
         }
 
         private void DrawTexts(Rect area, AdCreative creative, int descriptionLines)
         {
-            var rtl = IsRightToLeft(creative.Title) || IsRightToLeft(creative.Description);
-            var title = rtl ? _titleLineRtl : _titleLine;
-            var text = rtl ? _textRtl : _text;
+            var title = _titleLine;
+            var text = _text;
             var titleHeight = title.fontSize * 1.4f;
-            GUI.Label(new Rect(area.x, area.y, area.width, titleHeight), creative.Title ?? "", title);
+            GUI.Label(new Rect(area.x, area.y, area.width, titleHeight), Readable(creative.Title, "Soil ad"), title);
             GUI.Label(new Rect(area.x, area.y + titleHeight, area.width, text.fontSize * 1.35f * descriptionLines),
-                creative.Description ?? "", text);
+                Readable(creative.Description, "(Persian text, shown on devices)"), text);
         }
+
+        /// <summary>The text, or an English stand-in when it is Persian or Arabic (see BadgeText).</summary>
+        private static string Readable(string text, string standIn) =>
+            IsRightToLeft(text) ? standIn : text ?? "";
 
         private void Badge(Vector2 at, string label = null)
         {
@@ -421,8 +428,7 @@ namespace FlyingAcorn.Soil.Advertisement.Player
         private static bool IsRightToLeft(string text)
         {
             if (string.IsNullOrEmpty(text)) return false;
-            // Hebrew, Arabic and their presentation forms. IMGUI does not join or reorder these letters,
-            // so the Editor placeholder only aligns them; devices draw them with the OS.
+            // Hebrew, Arabic and their presentation forms: IMGUI does not join or reorder these letters.
             foreach (var c in text)
                 if (c is >= '\u0590' and <= '\u08FF' or >= '\uFB1D' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF')
                     return true;
