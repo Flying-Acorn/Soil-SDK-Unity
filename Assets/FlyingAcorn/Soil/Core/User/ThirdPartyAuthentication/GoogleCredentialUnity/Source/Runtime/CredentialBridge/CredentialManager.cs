@@ -14,15 +14,24 @@
 //    limitations under the License.
 // </copyright>
 using System;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEngine.Events;
+
+[assembly: InternalsVisibleTo("Assembly-CSharp-Editor")]
 
 namespace CredentialBridge
 {
     public class CredentialManager : MonoBehaviour
     {
+        // Fire for every result, whoever started the request. Callers that need their own result should pass
+        // callbacks to StartCredentialProcess instead of listening here.
         public static readonly UnityEvent<CredentialUserData> OnLoginSucess = new UnityEvent<CredentialUserData>();
         public static readonly UnityEvent<CredentialExceptionData> OnLoginFailed = new UnityEvent<CredentialExceptionData>();
+
+        // Reported when the bridge itself fails, so a request never ends without a result.
+        public const string BridgeErrorType = "CredentialBridge.BridgeError";
+        public const string InvalidResponseType = "CredentialBridge.InvalidResponse";
 
         private static CredentialManager m_instance;
         private static GameObject m_gameObject;
@@ -30,10 +39,18 @@ namespace CredentialBridge
         private const string m_objectName = "JavaBridge";
         private const string m_methodSucessName = "OnLogin";
         private const string m_methodExceptionName = "OnException";
-        // The bundled AAR drops the ID token, so this in-source bridge replaces it.
         private const string m_libaryObjectName = "com.flyingacorn.soil.credential.SoilCredentialBridge";
         private const string m_libaryObjectMethod = "getUserDataUnity";
         private string m_oathID = "";
+
+        // Only the latest request is answered; results that echo an older id are dropped.
+        private static int s_lastRequestId;
+        private static string s_pendingRequestId;
+        private static Action<CredentialUserData> s_pendingSuccess;
+        private static Action<CredentialExceptionData> s_pendingFailure;
+
+        // Tests replace the Java call with this (oauth client id, request id); null means call the Java bridge.
+        internal static Action<string, string> BridgeInvoker;
 
         private CredentialManager(){}
 
@@ -61,16 +78,94 @@ namespace CredentialBridge
 
         public static void StartCredentialProcess()
         {
-            AndroidJavaObject mainFunctions = new AndroidJavaObject(m_libaryObjectName);
-            object[] userParam = new object[] { GetInstance().m_oathID, m_objectName, m_methodSucessName, m_methodExceptionName };
+            StartCredentialProcess(null, null);
+        }
+
+        /// <summary>
+        /// Starts a sign-in and reports its outcome exactly once to the given callbacks, unless a newer request
+        /// supersedes it first, in which case it reports nothing. A superseded request is not told it was
+        /// replaced: Soil's sign-in callbacks are global, so a late failure would land on the newer attempt.
+        /// Callers that need to know should not start a second request while one is pending.
+        /// </summary>
+        public static void StartCredentialProcess(Action<CredentialUserData> onSuccess,
+            Action<CredentialExceptionData> onFailure)
+        {
+            var requestId = (++s_lastRequestId).ToString();
+            s_pendingRequestId = requestId;
+            s_pendingSuccess = onSuccess;
+            s_pendingFailure = onFailure;
+
             try
             {
-                mainFunctions.Call(m_libaryObjectMethod, userParam);
+                var oathID = GetInstance().m_oathID;
+                if (BridgeInvoker != null)
+                {
+                    BridgeInvoker(oathID, requestId);
+                    return;
+                }
+
+                using var bridge = new AndroidJavaObject(m_libaryObjectName);
+                bridge.Call(m_libaryObjectMethod, oathID, requestId, m_objectName,
+                    m_methodSucessName, m_methodExceptionName);
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 Debug.LogException(e);
-            }            
-        }        
+                Complete(requestId, null, new CredentialExceptionData { type = BridgeErrorType, message = e.Message });
+            }
+        }
+
+        /// <param name="requestId">The id the result echoes; null when it could not be read, which is treated as
+        /// the pending request so a malformed payload still ends it.</param>
+        internal static void Complete(string requestId, CredentialUserData? success, CredentialExceptionData? failure)
+        {
+            if (s_pendingRequestId == null || (requestId != null && requestId != s_pendingRequestId))
+            {
+                Debug.LogWarning($"[CredentialManager] Ignoring result of superseded request {requestId}");
+                return;
+            }
+
+            var onSuccess = s_pendingSuccess;
+            var onFailure = s_pendingFailure;
+            s_pendingRequestId = null;
+            s_pendingSuccess = null;
+            s_pendingFailure = null;
+
+            // A throwing caller must not stop the shared events or escape into whoever delivered the result.
+            if (success.HasValue)
+            {
+                SafeInvoke(onSuccess, success.Value);
+                SafeInvoke(OnLoginSucess.Invoke, success.Value);
+            }
+            else if (failure.HasValue)
+            {
+                SafeInvoke(onFailure, failure.Value);
+                SafeInvoke(OnLoginFailed.Invoke, failure.Value);
+            }
+        }
+
+        private static void SafeInvoke<T>(Action<T> callback, T value)
+        {
+            if (callback == null)
+                return;
+
+            try
+            {
+                callback(value);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+        }
+
+        // Tests start every case from a clean state.
+        internal static void ResetForTests()
+        {
+            s_pendingRequestId = null;
+            s_pendingSuccess = null;
+            s_pendingFailure = null;
+            BridgeInvoker = null;
+        }
     }
 }

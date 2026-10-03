@@ -13,37 +13,92 @@
 //  See the License for the specific language governing permissions and
 //    limitations under the License.
 // </copyright>
+using System;
 using UnityEngine;
 
 namespace CredentialBridge
 {
     public class CredentialEventHandler : MonoBehaviour
     {
+        // The Java bridge echoes the id it was started with next to the payload fields.
+        [Serializable]
+        private struct RequestEnvelope
+        {
+#pragma warning disable 0649 // Assigned by JsonUtility.
+            public string requestId;
+#pragma warning restore 0649
+        }
+
         private void Awake()
         {
             DontDestroyOnLoad(this);
         }
 
-        private void OnLogin(string message)
+        internal void OnLogin(string message)
         {
-            CredentialUserData data = JsonUtility.FromJson<CredentialUserData>(message);
-            if (data.id == null || data.id == string.Empty)
+            var requestId = ReadRequestId(message);
+            CredentialUserData data;
+            try
             {
-                Debug.LogError(UtilStrings.ErrorCredentialDataNull);
+                data = JsonUtility.FromJson<CredentialUserData>(message);
+            }
+            catch (Exception e)
+            {
+                Fail(requestId, $"{UtilStrings.ErrorCredentialDataNull}: {e.Message}");
                 return;
             }
-            CredentialManager.OnLoginSucess.Invoke(data);
+
+            if (string.IsNullOrEmpty(data.id))
+            {
+                Fail(requestId, UtilStrings.ErrorCredentialDataNull);
+                return;
+            }
+
+            CredentialManager.Complete(requestId, data, null);
         }
 
-        private void OnException(string message)
+        internal void OnException(string message)
         {
-            CredentialExceptionData data = JsonUtility.FromJson<CredentialExceptionData>(message);
-            if (data.type == null || data.type == string.Empty)
+            var requestId = ReadRequestId(message);
+            CredentialExceptionData data;
+            try
             {
-                Debug.LogError(UtilStrings.ErrorExcepetionDataNull);
+                data = JsonUtility.FromJson<CredentialExceptionData>(message);
+            }
+            catch (Exception e)
+            {
+                Fail(requestId, $"{UtilStrings.ErrorExcepetionDataNull}: {e.Message}");
                 return;
             }
-            CredentialManager.OnLoginFailed.Invoke(data);
+
+            if (string.IsNullOrEmpty(data.type))
+            {
+                Fail(requestId, UtilStrings.ErrorExcepetionDataNull);
+                return;
+            }
+
+            CredentialManager.Complete(requestId, null, data);
+        }
+
+        private static string ReadRequestId(string message)
+        {
+            try
+            {
+                // JsonUtility reads a missing field as "", which must count as "no id", not as another request.
+                var requestId = JsonUtility.FromJson<RequestEnvelope>(message).requestId;
+                return string.IsNullOrEmpty(requestId) ? null : requestId;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static void Fail(string requestId, string message)
+        {
+            Debug.LogError(message);
+            CredentialManager.Complete(requestId, null,
+                new CredentialExceptionData { type = CredentialManager.InvalidResponseType, message = message });
         }
     }
 }

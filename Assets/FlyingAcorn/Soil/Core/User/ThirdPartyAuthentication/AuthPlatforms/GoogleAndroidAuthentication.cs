@@ -9,8 +9,13 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 {
     public class GoogleAndroidAuthentication : IPlatformAuthentication
     {
-        // What Credential Manager reports when the player dismisses the account picker.
+        // GetCredentialException.getType() values from androidx.credentials, plus the bridge's own failures.
         private const string UserCanceledType = "android.credentials.GetCredentialException.TYPE_USER_CANCELED";
+        private const string NoCredentialType = "android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL";
+        private const string InterruptedType = "android.credentials.GetCredentialException.TYPE_INTERRUPTED";
+        private const string ProviderConfigurationType =
+            "androidx.credentials.TYPE_GET_CREDENTIAL_PROVIDER_CONFIGURATION_EXCEPTION";
+        private const string UnsupportedType = "androidx.credentials.TYPE_GET_CREDENTIAL_UNSUPPORTED_EXCEPTION";
 
         public ThirdPartySettings ThirdPartySettings { get; }
 
@@ -31,12 +36,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
             switch (ThirdPartySettings.ThirdParty)
             {
                 case ThirdParty.google:
-                    CredentialManager.OnLoginSucess.RemoveListener(OnLoginSuccess);
-                    CredentialManager.OnLoginFailed.RemoveListener(OnLoginFailed);
-                    CredentialManager.OnLoginSucess.AddListener(OnLoginSuccess);
-                    CredentialManager.OnLoginFailed.AddListener(OnLoginFailed);
+                    // Per-request callbacks: SocialAuthentication creates a handler per attempt, so listening on
+                    // CredentialManager's static events would deliver each result to every past attempt.
                     CredentialManager.SetupOathID(ThirdPartySettings.ClientId);
-                    CredentialManager.StartCredentialProcess();
+                    CredentialManager.StartCredentialProcess(OnLoginSuccess, OnLoginFailed);
                     break;
                 default:
                     throw new SoilException("Unsupported third party", SoilExceptionErrorCode.ServiceUnavailable);
@@ -49,12 +52,28 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication.AuthPlatforms
 
         private void OnLoginFailed(CredentialExceptionData arg0)
         {
-            Debug.LogError($"OnLoginFailed: {arg0.message}");
-            var errorCode = arg0.type == UserCanceledType
-                ? SoilExceptionErrorCode.Canceled
-                : SoilExceptionErrorCode.Unknown;
+            Debug.LogError($"OnLoginFailed: {arg0.type} {arg0.message}");
             IPlatformAuthentication.OnSignInFailureCallback?.Invoke(ThirdParty.google,
-                new SoilException(arg0.message, errorCode));
+                new SoilException(arg0.message, MapErrorCode(arg0.type)));
+        }
+
+        /// <summary>
+        /// Gives each Credential Manager failure its own code so games can tell "no Google account" or "device
+        /// can't do this" apart from a real network error, instead of everything reading as Unknown.
+        /// </summary>
+        internal static SoilExceptionErrorCode MapErrorCode(string credentialErrorType)
+        {
+            return credentialErrorType switch
+            {
+                UserCanceledType => SoilExceptionErrorCode.Canceled,
+                NoCredentialType => SoilExceptionErrorCode.NotFound,
+                InterruptedType => SoilExceptionErrorCode.TransportError,
+                ProviderConfigurationType => SoilExceptionErrorCode.ServiceUnavailable,
+                UnsupportedType => SoilExceptionErrorCode.ServiceUnavailable,
+                CredentialManager.BridgeErrorType => SoilExceptionErrorCode.MisConfiguration,
+                CredentialManager.InvalidResponseType => SoilExceptionErrorCode.InvalidResponse,
+                _ => SoilExceptionErrorCode.Unknown
+            };
         }
 
         private void OnLoginSuccess(CredentialUserData arg0)
