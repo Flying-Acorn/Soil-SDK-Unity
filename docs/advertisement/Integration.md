@@ -54,7 +54,7 @@ Interstitial and rewarded ads are drawn natively **on top of Unity**:
 
 So gameplay receives no input and makes no sound while a fullscreen ad is up, without any code in your game. `Shown` arrives when the ad appears, on both platforms. Events raised while the game is paused under the ad (`Clicked`, `Rewarded`) are delivered, in order, as soon as it resumes — right before `Closed`.
 
-`SoilAdInputBlocker.IsBlocked` (or `Advertisement.IsFullscreenAdShowing`) is true while a fullscreen ad is on screen, for game code that wants to know. If your game keeps its own timers in real time, pause them from the events:
+`Advertisement.IsFullscreenAdShowing` is true while a fullscreen ad is on screen, for game code that wants to know. If your game keeps its own timers in real time, pause them from the events:
 
 ```csharp
 Advertisement.Events.OnInterstitialAdShown += _ => PauseGame();
@@ -569,9 +569,9 @@ In the Editor, ads are drawn by a placeholder (clicks are only logged). On deskt
 
 ## Migrating From the Unity-Drawn Ads
 
-- `SoilAdInputBlocker.Block`, `Unblock`, `ForceUnblock` and `FailsafeTick` are obsolete no-ops: input is blocked automatically while a fullscreen ad is up.
-- `Advertisement.LoadVideoUrl`, `IsVideoCachedAsync` and `DownloadAndCacheVideoAsync` are obsolete; the SDK downloads videos itself.
-- `SoilAdManager.canvasReferences` is obsolete and always null.
+- `SoilAdInputBlocker` is removed: input is blocked automatically while a fullscreen ad is up. Read `Advertisement.IsFullscreenAdShowing` instead of `SoilAdInputBlocker.IsBlocked`.
+- `Advertisement.LoadVideoUrl`, `IsVideoCachedAsync` and `DownloadAndCacheVideoAsync` are removed; the SDK downloads videos itself (use `GetAssetPath` for a cached file).
+- `SoilAdManager.canvasReferences` and `SoilAdManager.CanvasReferences` are removed.
 - `SoilAdManager.bannerAdPlacement`, `interstitialAdPlacement`, `rewardedAdPlacement` and the `Models.AdPlacements` types (the Unity ad prefabs and their components) are removed. Code that used them must switch to the `Advertisement` API.
 - On Android, fullscreen ads now pause Unity's activity (see *Game Pause, Input and Audio During Ads*).
 - The Editor class `FlyingAcorn.Soil.Advertisement.Editor.TMPFontHelper` (the *FlyingAcorn/Soil/Advertisement/Font Tools* menu, used to build fonts for the Unity-drawn ads) is removed. Use TextMeshPro's own *Window > TextMeshPro > Font Asset Creator*.

@@ -92,12 +92,19 @@
     CGFloat logoPixels = 128 * scale;
     BOOL fullscreen = SoilAdsFormatIsFullscreen(format);
 
+    // Delivered once, whatever happens: a failure after the result (or a second result) is dropped.
+    NSObject *deliveryLock = [[NSObject alloc] init];
+    __block BOOL delivered = NO;
     void (^finish)(SoilAdsLoadedMedia *, NSString *, NSString *) = ^(SoilAdsLoadedMedia *media, NSString *code, NSString *message) {
+        @synchronized (deliveryLock) {
+            if (delivered) return;
+            delivered = YES;
+        }
         dispatch_async(dispatch_get_main_queue(), ^{ completion(media, code, message); });
     };
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        @autoreleasepool {
+        BOOL decoded = SoilAdsGuard(@"decoding the ad", ^{ @autoreleasepool {
             UIImage *image = [self decodeImageAtPath:creative.imagePath maxPixelSize:maxPixels scale:scale];
             UIImage *logo = [self decodeImageAtPath:creative.logoPath maxPixelSize:logoPixels scale:scale];
             if (creative.logoPath.length > 0 && !logo) SoilAdsLog(@"logo ignored (unreadable)");
@@ -123,21 +130,25 @@
 
             if (fullscreen && creative.videoPath.length > 0) {
                 [self validateVideoAtPath:creative.videoPath completion:^(double duration) {
-                    if (duration > 0) {
-                        long long durationMs = llround(duration * 1000.0);
-                        NSURL *url = [NSURL fileURLWithPath:creative.videoPath];
-                        finish([[SoilAdsLoadedMedia alloc] initWithFormat:format creative:creative media:SoilAdsMediaVideo
-                                                               durationMs:durationMs videoURL:url image:image logo:logo],
-                               nil, nil);
-                    } else {
-                        SoilAdsLog(@"video unreadable, trying the image");
-                        failOrFallBack();
-                    }
+                    BOOL checked = SoilAdsGuard(@"checking the video", ^{
+                        if (duration > 0) {
+                            long long durationMs = llround(duration * 1000.0);
+                            NSURL *url = [NSURL fileURLWithPath:creative.videoPath];
+                            finish([[SoilAdsLoadedMedia alloc] initWithFormat:format creative:creative media:SoilAdsMediaVideo
+                                                                   durationMs:durationMs videoURL:url image:image logo:logo],
+                                   nil, nil);
+                        } else {
+                            SoilAdsLog(@"video unreadable, trying the image");
+                            failOrFallBack();
+                        }
+                    });
+                    if (!checked) finish(nil, SoilAdsErrorInternal, @"checking the video failed");
                 }];
             } else {
                 failOrFallBack();
             }
-        }
+        } });
+        if (!decoded) finish(nil, SoilAdsErrorInternal, @"decoding the ad failed");
     });
 }
 

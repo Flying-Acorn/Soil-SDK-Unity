@@ -398,7 +398,7 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         {
             get
             {
-                // Polled every frame by games (SoilAdInputBlocker.IsBlocked): no LINQ, no allocation.
+                // Polled every frame by games (Advertisement.IsFullscreenAdShowing): no LINQ, no allocation.
                 foreach (var slot in _slots.Values)
                     if (slot.IsFullscreen && slot.IsShowing)
                         return true;

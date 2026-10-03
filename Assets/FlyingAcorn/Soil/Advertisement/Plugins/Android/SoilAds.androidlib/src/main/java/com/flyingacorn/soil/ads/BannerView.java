@@ -37,26 +37,35 @@ final class BannerView extends FrameLayout {
         setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (!attached || closed) return;
-                // Reported even without a URL or an app to open it, as the SDK always did.
-                BannerView.this.listener.onClicked();
-                Ui.openUrl(getContext(), ad.creative.clickUrl);
+                Guard.run("Banner click", new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!attached || closed) return;
+                        // Reported even without a URL or an app to open it, as the SDK always did.
+                        BannerView.this.listener.onClicked();
+                        Ui.openUrl(getContext(), ad.creative.clickUrl);
+                    }
+                });
             }
         });
         buildContent();
         setOnApplyWindowInsetsListener(new OnApplyWindowInsetsListener() {
             @Override
-            public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
-                int[] insetsNow = Ui.safeInsets(insets);
-                if (!Arrays.equals(insetsNow, safeInsets)) {
-                    safeInsets = insetsNow;
-                    post(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (!closed) setLayoutParams(layoutParams());
-                        }
-                    });
-                }
+            public WindowInsets onApplyWindowInsets(View view, final WindowInsets insets) {
+                Guard.run("Banner insets", new Runnable() {
+                    @Override
+                    public void run() {
+                        int[] insetsNow = Ui.safeInsets(insets);
+                        if (Arrays.equals(insetsNow, safeInsets)) return;
+                        safeInsets = insetsNow;
+                        post(Guard.wrap("Banner layout", new Runnable() {
+                            @Override
+                            public void run() {
+                                if (!closed) setLayoutParams(layoutParams());
+                            }
+                        }));
+                    }
+                });
                 return insets;
             }
         });
@@ -67,7 +76,13 @@ final class BannerView extends FrameLayout {
 
             @Override
             public void onViewDetachedFromWindow(View view) {
-                close(); // also covers Unity's Activity going away underneath us
+                // Also covers Unity's Activity going away underneath us.
+                Guard.run("Banner detach", new Runnable() {
+                    @Override
+                    public void run() {
+                        close();
+                    }
+                });
             }
         });
     }

@@ -44,6 +44,32 @@ public class PresentationRulesTest {
     }
 
     @Test
+    public void guardKeepsAThrowingCallbackFromEscaping() {
+        final int[] calls = new int[1];
+        assertFalse(Guard.run("test", new Runnable() {
+            @Override
+            public void run() {
+                calls[0]++;
+                throw new IllegalStateException("boom");
+            }
+        }));
+        assertTrue(Guard.run("test", new Runnable() {
+            @Override
+            public void run() {
+                calls[0]++;
+            }
+        }));
+        Guard.wrap("test", new Runnable() {
+            @Override
+            public void run() {
+                calls[0]++;
+                throw new OutOfMemoryError("not really");
+            }
+        }).run();
+        assertEquals(3, calls[0]);
+    }
+
+    @Test
     public void badgeSaysAdInPersian() {
         assertEquals("تبلیغ", Ui.BADGE_TEXT);
     }

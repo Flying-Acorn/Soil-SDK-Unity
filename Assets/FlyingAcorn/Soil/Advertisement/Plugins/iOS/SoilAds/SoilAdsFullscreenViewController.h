@@ -18,6 +18,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)fullscreenControllerDidEarnReward:(SoilAdsFullscreenViewController *)controller;
 /// The controller left the screen by being dismissed (by us or by anyone else).
 - (void)fullscreenControllerDidDisappear:(SoilAdsFullscreenViewController *)controller;
+/// One of the controller's callbacks threw: the show must end (see -[SoilAdsManager recoverFromFailure]).
+- (void)fullscreenControllerDidFail:(SoilAdsFullscreenViewController *)controller;
 @end
 
 @interface SoilAdsFullscreenViewController : UIViewController
@@ -47,6 +49,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)resumeAfterClick;
 /// Stops the clock, the video and all observers. Idempotent; no delegate calls afterwards.
 - (void)teardown;
+
+/// Test hook: the callback (`create` or `tick`) that throws, to prove the show still ends cleanly.
+@property (class, nonatomic, copy, nullable) NSString *failAtForTests;
 
 @end
 

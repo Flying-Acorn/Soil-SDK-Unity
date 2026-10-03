@@ -41,8 +41,12 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     private final Runnable ticker = new Runnable() {
         @Override
         public void run() {
-            tick();
-            if (resumed) handler.postDelayed(this, TICK_MS);
+            try {
+                tick();
+                if (resumed) handler.postDelayed(this, TICK_MS);
+            } catch (Throwable t) {
+                fail("tick", t);
+            }
         }
     };
 
@@ -69,77 +73,100 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        session = FullscreenSession.find(getIntent().getIntExtra(EXTRA_SESSION_ID, -1));
-        if (session == null) {
-            // E.g. the process was recreated: the show this Activity belonged to no longer exists.
-            Log.w(SoilAdsBridge.TAG, "No ad to show; closing the ad activity");
-            finish();
-            return;
+        try {
+            session = FullscreenSession.find(getIntent().getIntExtra(EXTRA_SESSION_ID, -1));
+            if (session == null) {
+                // E.g. the process was recreated: the show this Activity belonged to no longer exists.
+                Log.w(SoilAdsBridge.TAG, "No ad to show; closing the ad activity");
+                finish();
+                return;
+            }
+            session.attach(this);
+            faultForTests("create");
+            if (Build.VERSION.SDK_INT >= 28) {
+                WindowManager.LayoutParams attributes = getWindow().getAttributes();
+                attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                getWindow().setAttributes(attributes);
+            }
+            setContentView(buildLayout());
+            enterImmersive();
+            registerBackCallback();
+        } catch (Throwable t) {
+            fail("onCreate", t);
         }
-        session.attach(this);
-        if (Build.VERSION.SDK_INT >= 28) {
-            WindowManager.LayoutParams attributes = getWindow().getAttributes();
-            attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            getWindow().setAttributes(attributes);
-        }
-        setContentView(buildLayout());
-        enterImmersive();
-        registerBackCallback();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (session == null) return;
-        resumed = true;
-        resumedAtMs = SystemClock.elapsedRealtime();
-        enterImmersive();
-        session.reportShown();
-        startPlaybackIfReady();
-        handler.removeCallbacks(ticker);
-        handler.post(ticker);
+        try {
+            if (session == null) return;
+            resumed = true;
+            resumedAtMs = SystemClock.elapsedRealtime();
+            enterImmersive();
+            session.reportShown();
+            startPlaybackIfReady();
+            handler.removeCallbacks(ticker);
+            handler.post(ticker);
+        } catch (Throwable t) {
+            fail("onResume", t);
+        }
     }
 
     @Override
     protected void onPause() {
-        if (session != null && resumed) {
-            session.visibleMs += SystemClock.elapsedRealtime() - resumedAtMs;
-            resumed = false;
-            handler.removeCallbacks(ticker);
-            if (player != null && prepared) {
-                session.recordVideoPosition(safePosition());
-                if (player.isPlaying()) player.pause();
+        try {
+            if (session != null && resumed) {
+                session.visibleMs += SystemClock.elapsedRealtime() - resumedAtMs;
+                resumed = false;
+                handler.removeCallbacks(ticker);
+                if (player != null && prepared) {
+                    session.recordVideoPosition(safePosition());
+                    if (player.isPlaying()) player.pause();
+                }
             }
+            super.onPause();
+        } catch (Throwable t) {
+            fail("onPause", t);
         }
-        super.onPause();
+
     }
 
     @Override
     protected void onDestroy() {
-        handler.removeCallbacksAndMessages(null);
-        releasePlayer();
-        if (surface != null) {
-            surface.release();
-            surface = null;
+        try {
+            handler.removeCallbacksAndMessages(null);
+            releasePlayer();
+            if (surface != null) {
+                surface.release();
+                surface = null;
+            }
+            if (imageView != null) imageView.setImageDrawable(null);
+            if (logoView != null) logoView.setImageDrawable(null);
+            if (backdropView != null) backdropView.setImageDrawable(null);
+            unregisterBackCallback();
+            FullscreenSession current = session;
+            session = null;
+            if (current != null) {
+                // A configuration change hands the show to the next instance; anything else ends it.
+                if (!isChangingConfigurations()) current.end();
+                current.detach(this);
+            }
+            super.onDestroy();
+        } catch (Throwable t) {
+            fail("onDestroy", t);
         }
-        if (imageView != null) imageView.setImageDrawable(null);
-        if (logoView != null) logoView.setImageDrawable(null);
-        if (backdropView != null) backdropView.setImageDrawable(null);
-        unregisterBackCallback();
-        FullscreenSession current = session;
-        session = null;
-        if (current != null) {
-            // A configuration change hands the show to the next instance; anything else ends it.
-            if (!isChangingConfigurations()) current.end();
-            current.detach(this);
-        }
-        super.onDestroy();
+
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) enterImmersive();
+        try {
+            if (hasFocus) enterImmersive();
+        } catch (Throwable t) {
+            fail("onWindowFocusChanged", t);
+        }
     }
 
     @SuppressWarnings("deprecation")
@@ -149,7 +176,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
     }
 
     private void onBackRequested() {
-        if (session != null && session.lock.isUnlocked()) session.end();
+        try {
+            if (session != null && session.lock.isUnlocked()) session.end();
+        } catch (Throwable t) {
+            fail("back", t);
+        }
     }
 
     private void registerBackCallback() {
@@ -183,6 +214,37 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
+    // ---- Failure ----------------------------------------------------------------------------------
+
+    /** Test hook: the callback ({@code "create"} or {@code "tick"}) that throws, to prove recovery. */
+    static volatile String failAtForTests;
+
+    private static void faultForTests(String where) {
+        if (where.equals(failAtForTests)) throw new IllegalStateException("injected fault in " + where);
+    }
+
+    /**
+     * An unexpected exception in one of the screen's callbacks: rather than let it kill the game,
+     * the show ends as it does on close ({@code closed}, or {@code showFailed} if it never appeared)
+     * and the screen goes away, so the game resumes.
+     */
+    private void fail(String where, Throwable t) {
+        Log.e(SoilAdsBridge.TAG, "The ad screen failed in " + where + "; ending the show", t);
+        final FullscreenSession current = session;
+        if (current != null) Guard.run("Ending the failed show", new Runnable() {
+            @Override
+            public void run() {
+                current.end();
+            }
+        });
+        Guard.run("Closing the failed ad screen", new Runnable() {
+            @Override
+            public void run() {
+                if (!isFinishing()) finish();
+            }
+        });
+    }
+
     // ---- Layout ---------------------------------------------------------------------------------
 
     private View buildLayout() {
@@ -202,11 +264,16 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override
             public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
-                // Cutout plus visible bars: immersive hides them, but split screen, freeform
-                // windows or a transient reveal can leave them over the ad's controls.
-                int[] safe = Ui.safeInsets(insets);
-                content.setPadding(safe[0], safe[1], safe[2], safe[3]);
-                return insets;
+                try {
+                    // Cutout plus visible bars: immersive hides them, but split screen, freeform
+                    // windows or a transient reveal can leave them over the ad's controls.
+                    int[] safe = Ui.safeInsets(insets);
+                    content.setPadding(safe[0], safe[1], safe[2], safe[3]);
+                    return insets;
+                } catch (Throwable t) {
+                    fail("applying insets", t);
+                    return insets;
+                }
             }
         });
 
@@ -234,8 +301,12 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
             muteButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    session.muted = !session.muted;
-                    applyVolume();
+                    try {
+                        session.muted = !session.muted;
+                        applyVolume();
+                    } catch (Throwable t) {
+                        fail("click", t);
+                    }
                 }
             });
             LinearLayout.LayoutParams muteParams = new LinearLayout.LayoutParams(Ui.dp(this, 36), Ui.dp(this, 36));
@@ -252,7 +323,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         closeButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (session != null && session.lock.isUnlocked()) session.end();
+                try {
+                    if (session != null && session.lock.isUnlocked()) session.end();
+                } catch (Throwable t) {
+                    fail("click", t);
+                }
             }
         });
         FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(Ui.dp(this, 36), Ui.dp(this, 36),
@@ -269,7 +344,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
         media.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                onAdClicked();
+                try {
+                    onAdClicked();
+                } catch (Throwable t) {
+                    fail("click", t);
+                }
             }
         });
         // An ended video is never reopened: its last frame (or the image) stays on screen.
@@ -280,7 +359,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
             textureView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
                 @Override
                 public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
-                    applyVideoTransform();
+                    try {
+                        applyVideoTransform();
+                    } catch (Throwable failure) {
+                        fail("layout", failure);
+                    }
                 }
             });
             media.addView(textureView, new FrameLayout.LayoutParams(-1, -1));
@@ -348,7 +431,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
             cta.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    onAdClicked();
+                    try {
+                        onAdClicked();
+                    } catch (Throwable t) {
+                        fail("click", t);
+                    }
                 }
             });
             LinearLayout.LayoutParams ctaParams = new LinearLayout.LayoutParams(-1, -2);
@@ -389,6 +476,7 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
 
     private void tick() {
         if (session == null || session.isEnded()) return;
+        faultForTests("tick");
         if (player != null && prepared && !session.videoEnded) session.recordVideoPosition(safePosition());
         double visibleSeconds = (session.visibleMs
                 + (resumed ? SystemClock.elapsedRealtime() - resumedAtMs : 0)) / 1000.0;
@@ -415,33 +503,50 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
 
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
-        surface = new Surface(texture);
-        openPlayer();
+        try {
+            surface = new Surface(texture);
+            openPlayer();
+        } catch (Throwable t) {
+            fail("surface available", t);
+        }
     }
 
     @Override
     public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
-        applyVideoTransform();
+        try {
+            applyVideoTransform();
+        } catch (Throwable t) {
+            fail("surface resized", t);
+        }
     }
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
-        if (player != null && prepared && session != null && !session.videoEnded) {
-            session.recordVideoPosition(safePosition());
+        try {
+            if (player != null && prepared && session != null && !session.videoEnded) {
+                session.recordVideoPosition(safePosition());
+            }
+            releasePlayer();
+            if (surface != null) {
+                surface.release();
+                surface = null;
+            }
+            return true;
+        } catch (Throwable t) {
+            fail("surface destroyed", t);
+            return true;
         }
-        releasePlayer();
-        if (surface != null) {
-            surface.release();
-            surface = null;
-        }
-        return true;
     }
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture texture) {
-        if (!firstFrameRendered) {
-            firstFrameRendered = true;
-            updateImageVisibility();
+        try {
+            if (!firstFrameRendered) {
+                firstFrameRendered = true;
+                updateImageVisibility();
+            }
+        } catch (Throwable t) {
+            fail("surface updated", t);
         }
     }
 
@@ -456,37 +561,54 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
             mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
-                    if (mp != player) return;
-                    prepared = true;
-                    applyVolume();
-                    if (session.videoPositionMs > 0) seekTo(mp, session.videoPositionMs);
-                    startPlaybackIfReady();
+                    try {
+                        if (mp != player) return;
+                        prepared = true;
+                        applyVolume();
+                        if (session.videoPositionMs > 0) seekTo(mp, session.videoPositionMs);
+                        startPlaybackIfReady();
+                    } catch (Throwable t) {
+                        fail("video prepared", t);
+                    }
                 }
             });
             mediaPlayer.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
                 @Override
                 public void onVideoSizeChanged(MediaPlayer mp, int width, int height) {
-                    videoWidth = width;
-                    videoHeight = height;
-                    applyVideoTransform();
+                    try {
+                        videoWidth = width;
+                        videoHeight = height;
+                        applyVideoTransform();
+                    } catch (Throwable t) {
+                        fail("video size", t);
+                    }
                 }
             });
             mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
                 public void onCompletion(MediaPlayer mp) {
-                    if (mp != player || session == null) return;
-                    session.videoEnded = true;
-                    keepLastFrame();
-                    updateImageVisibility();
-                    releasePlayer(); // frees the decoder; the ended video is not played again
-                    tick();
+                    try {
+                        if (mp != player || session == null) return;
+                        session.videoEnded = true;
+                        keepLastFrame();
+                        updateImageVisibility();
+                        releasePlayer(); // frees the decoder; the ended video is not played again
+                        tick();
+                    } catch (Throwable t) {
+                        fail("video completed", t);
+                    }
                 }
             });
             mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                 @Override
                 public boolean onError(MediaPlayer mp, int what, int extra) {
-                    if (mp == player) onVideoFailed("MediaPlayer error " + what + "/" + extra);
-                    return true;
+                    try {
+                        if (mp == player) onVideoFailed("MediaPlayer error " + what + "/" + extra);
+                        return true;
+                    } catch (Throwable t) {
+                        fail("video error", t);
+                        return true;
+                    }
                 }
             });
             mediaPlayer.prepareAsync();

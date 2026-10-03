@@ -283,6 +283,24 @@ scheme is never opened.
   line, clear of the logo and button. The whole banner is clickable.
 - The banner never steals touches outside its own rectangle.
 
+## Failures inside the players
+
+No exception may leave a player into the game, whose main thread an uncaught one would end:
+
+- Every call from Unity, and every callback the OS makes into the player (Activity / view
+  controller lifecycle, the tick, buttons, back, insets, media and surface events, load results,
+  delayed blocks and notifications), runs inside a guard (Android `Guard`, iOS `SoilAdsGuard`).
+- A failure in a fullscreen ad ends the show the way a close does: `closed` if it was shown, else
+  `showFailed` / `internal` with the ad back in its slot. The ad screen goes away and the game
+  resumes (iOS: `UnityPause(0)` if the player paused it; Android: the ad Activity finishes).
+- A failure while loading reports `loadFailed` / `internal`; a load result is delivered once.
+- A failure elsewhere (a banner callback, `isReady`) is logged and the call answers with its
+  neutral value (`isReady` false).
+- C# catches exceptions from event handlers and the frame tick, so one failing listener does not
+  stop the others; the Unity-side watchdogs below still answer a call the player never answers.
+
+Hard crashes (a signal inside the OS media stack) cannot be caught by app code.
+
 ## Unity-side watchdogs
 
 C# never waits forever on a player. Only time while the game runs counts (unscaled, at most a

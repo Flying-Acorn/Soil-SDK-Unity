@@ -40,4 +40,10 @@ FOUNDATION_EXPORT BOOL SoilAdsFormatIsFullscreen(SoilAdsFormat format);
 /// The first argument must be a string literal.
 #define SoilAdsLog(...) NSLog(@"[SoilAds] " __VA_ARGS__)
 
+/// Runs `block`, catching any Objective-C exception it throws so it cannot take the game down
+/// (UIKit and the players' callbacks run on the game's main thread, where an uncaught exception
+/// ends the app). Returns NO, after logging what failed, when one was thrown. Hard crashes (a
+/// signal in the OS media stack) cannot be caught by any app code.
+FOUNDATION_EXPORT BOOL SoilAdsGuard(NSString *what, dispatch_block_t block);
+
 NS_ASSUME_NONNULL_END
