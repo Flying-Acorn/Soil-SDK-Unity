@@ -40,4 +40,4 @@ Demo scene: `Assets/FlyingAcorn/Soil/Advertisement/Demo/SoilAdvertisementExample
 - Core SDK
 - Unity UI (`com.unity.ugui`)
 
-The device players use only the operating system. RTL Text Mesh Pro is no longer needed: the Editor placeholder aligns Persian text to the right but does not join its letters, and devices draw it correctly through the OS.
+The device players use only the operating system. RTL Text Mesh Pro is no longer needed: the Editor placeholder shows English stand-ins for Persian texts, and devices draw the Persian texts through the OS.
