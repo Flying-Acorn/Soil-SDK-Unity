@@ -48,7 +48,7 @@ PluginImporter:
       settings:
         AddToEmbeddedBinaries: false
         CPU: AnyCPU
-        CompileFlags: -fobjc-arc
+        CompileFlags: -fobjc-arc -fobjc-exceptions
         FrameworkDependencies: AVFoundation;CoreMedia;ImageIO;QuartzCore;
   - first:
       tvOS: tvOS

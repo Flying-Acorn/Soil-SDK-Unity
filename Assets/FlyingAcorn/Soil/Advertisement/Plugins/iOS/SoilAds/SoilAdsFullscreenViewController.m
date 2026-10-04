@@ -78,7 +78,7 @@ static NSString *SoilAdsFailAtForTests;
 static void SoilAdsFaultForTests(NSString *where)
 {
     if ([where isEqualToString:SoilAdsFailAtForTests])
-        @throw [NSException exceptionWithName:@"SoilAdsInjectedFault" reason:where userInfo:nil];
+        [NSException raise:@"SoilAdsInjectedFault" format:@"%@", where]; // no @throw: Unity builds without -fobjc-exceptions
 }
 
 /// Runs one of the screen's callbacks; an exception in it is reported once to the delegate, which

@@ -4,6 +4,7 @@ XCTest bundle. The plugin files are referenced in place from Assets/, nothing is
 Re-run after adding or removing files:  python3 NativeAds/ios/gen_project.py"""
 import hashlib
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PLUGIN_REL = "../../Assets/FlyingAcorn/Soil/Advertisement/Plugins/iOS/SoilAds"
@@ -66,11 +67,24 @@ add(main_group, "{isa = PBXGroup; children = (%s %s); sourceTree = \"<group>\"; 
     % (" ".join(uid("group", g) + "," for g in groups), products_group + ","))
 
 
+def unity_compile_flags(name):
+    """The per-file iOS compiler flags Unity puts in its Xcode project: CompileFlags in the .meta."""
+    meta = os.path.join(HERE, PLUGIN_REL, name + ".meta")
+    if not os.path.exists(meta):
+        return ""
+    # Only the iOS entry: it ends where the next platform's "- first:" starts.
+    entry = re.search(r"iPhone: iOS\n(.*?)(?:\n  - first:|\Z)", open(meta).read(), re.S)
+    match = entry and re.search(r"CompileFlags:[ \t]*([^\n]*)", entry.group(1))
+    return match.group(1).strip() if match else ""
+
+
 def build_files(phase, group, names):
     keys = []
     for name in names:
         key = uid("build", phase, group, name)
-        add(key, f"{{isa = PBXBuildFile; fileRef = {file_refs[(group, name)]}; }}")
+        flags = unity_compile_flags(name) if group == "SoilAds" else ""
+        extra = f' settings = {{COMPILER_FLAGS = "{flags}"; }};' if flags else ""
+        add(key, f"{{isa = PBXBuildFile; fileRef = {file_refs[(group, name)]};{extra} }}")
         keys.append(key)
     return keys
 
@@ -137,6 +151,9 @@ app_settings = {
     "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",
     "INFOPLIST_KEY_UISupportedInterfaceOrientations": "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
     "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight",
+    # Like Unity's UnityFramework target: Objective-C exceptions are off, so @try/@throw only
+    # compile in files whose .meta CompileFlags add -fobjc-exceptions (copied per file above).
+    "GCC_ENABLE_OBJC_EXCEPTIONS": "NO",
     # The plugin must build warning-free.
     "WARNING_CFLAGS": ["-Wall", "-Wextra", "-Wpedantic", "-Wno-unused-parameter", "-Wmissing-prototypes", "-Wunguarded-availability"],
     "GCC_TREAT_WARNINGS_AS_ERRORS": "YES",
@@ -147,6 +164,8 @@ test_settings = {
     "GENERATE_INFOPLIST_FILE": "YES",
     "TEST_HOST": f"$(BUILT_PRODUCTS_DIR)/{APP}.app/{APP}",
     "BUNDLE_LOADER": "$(TEST_HOST)",
+    # The tests themselves throw on purpose (the guard's tests).
+    "GCC_ENABLE_OBJC_EXCEPTIONS": "YES",
     "IPHONEOS_DEPLOYMENT_TARGET": "13.0",
     # broken.png is deliberately not a PNG.
     "COMPRESS_PNG_FILES": "NO",

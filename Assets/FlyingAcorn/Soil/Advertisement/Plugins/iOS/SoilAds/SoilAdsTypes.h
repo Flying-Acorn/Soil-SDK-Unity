@@ -44,6 +44,8 @@ FOUNDATION_EXPORT BOOL SoilAdsFormatIsFullscreen(SoilAdsFormat format);
 /// (UIKit and the players' callbacks run on the game's main thread, where an uncaught exception
 /// ends the app). Returns NO, after logging what failed, when one was thrown. Hard crashes (a
 /// signal in the OS media stack) cannot be caught by any app code.
+/// Unity compiles plugins with Objective-C exceptions disabled, so SoilAdsTypes.m alone is built
+/// with -fobjc-exceptions (its .meta CompileFlags); keep @try/@catch/@throw out of every other file.
 FOUNDATION_EXPORT BOOL SoilAdsGuard(NSString *what, dispatch_block_t block);
 
 NS_ASSUME_NONNULL_END
