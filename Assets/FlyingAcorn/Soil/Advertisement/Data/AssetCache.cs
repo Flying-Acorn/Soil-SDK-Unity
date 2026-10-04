@@ -70,6 +70,19 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         private static readonly Dictionary<string, AssetCacheEntry> _cachedAssets = new();
         private static readonly HashSet<string> _currentlyDownloading = new();
         private static readonly object _lockObject = new();
+
+        // Formats keep their own entries, but entries of the same asset URL share one file: a
+        // file already cached (or staged) for another format is reused, a download already
+        // running is joined, and a file is deleted only once no entry or staging uses it.
+        private static readonly Dictionary<string, SharedDownload> _downloadsByUrl = new();
+        private static readonly HashSet<StagedFormatAssets> _activeStaged = new();
+        // Files a player could not read: never handed to another format.
+        private static readonly HashSet<string> _unreadablePaths = new(StringComparer.Ordinal);
+
+        private sealed class SharedDownload
+        {
+            public UniTask<string> Task;
+        }
         private static string CacheDirectory => Path.Combine(Application.persistentDataPath, "SoilAssets");
 
         private const string PartialFileSuffix = ".part";
@@ -122,6 +135,9 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             {
                 _cachedAssets.Clear();
                 _currentlyDownloading.Clear();
+                _downloadsByUrl.Clear();
+                _activeStaged.Clear();
+                _unreadablePaths.Clear();
             }
             _directoryExcludedFromBackup = false;
         }
@@ -352,8 +368,50 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 _cachedAssets.Remove(cacheKey);
             }
 
-            DeleteFileQuietly(entry.LocalPath);
+            DeleteFileIfUnused(entry.LocalPath);
             MyDebug.Verbose($"Removed cached asset {cacheKey}");
+        }
+
+        /// <summary>Whether an entry or a pending staging uses the file. Callers hold the lock.</summary>
+        private static bool IsFileInUseLocked(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            foreach (var entry in _cachedAssets.Values)
+                if (string.Equals(entry.LocalPath, path, StringComparison.Ordinal))
+                    return true;
+            foreach (var staged in _activeStaged)
+            foreach (var (_, entry) in staged.Entries)
+                if (string.Equals(entry.LocalPath, path, StringComparison.Ordinal))
+                    return true;
+            return false;
+        }
+
+        /// <summary>Deletes a file no entry or pending staging uses any more.</summary>
+        private static void DeleteFileIfUnused(string path)
+        {
+            lock (_lockObject)
+            {
+                if (IsFileInUseLocked(path)) return;
+            }
+            DeleteFileQuietly(path);
+        }
+
+        /// <summary>A readable cached or staged file downloaded from <paramref name="url"/>. Callers hold the lock.</summary>
+        private static string FindFileOfUrlLocked(string url)
+        {
+            bool Usable(AssetCacheEntry entry) =>
+                entry != null && string.Equals(entry.OriginalUrl, url, StringComparison.Ordinal)
+                              && !string.IsNullOrEmpty(entry.LocalPath) && !_unreadablePaths.Contains(entry.LocalPath)
+                              && File.Exists(entry.LocalPath);
+
+            foreach (var entry in _cachedAssets.Values)
+                if (Usable(entry))
+                    return entry.LocalPath;
+            foreach (var staged in _activeStaged)
+            foreach (var (_, entry) in staged.Entries)
+                if (Usable(entry))
+                    return entry.LocalPath;
+            return null;
         }
 
         private static void DeleteFileQuietly(string path)
@@ -383,16 +441,21 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         }
 
         /// <summary>
-        /// Removes the entry of one format's asset (and its file), leaving the same asset of other
-        /// formats alone.
+        /// Removes the entry of one format's asset (and its file, unless another format uses it),
+        /// leaving the same asset of other formats alone. An <paramref name="unreadable"/> file is
+        /// not reused for anything again, so the format downloads a new copy.
         /// </summary>
-        internal static bool RemoveCachedAsset(AdFormat adFormat, string assetId)
+        internal static bool RemoveCachedAsset(AdFormat adFormat, string assetId, bool unreadable = false)
         {
             List<string> keys;
             lock (_lockObject)
             {
                 keys = _cachedAssets.Where(kvp => kvp.Value.AdFormat == adFormat && kvp.Value.Id == assetId)
                     .Select(kvp => kvp.Key).ToList();
+                if (unreadable)
+                    foreach (var key in keys)
+                        if (!string.IsNullOrEmpty(_cachedAssets[key].LocalPath))
+                            _unreadablePaths.Add(_cachedAssets[key].LocalPath);
             }
 
             foreach (var key in keys)
@@ -451,6 +514,10 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             if (plan.Count == 0) return null;
 
             var staged = new StagedFormatAssets(adFormat);
+            lock (_lockObject)
+            {
+                _activeStaged.Add(staged);
+            }
             var downloads = new List<UniTask<AssetCacheEntry>>();
             var downloadKeys = new List<string>();
             foreach (var (cacheKey, asset, assetType, ad) in plan)
@@ -526,6 +593,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     _cachedAssets.Remove(key);
                 foreach (var (cacheKey, entry) in staged.Entries)
                     _cachedAssets[cacheKey] = entry;
+                _activeStaged.Remove(staged);
             }
 
             PersistCachedAssets();
@@ -536,23 +604,19 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         internal static void DiscardStaged(StagedFormatAssets staged)
         {
             if (staged == null) return;
+            lock (_lockObject)
+            {
+                _activeStaged.Remove(staged);
+            }
             DeleteRetiredFiles(staged.DownloadedPaths);
         }
 
-        /// <summary>Deletes files the cache no longer uses; one an entry still points to is kept.</summary>
+        /// <summary>Deletes files the cache no longer uses; one an entry or a staging still points to is kept.</summary>
         internal static void DeleteRetiredFiles(IEnumerable<string> paths)
         {
             if (paths == null) return;
-            HashSet<string> referenced;
-            lock (_lockObject)
-            {
-                referenced = new HashSet<string>(_cachedAssets.Values.Select(e => e.LocalPath)
-                    .Where(p => !string.IsNullOrEmpty(p)), StringComparer.Ordinal);
-            }
-
             foreach (var path in paths)
-                if (!referenced.Contains(path))
-                    DeleteFileQuietly(path);
+                DeleteFileIfUnused(path);
         }
 
         /// <summary>
@@ -799,7 +863,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                     _currentlyDownloading.Add(cacheKey);
                 }
 
-                if (unusable != null) DeleteFileQuietly(unusable.LocalPath);
+                if (unusable != null) DeleteFileIfUnused(unusable.LocalPath);
                 var cachedAsset = await DownloadEntryAsync(cacheKey, asset, assetType, adFormat, clickUrl, ad);
 
                 lock (_lockObject)
@@ -839,9 +903,66 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             var resolvedUrl = ResolveAssetUrl(asset.url);
             Analytics.MyDebug.Verbose($"Processing asset {cacheKey} ({assetType}) from URL: {resolvedUrl}");
 
+            var filePath = await GetOrDownloadFileAsync(resolvedUrl, assetType, asset.id);
+
+            var entry = new AssetCacheEntry
+            {
+                Id = asset.id,
+                AssetType = assetType,
+                AdFormat = adFormat,
+                LocalPath = filePath,
+                OriginalUrl = resolvedUrl, // Store the resolved URL
+                CachedAt = DateTime.UtcNow
+            };
+            // The click URL of the ad group and the ad-level data of the ad it was cached for.
+            ApplyMetadata(entry, asset, clickUrl, ad);
+            return entry;
+        }
+
+        /// <summary>
+        /// The file of <paramref name="url"/>: one another format already has, the one a running
+        /// download of it is writing, or a new download.
+        /// </summary>
+        private static async UniTask<string> GetOrDownloadFileAsync(string url, AssetType assetType, string assetId)
+        {
+            SharedDownload download;
+            lock (_lockObject)
+            {
+                var existing = FindFileOfUrlLocked(url);
+                if (existing != null)
+                {
+                    MyDebug.Verbose($"Reusing the cached file of {url}");
+                    return existing;
+                }
+
+                if (!_downloadsByUrl.TryGetValue(url, out download))
+                {
+                    download = new SharedDownload();
+                    _downloadsByUrl[url] = download;
+                    download.Task = DownloadNewFileAsync(url, assetType, assetId).Preserve();
+                }
+            }
+
+            try
+            {
+                return await download.Task;
+            }
+            finally
+            {
+                lock (_lockObject)
+                {
+                    if (_downloadsByUrl.TryGetValue(url, out var current) && current == download)
+                        _downloadsByUrl.Remove(url);
+                }
+            }
+        }
+
+        private static async UniTask<string> DownloadNewFileAsync(string resolvedUrl, AssetType assetType, string assetId)
+        {
             // Every file - videos included - is on disk before its ad counts as ready: the
             // native players only play local files, so a slow network delays an ad instead of
             // stalling it on screen. Downloads stream straight to disk.
+            // One file per URL, shared by every format that uses it (no format in its name).
             // File names never take a server string as is: the id is reduced to [A-Za-z0-9_-]
             // (or hashed) and the extension to a plain one, so nothing can escape SoilAssets.
             // A URL without one still gets one: iOS picks the video decoder by extension,
@@ -849,7 +970,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
             var extension = AssetCachePlan.SafeExtension(Path.GetExtension(new Uri(resolvedUrl).AbsolutePath),
                 assetType == AssetType.video ? ".mp4" : ".img");
-            var baseName = $"{adFormat}_{assetType}_{AssetCachePlan.SafeFileId(asset.id)}";
+            var baseName = $"{assetType}_{AssetCachePlan.SafeFileId(assetId)}";
             var fileName = $"{baseName}_{timestamp}{extension}";
             var filePath = Path.Combine(CacheDirectory, fileName);
 
@@ -866,19 +987,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             // download stalls, but a video may take much longer overall on a slow network.
             var capSeconds = assetType == AssetType.video ? VideoDownloadCapSeconds : ImageDownloadCapSeconds;
             await DownloadToFileAsync(resolvedUrl, filePath, capSeconds);
-
-            var entry = new AssetCacheEntry
-            {
-                Id = asset.id,
-                AssetType = assetType,
-                AdFormat = adFormat,
-                LocalPath = filePath,
-                OriginalUrl = resolvedUrl, // Store the resolved URL
-                CachedAt = DateTime.UtcNow
-            };
-            // The click URL of the ad group and the ad-level data of the ad it was cached for.
-            ApplyMetadata(entry, asset, clickUrl, ad);
-            return entry;
+            return filePath;
         }
 
         /// <summary>
@@ -1099,6 +1208,15 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 return false;
             }
 
+            lock (_lockObject)
+            {
+                if (IsFileInUseLocked(asset.LocalPath))
+                {
+                    MyDebug.Verbose($"Removed cached asset: {uuid} (its file stays for another format)");
+                    return true;
+                }
+            }
+
             try
             {
                 // Remove file outside of lock
@@ -1229,6 +1347,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     _cachedAssets.Remove(key);
                 }
+                // Files other formats share stay.
+                assetsToDelete.RemoveAll(asset => IsFileInUseLocked(asset.LocalPath));
             }
 
             await UniTask.RunOnThreadPool(() =>
@@ -1275,6 +1395,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                 {
                     _cachedAssets.Remove(key);
                 }
+                assetsToDelete.RemoveAll(asset => IsFileInUseLocked(asset.LocalPath));
             }
 
             await UniTask.RunOnThreadPool(() =>
@@ -1461,7 +1582,7 @@ namespace FlyingAcorn.Soil.Advertisement.Data
                         }
 
                         // Only while nothing is being written into the directory.
-                        if (cacheDirectory != null && _currentlyDownloading.Count == 0)
+                        if (cacheDirectory != null && _currentlyDownloading.Count == 0 && _downloadsByUrl.Count == 0)
                             deletedCount = DeleteOrphanedFiles(cacheDirectory);
                     }
                 }
@@ -1522,7 +1643,8 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             if (!Directory.Exists(cacheDirectory)) return 0;
 
             var referenced = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var entry in _cachedAssets.Values)
+            var stagedEntries = _activeStaged.SelectMany(staged => staged.Entries.Select(e => e.entry));
+            foreach (var entry in _cachedAssets.Values.Concat(stagedEntries))
             {
                 if (string.IsNullOrEmpty(entry.LocalPath)) continue;
                 try { referenced.Add(Path.GetFullPath(entry.LocalPath)); }

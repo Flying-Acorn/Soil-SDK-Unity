@@ -661,9 +661,9 @@ namespace FlyingAcorn.Soil.Advertisement
             if (error == NativeAdErrors.MediaUnreadable)
             {
                 if (FileExists(creative.VideoPath) && !string.IsNullOrEmpty(creative.VideoAssetId))
-                    AssetCache.RemoveCachedAsset(format, creative.VideoAssetId);
+                    AssetCache.RemoveCachedAsset(format, creative.VideoAssetId, unreadable: true);
                 if (FileExists(creative.ImagePath) && !string.IsNullOrEmpty(creative.ImageAssetId))
-                    AssetCache.RemoveCachedAsset(format, creative.ImageAssetId);
+                    AssetCache.RemoveCachedAsset(format, creative.ImageAssetId, unreadable: true);
             }
 
             MyDebug.Verbose($"[Advertisement] Repairing the {format} cache after {error}");
