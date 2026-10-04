@@ -21,6 +21,7 @@ final class BannerView extends FrameLayout {
     private final SoilAdsManager.PresentationListener listener;
     private final float scale;
     private String position = ShowOptions.POSITION_BOTTOM;
+    /** Display cutout insets only, like CAS: the banner may sit over a visible navigation bar. */
     private int[] safeInsets = new int[4];
     private boolean attached;
     private boolean closed;
@@ -55,7 +56,7 @@ final class BannerView extends FrameLayout {
                 Guard.run("Banner insets", new Runnable() {
                     @Override
                     public void run() {
-                        int[] insetsNow = Ui.safeInsets(insets);
+                        int[] insetsNow = Ui.cutoutInsets(insets);
                         if (Arrays.equals(insetsNow, safeInsets)) return;
                         safeInsets = insetsNow;
                         post(Guard.wrap("Banner layout", new Runnable() {
@@ -89,7 +90,7 @@ final class BannerView extends FrameLayout {
 
     void show(String position) {
         this.position = position;
-        safeInsets = Ui.safeInsets(activity.getWindow().getDecorView());
+        safeInsets = Ui.cutoutInsets(activity.getWindow().getDecorView());
         activity.addContentView(this, layoutParams());
         ad.retain();
         attached = true;
@@ -97,7 +98,7 @@ final class BannerView extends FrameLayout {
 
     void move(String position) {
         this.position = position;
-        safeInsets = Ui.safeInsets(activity.getWindow().getDecorView());
+        safeInsets = Ui.cutoutInsets(activity.getWindow().getDecorView());
         setLayoutParams(layoutParams());
     }
 

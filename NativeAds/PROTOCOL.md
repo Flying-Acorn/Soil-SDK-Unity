@@ -280,7 +280,7 @@ scheme is never opened.
   window is at least 600 dp/pt (tablets; on iOS the host window's bounds, so Split View counts,
   with the screen only as a fallback). Placed at the bottom, top or vertical center of the safe area.
 - Android: `activity.addContentView(view, FrameLayout.LayoutParams(MATCH_PARENT, h, gravity))`,
-  top/bottom margins from the display cutout and visible system-bar insets. iOS: subview of Unity's root view
+  margins from the display cutout only (like CAS: a visible navigation bar does not lift it). iOS: subview of Unity's root view
   controller view, Auto Layout against `safeAreaLayoutGuide`.
 - With an image: the image aspect-fit and centered at the banner's height, with the `تبلیغ`
   badge on the image's top-left corner. The rest of the banner (the sides of a 320x50 image on a

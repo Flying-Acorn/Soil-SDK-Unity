@@ -1053,8 +1053,8 @@ public class SoilAdsDeviceTest {
         View game = host.findViewById(android.R.id.content);
         int expectedHeight = Math.round(50 * host.getResources().getDisplayMetrics().density);
         assertEquals(expectedHeight, banner.getHeight());
-        // Above a visible navigation bar (and any cutout), flush with the edge when there is none.
-        int[] safe = Ui.safeInsets(host.getWindow().getDecorView());
+        // Clear of a display cutout only; a visible navigation bar does not lift it (as CAS).
+        int[] safe = Ui.cutoutInsets(host.getWindow().getDecorView());
         assertEquals(game.getHeight() - safe[3], banner.getBottom());
         assertTrue(SoilAdsBridge.isReady("banner"));
 

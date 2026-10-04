@@ -179,10 +179,10 @@ final class Ui {
     /**
      * Left, top, right, bottom insets ad content must keep clear of: the display cutout plus any
      * system bar that is actually visible. Hidden (immersive) bars count as zero, so fullscreen
-     * games and the immersive ad player are unaffected, while a window whose bars show (a game that
-     * keeps them, edge-to-edge on Android 15+, split screen) keeps its banner and ad controls off
-     * the bars instead of under them. Before API 30 the visible bars are the system window insets,
-     * which only drop to zero for hidden bars when the window does not ask for
+     * games and the immersive ad player are unaffected, while a window whose bars show (edge-to-edge
+     * on Android 15+, split screen) keeps the fullscreen ad's controls off the bars. The banner
+     * uses {@link #cutoutInsets} instead, like CAS. Before API 30 the visible bars are the system
+     * window insets, which only drop to zero for hidden bars when the window does not ask for
      * {@code SYSTEM_UI_FLAG_LAYOUT_STABLE}.
      */
     @SuppressWarnings("deprecation")
@@ -201,9 +201,9 @@ final class Ui {
         return result;
     }
 
-    static int[] safeInsets(View anyAttachedView) {
+    static int[] cutoutInsets(View anyAttachedView) {
         if (Build.VERSION.SDK_INT < 23 || anyAttachedView == null) return new int[4];
-        return safeInsets(anyAttachedView.getRootWindowInsets());
+        return cutoutInsets(anyAttachedView.getRootWindowInsets());
     }
 
     /** Web and store links: always opened. */
