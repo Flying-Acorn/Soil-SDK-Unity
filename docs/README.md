@@ -13,6 +13,7 @@ For installation instructions, see [Installation](./Installation.md). To move to
     - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
     - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
     - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking and friend leaderboards.
+    - [Feedback](./feedback/Introduction.md) - Support messages, ratings with a reason and suggestions from players.
 
 - Purchasing
     - [Purchasing](./purchasing/Introduction.md) - In-app purchases.
