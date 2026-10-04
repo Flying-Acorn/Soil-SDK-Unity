@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace FlyingAcorn.Soil.Advertisement.Logic
@@ -92,5 +93,25 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         public static bool CanSwitchNow(bool slotReady, bool slotPreparing, bool slotShowing, bool formatCaching,
             bool fullscreenOnScreen) =>
             !slotReady && !slotPreparing && !slotShowing && !formatCaching && !fullscreenOnScreen;
+
+        private static readonly double[] LaunchRetryDelays = { 5, 15, 30, 60, 120, 300 };
+
+        /// <summary>A LoadAd retries a failed format no sooner than this after its last try.</summary>
+        public const double LaunchRetryMinGapSeconds = 5;
+
+        /// <summary>
+        /// How long a format with no ad, because its ad group request or every download failed,
+        /// waits before asking again, by how many tries failed in a row. Such a format is never
+        /// shown, so rotation would never fetch it again.
+        /// </summary>
+        public static double LaunchRetryDelaySeconds(int failures) =>
+            LaunchRetryDelays[Math.Max(0, Math.Min(failures - 1, LaunchRetryDelays.Length - 1))];
+
+        /// <summary>
+        /// Whether a failed format asks again now: on its own after the backoff, or sooner when the
+        /// game asks for an ad, but never while it is already being fetched or cached.
+        /// </summary>
+        public static bool ShouldRetryLaunch(bool busy, double secondsSinceLastTry, int failures, bool loadRequested) =>
+            !busy && secondsSinceLastTry >= (loadRequested ? LaunchRetryMinGapSeconds : LaunchRetryDelaySeconds(failures));
     }
 }

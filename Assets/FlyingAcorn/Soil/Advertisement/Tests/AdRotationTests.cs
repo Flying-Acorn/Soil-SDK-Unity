@@ -128,5 +128,26 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
             // A rewarded video playing would leave the interstitial's new video undecodable.
             Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotPreparing: false, slotShowing: false, formatCaching: false, fullscreenOnScreen: true));
         }
+
+        [Test]
+        public void AFailedLaunchBacksOff_UpToFiveMinutes()
+        {
+            Assert.AreEqual(5, AdRotation.LaunchRetryDelaySeconds(1));
+            Assert.AreEqual(15, AdRotation.LaunchRetryDelaySeconds(2));
+            Assert.AreEqual(300, AdRotation.LaunchRetryDelaySeconds(6));
+            Assert.AreEqual(300, AdRotation.LaunchRetryDelaySeconds(50));
+            Assert.AreEqual(5, AdRotation.LaunchRetryDelaySeconds(0));
+        }
+
+        [Test]
+        public void AFailedLaunchRetries_AfterTheBackoff_OrSoonerOnLoadAd()
+        {
+            Assert.IsFalse(AdRotation.ShouldRetryLaunch(busy: false, secondsSinceLastTry: 20, failures: 3, loadRequested: false));
+            Assert.IsTrue(AdRotation.ShouldRetryLaunch(busy: false, secondsSinceLastTry: 30, failures: 3, loadRequested: false));
+            Assert.IsTrue(AdRotation.ShouldRetryLaunch(busy: false, secondsSinceLastTry: 5, failures: 3, loadRequested: true));
+            // Mediation retries a load at once; those do not each send a request.
+            Assert.IsFalse(AdRotation.ShouldRetryLaunch(busy: false, secondsSinceLastTry: 1, failures: 3, loadRequested: true));
+            Assert.IsFalse(AdRotation.ShouldRetryLaunch(busy: true, secondsSinceLastTry: 1000, failures: 1, loadRequested: true));
+        }
     }
 }

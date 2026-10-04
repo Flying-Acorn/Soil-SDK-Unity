@@ -138,6 +138,12 @@ namespace FlyingAcorn.Soil.Advertisement
         // Reused every frame a staged ad group waits, so waiting allocates nothing.
         private static readonly List<AdFormat> _rotationFormatsBuffer = new();
 
+        // Formats left without an ad because their ad group request or every download failed
+        // (AdRotation.ShouldRetryLaunch): failures in a row and when the last try ended (runtime clock).
+        private static readonly Dictionary<AdFormat, (int failures, double lastTryAt)> _launchFailures = new();
+        private static readonly HashSet<AdFormat> _launchRetries = new();
+        private static readonly List<AdFormat> _launchRetryBuffer = new();
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
@@ -179,6 +185,8 @@ namespace FlyingAcorn.Soil.Advertisement
             _stagedRotations.Clear();
             _retiredFiles.Clear();
             _preparedAdGroups.Clear();
+            _launchFailures.Clear();
+            _launchRetries.Clear();
             AssetCache.ResetStatics();
             AdLinkPolicy.ResetStatics();
             Events.ResetSubscribers();
@@ -292,6 +300,7 @@ namespace FlyingAcorn.Soil.Advertisement
             _campaignRequested = true;
             _campaignSelectionSucceeded = false; // reset before attempt
             _selectedAdGroups.Clear();
+            _launchFailures.Clear();
 
             // Select formats sequentially (not in parallel): each selection is reported as seen in
             // the next format's request, so the server prefers a different ad group (and thus a
@@ -338,7 +347,10 @@ namespace FlyingAcorn.Soil.Advertisement
                 // The ads cached last session still work (they are local files); a later
                 // InitializeAsync tries the server again.
                 foreach (var format in _requestedFormats)
+                {
                     UseCachedAdOrFail(format, NativeAdErrors.Network);
+                    NoteLaunchFailed(format);
+                }
                 Events.InvokeOnInitializeFailed($"Failed to select ad groups: {lastException.Message}");
                 return;
             }
@@ -350,7 +362,10 @@ namespace FlyingAcorn.Soil.Advertisement
             foreach (var format in _requestedFormats.Where(f => !_selectedAdGroups.ContainsKey(f)))
             {
                 if (failedFormats.Contains(format))
+                {
                     UseCachedAdOrFail(format, NativeAdErrors.Network);
+                    NoteLaunchFailed(format);
+                }
                 else if (format == AdFormat.native)
                     NativeCachingEnded(NativeAdErrors.NoFill);
                 else
@@ -432,6 +447,8 @@ namespace FlyingAcorn.Soil.Advertisement
 
             if (_stagedRotations.Count > 0)
                 SwitchStagedRotations();
+            if (_launchFailures.Count > 0)
+                RetryFailedLaunches();
             if (_retiredFiles.Count > 0)
                 DeleteRetiredFilesOfLoadedSlots();
 
@@ -767,11 +784,19 @@ namespace FlyingAcorn.Soil.Advertisement
                 if (clearFirst)
                     await AssetCache.ClearFormatCacheAsync(adFormat);
                 await AssetCache.CacheAssetsForAdGroupAsync(adGroup, adFormat, OnFormatAssetsReady);
+
+                // An ad group with ads that left the format without an ad means downloads failed
+                // (all of them, or the ones the ad cannot do without).
+                if (AssetCache.HasAdsForFormat(adGroup, adFormat) && !HasAd(adFormat))
+                    NoteLaunchFailed(adFormat);
+                else
+                    _launchFailures.Remove(adFormat);
             }
             catch (Exception ex)
             {
                 MyDebug.LogWarning($"[Advertisement] Caching {adFormat} failed: {ex.Message}");
                 CachingFailed(adFormat, NativeAdErrors.Network);
+                NoteLaunchFailed(adFormat);
             }
             finally
             {
@@ -1122,6 +1147,95 @@ namespace FlyingAcorn.Soil.Advertisement
             }
         }
 
+        private static void NoteLaunchFailed(AdFormat format)
+        {
+            if (format != AdFormat.native && !HasAdPlayer) return;
+            var failures = _launchFailures.TryGetValue(format, out var failure) ? failure.failures + 1 : 1;
+            _launchFailures[format] = (failures, _runtimeClock);
+            MyDebug.Verbose($"[Advertisement] No {format} ad could be fetched ({failures} in a row); " +
+                            $"asking again in {AdRotation.LaunchRetryDelaySeconds(failures)} s");
+        }
+
+        private static bool HasAd(AdFormat format) =>
+            format == AdFormat.native ? _nativeAdContent != null : SlotFor(format)?.Creative != null;
+
+        private static void RetryFailedLaunches()
+        {
+            _launchRetryBuffer.Clear();
+            _launchRetryBuffer.AddRange(_launchFailures.Keys);
+            foreach (var format in _launchRetryBuffer)
+                RetryFailedLaunch(format, loadRequested: false);
+        }
+
+        /// <summary>
+        /// A format left without an ad by a failed ad group request or failed downloads is never
+        /// shown, so rotation never fetches it again: it asks the server again with a backoff
+        /// (<see cref="AdRotation.ShouldRetryLaunch"/>). An ad it got meanwhile, e.g. last
+        /// session's files, ends the retries; rotation takes it from there.
+        /// </summary>
+        private static void RetryFailedLaunch(AdFormat format, bool loadRequested)
+        {
+            if (!_launchFailures.TryGetValue(format, out var failure)) return;
+            // Checked every frame until due, so the cheap checks come first.
+            var busy = _launchRetries.Contains(format) || _cachingFormats.Contains(format) || _isInitializing
+                       || !SoilServices.Ready;
+            if (!AdRotation.ShouldRetryLaunch(busy, _runtimeClock - failure.lastTryAt, failure.failures, loadRequested))
+                return;
+            if (HasAd(format))
+            {
+                _launchFailures.Remove(format);
+                return;
+            }
+            RetryLaunchAsync(format).Forget();
+        }
+
+        private static async UniTask RetryLaunchAsync(AdFormat format)
+        {
+            _launchRetries.Add(format);
+            // LoadAd calls wait for the answer instead of failing at once.
+            if (format == AdFormat.native)
+                _nativeCaching = true;
+            else
+                SlotFor(format)?.BeginCaching();
+            try
+            {
+                var otherFormats = _selectedAdGroups.Where(kvp => kvp.Key != format).Select(kvp => kvp.Value).ToList();
+                var adGroup = await ChooseAdGroupAsync(format,
+                    AdRotation.SeenIds(AdvertisementPlayerPrefs.RecentAdGroupIds, otherFormats.Select(g => g?.id)),
+                    AdRotation.SeenIds(AdvertisementPlayerPrefs.RecentCampaignIds, otherFormats.Select(g => g?.campaign_id)));
+                if (_slots == null) return; // the SDK was reset meanwhile
+
+                if (adGroup == null)
+                {
+                    // The server answered: it has nothing for this format.
+                    _launchFailures.Remove(format);
+                    if (format == AdFormat.native)
+                        NativeCachingEnded(NativeAdErrors.NoFill);
+                    else
+                        SetSlotCreative(format, null, null);
+                    return;
+                }
+
+                MyDebug.Verbose($"[Advertisement] {format} got ad group {adGroup.id} on a retry");
+                var isSameAdGroup = CachedAdGroupOf(format)?.id == adGroup.id;
+                _selectedAdGroups[format] = adGroup;
+                var cachedAdGroups = AdvertisementPlayerPrefs.CachedAdGroups;
+                cachedAdGroups[format] = adGroup;
+                AdvertisementPlayerPrefs.CachedAdGroups = cachedAdGroups;
+                await CacheFormatAssetsAsync(adGroup, format, clearFirst: !isSameAdGroup);
+            }
+            catch (Exception ex)
+            {
+                MyDebug.Verbose($"[Advertisement] {format} retry failed: {ex.Message}");
+                NoteLaunchFailed(format);
+                CachingFailed(format, NativeAdErrors.Network);
+            }
+            finally
+            {
+                _launchRetries.Remove(format);
+            }
+        }
+
         #endregion
 
         /// <summary>
@@ -1262,6 +1376,9 @@ namespace FlyingAcorn.Soil.Advertisement
         /// <param name="adFormat">The ad format to load (banner, interstitial, rewarded, native).</param>
         public static void LoadAd(AdFormat adFormat)
         {
+            // A format whose ad could not be fetched asks again; this load then waits for it.
+            RetryFailedLaunch(adFormat, loadRequested: true);
+
             if (adFormat == AdFormat.native)
             {
                 if (_nativeCaching)
