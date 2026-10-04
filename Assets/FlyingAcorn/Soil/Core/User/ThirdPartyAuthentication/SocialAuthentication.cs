@@ -82,9 +82,6 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
                     FireInitFailed(new SoilException("No Third Party Settings found", SoilExceptionErrorCode.NotReady));
             }
 
-            foreach (var party in LinkingPlayerPrefs.SilentUnlinkQueue)
-                Unlink(party);
-
             _availableHandlers = new List<IPlatformAuthentication>();
             foreach (var handler in _thirdPartySettings.Select(GetAuthHandler).Where(handler => handler != null))
                 _availableHandlers.Add(handler);
@@ -110,6 +107,10 @@ namespace FlyingAcorn.Soil.Core.User.ThirdPartyAuthentication
             foreach (var link in _myLinks)
                 LinkingPlayerPrefs.SetUserId(link.detail.app_party.party, link.social_account_info.social_account_id);
             FireInitSuccess();
+
+            // Unlinks that failed earlier are retried once ready: Unlink refuses before that.
+            foreach (var party in LinkingPlayerPrefs.SilentUnlinkQueue)
+                Unlink(party);
         }
 
         private static void OnGetAllLinksFailure(ThirdParty party, SoilException exception)
