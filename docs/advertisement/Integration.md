@@ -87,6 +87,8 @@ private void OnAdsInitialized()
 
 **Every `LoadAd` is answered** with the format's Loaded or Error event. If the ad's files are still downloading (for example right after initialization), the answer comes when they are ready. After an interstitial or rewarded ad closes, the SDK prepares an ad again by itself; calling `LoadAd` from `OnAdClosed` is still the simplest pattern and is answered as soon as the ad is ready.
 
+**A format that got no ad at launch is asked for again.** If its ad request or its downloads failed (no network yet, for example), the SDK asks again on its own after 5, 15, 30, 60, 120 and then every 300 seconds, and sooner (at most every 5 seconds) when the game calls `LoadAd` for it. The retries stop once the format has an ad or Soil answers that it has none for it. An asset that several formats use is downloaded once.
+
 **Fullscreen ads rotate.** While an interstitial or rewarded ad is on screen, the SDK downloads the next one in the background and switches to it after the close, so players see different apps instead of the same ad all session. An ad the game was already told is loaded is never swapped out from under it: the switch happens while the slot has nothing ready (right after a close, or during the rewarded cooldown). If the next ad cannot be fetched or downloaded, the current one simply stays. Which ad comes next is decided by Soil, which weighs down ads the player saw recently.
 
 Subscribe to loading events:
