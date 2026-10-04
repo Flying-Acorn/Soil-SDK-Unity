@@ -255,6 +255,21 @@ public class SoilAdsDeviceTest {
     }
 
     @Test
+    public void videosLoadedTogetherBothReportVideo() throws Exception {
+        // At start-up every fullscreen format is prepared at once. A device with few video
+        // decoders could not read two videos' frames together, and one ad lost its video.
+        for (int round = 0; round < 3; round++) {
+            events.clear();
+            SoilAdsBridge.load("interstitial", creative("videoPath", "video_3s.mp4", "imagePath", "image.png"));
+            SoilAdsBridge.load("rewarded", creative("videoPath", "video_10s.mp4", "imagePath", "image.png"));
+            JSONObject interstitial = events.awaitAny("interstitial", "loaded", "loadFailed");
+            JSONObject rewarded = events.awaitAny("rewarded", "loaded", "loadFailed");
+            assertEquals("round " + round, "video", interstitial.optString("media"));
+            assertEquals("round " + round, "video", rewarded.optString("media"));
+        }
+    }
+
+    @Test
     public void loadImageReportsImage() throws Exception {
         JSONObject event = load("rewarded", creative("imagePath", "image.png", "logoPath", "broken.png"));
         assertEquals("image", event.getString("media"));

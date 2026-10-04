@@ -122,6 +122,13 @@ Validation on `load`:
 - `logoPath` is optional decoration; a broken logo is ignored, never a failure.
 - Images are decoded off the main thread and downsampled to the screen size. Each format decodes
   on its own background thread, so a slow video check never delays a banner.
+- Android's video check decodes one frame. Only one format checks a video at a time, because a phone
+  with few video decoders cannot decode two at once and the loser would wrongly fall back to its
+  image; a check that gets no frame tries again a few times. If it still gets none while another
+  fullscreen ad is on screen (its video holding the decoder) but the file has a video track and a
+  duration, the video counts as usable: a video that then fails to play shows the image instead.
+  iOS checks the asset's playable flag, video track and duration without decoding a frame, so
+  it is not affected.
 
 ## Show options JSON (`show`)
 

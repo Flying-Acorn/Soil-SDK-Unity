@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.os.Build;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
@@ -27,6 +28,11 @@ final class MediaLoader implements SoilAdsManager.Loader {
     private static final int LOGO_MAX_SIDE = 256;
     /** Size of the frame grabbed to prove a video decodes; small is enough (API 27+). */
     private static final int PROBE_FRAME_SIDE = 64;
+    private static final int PROBE_FRAME_ATTEMPTS = 3;
+    private static final long PROBE_FRAME_RETRY_MS = 400;
+    // One video probe at a time across formats: a phone with few video decoders cannot decode two
+    // videos' frames at once, and the format that lost would fall back to its image for good.
+    private static final Object VIDEO_PROBE_LOCK = new Object();
 
     private final Handler main;
     private final Map<String, ExecutorService> executors = new HashMap<>();
@@ -142,6 +148,12 @@ final class MediaLoader implements SoilAdsManager.Loader {
      */
     static long probeVideoDurationMs(String path) {
         if (path == null || !new File(path).canRead()) return 0;
+        synchronized (VIDEO_PROBE_LOCK) {
+            return probeVideoLocked(path);
+        }
+    }
+
+    private static long probeVideoLocked(String path) {
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
             retriever.setDataSource(path);
@@ -149,13 +161,25 @@ final class MediaLoader implements SoilAdsManager.Loader {
             String duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             long durationMs = duration == null ? 0 : Long.parseLong(duration.trim());
             if (durationMs <= 0) return 0;
-            Bitmap frame = Build.VERSION.SDK_INT >= 27
-                    ? retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                    PROBE_FRAME_SIDE, PROBE_FRAME_SIDE)
-                    : retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
-            if (frame == null) return 0;
-            frame.recycle();
-            return durationMs;
+            for (int attempt = 1; attempt <= PROBE_FRAME_ATTEMPTS; attempt++) {
+                Bitmap frame = Build.VERSION.SDK_INT >= 27
+                        ? retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                        PROBE_FRAME_SIDE, PROBE_FRAME_SIDE)
+                        : retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                if (frame != null) {
+                    frame.recycle();
+                    return durationMs;
+                }
+                if (attempt < PROBE_FRAME_ATTEMPTS) SystemClock.sleep(PROBE_FRAME_RETRY_MS);
+            }
+            // The file says it has video, but no frame came out. While another ad plays its video
+            // the decoder is likely busy rather than this video broken: it counts as video, and
+            // if it really cannot play, the ad shows its image instead (SoilAdActivity.onVideoFailed).
+            if (FullscreenSession.isAnyActive()) {
+                Log.w(SoilAdsBridge.TAG, "No video frame while another ad is on screen; keeping the video: " + path);
+                return durationMs;
+            }
+            return 0;
         } catch (Exception e) {
             Log.w(SoilAdsBridge.TAG, "Video is not readable: " + path + " (" + e + ")");
             return 0;

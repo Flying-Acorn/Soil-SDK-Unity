@@ -120,11 +120,17 @@ namespace FlyingAcorn.Soil.Advertisement
         // The creative each format last built from the cache; only those are repaired.
         private static readonly Dictionary<AdFormat, AdCreative> _cacheCreatives = new();
 
-        // Rotation (AdRotation): the next ad group of an interstitial or rewarded format is fetched
-        // and its files staged next to the cache (after a close; interstitials also right after a
-        // switch); the format switches to it on a frame its slot has nothing ready, and the files
-        // it switched away from are deleted once the slot has finished loading the new ad.
+        // Rotation (AdRotation): when an interstitial or rewarded ad is shown, the format's next ad
+        // group is fetched and its files staged next to the cache; after the close the format
+        // switches to it on a frame its slot has nothing ready, and the files it switched away from
+        // are deleted once the slot has finished loading the new ad.
         private static readonly HashSet<AdFormat> _rotatingFormats = new();
+        // Formats whose last fetch failed; their close tries again.
+        private static readonly HashSet<AdFormat> _failedRotations = new();
+        // When each fullscreen format last closed (runtime clock), for its hold (AdRotation.HoldsAfterClose).
+        // Moved forward while the slot prepares, so the hold counts only time the switch could happen.
+        private static readonly Dictionary<AdFormat, double> _closedAt = new();
+        private static readonly AdFormat[] FullscreenFormats = { AdFormat.interstitial, AdFormat.rewarded };
         private static readonly Dictionary<AdFormat, (AdGroup adGroup, AssetCache.StagedFormatAssets assets)> _stagedRotations = new();
         private static readonly Dictionary<AdFormat, List<string>> _retiredFiles = new();
         // The ad group each format's prepared ad came from: recorded as seen when it is shown.
@@ -168,6 +174,8 @@ namespace FlyingAcorn.Soil.Advertisement
             _cacheCreatives.Clear();
             // Staged and retired files are left to the orphan cleanup of the next cache load.
             _rotatingFormats.Clear();
+            _failedRotations.Clear();
+            _closedAt.Clear();
             _stagedRotations.Clear();
             _retiredFiles.Clear();
             _preparedAdGroups.Clear();
@@ -398,7 +406,8 @@ namespace FlyingAcorn.Soil.Advertisement
             _player = new NullAdPlayer(Defer);
 #endif
 
-            _slots = new AdSlots(_player, IsRewardedAdInCooldown, () => _runtimeClock, Debug.LogException);
+            _slots = new AdSlots(_player, () => IsRewardedAdInCooldown() || IsWaitingForNextAd(AdFormat.rewarded),
+                () => _runtimeClock, Debug.LogException, () => IsWaitingForNextAd(AdFormat.interstitial));
             foreach (var slot in _slots.All)
             {
                 var format = ToAdFormat(slot.Format);
@@ -410,7 +419,9 @@ namespace FlyingAcorn.Soil.Advertisement
 
         private static void TickPlayerRuntime()
         {
-            _runtimeClock += Math.Min(Time.unscaledDeltaTime, MaxCountedFrameSeconds);
+            var frame = Math.Min(Time.unscaledDeltaTime, MaxCountedFrameSeconds);
+            _runtimeClock += frame;
+            PauseHoldsWhilePreparing(frame);
 
             var count = _deferredPlayerEvents.Count;
             for (var i = 0; i < count; i++)
@@ -525,6 +536,8 @@ namespace FlyingAcorn.Soil.Advertisement
                 case AdSlotNotice.Shown:
                     if (_preparedAdGroups.TryGetValue(format, out var shownAdGroup))
                         AdvertisementPlayerPrefs.RecordShownAdGroup(shownAdGroup);
+                    // Fetched while the ad is on screen, so the close finds the next one ready.
+                    FetchNextAdGroup(format);
                     InvokeFormatEvent(format, Events.InvokeOnBannerAdShown, Events.InvokeOnInterstitialAdShown,
                         Events.InvokeOnRewardedAdShown, data);
                     break;
@@ -538,9 +551,10 @@ namespace FlyingAcorn.Soil.Advertisement
                 case AdSlotNotice.Closed:
                     if (format == AdFormat.rewarded)
                         SetRewardedAdCooldown();
+                    _closedAt[format] = _runtimeClock;
                     InvokeFormatEvent(format, Events.InvokeOnBannerAdClosed, Events.InvokeOnInterstitialAdClosed,
                         Events.InvokeOnRewardedAdClosed, data);
-                    FetchNextAdGroup(format);
+                    RetryFailedFetch(format);
                     break;
             }
         }
@@ -964,11 +978,41 @@ namespace FlyingAcorn.Soil.Advertisement
 
         #region Rotation
 
+        /// <summary>
+        /// After a close the slot prepares the old ad again before a staged ad group may take over
+        /// (AdRotation.CanSwitchNow); on a busy device that can take seconds. That time does not
+        /// count against the hold, or a slow decode alone would let the old ad become ready.
+        /// </summary>
+        private static void PauseHoldsWhilePreparing(float frame)
+        {
+            if (_closedAt.Count == 0) return;
+            foreach (var format in FullscreenFormats)
+            {
+                if (!_closedAt.TryGetValue(format, out var closedAt)) continue;
+                if (SlotFor(format)?.IsPreparing == true)
+                    _closedAt[format] = closedAt + frame;
+            }
+        }
+
+        /// <summary>A fullscreen slot's hold: not ready after its close while its next ad group arrives.</summary>
+        private static bool IsWaitingForNextAd(AdFormat format) =>
+            _closedAt.TryGetValue(format, out var closedAt) && AdRotation.HoldsAfterClose(format.ToString(),
+                _rotatingFormats.Contains(format) || _stagedRotations.ContainsKey(format), _runtimeClock - closedAt);
+
         private static void FetchNextAdGroup(AdFormat format)
         {
             if (!HasAdPlayer) return;
             if (!AdRotation.ShouldFetchNext(format.ToString(), _rotatingFormats.Contains(format),
                     _stagedRotations.ContainsKey(format)))
+                return;
+            RotateAsync(format).Forget();
+        }
+
+        private static void RetryFailedFetch(AdFormat format)
+        {
+            if (!HasAdPlayer) return;
+            if (!AdRotation.RetriesAfterClose(format.ToString(), _failedRotations.Contains(format),
+                    _rotatingFormats.Contains(format), _stagedRotations.ContainsKey(format)))
                 return;
             RotateAsync(format).Forget();
         }
@@ -981,6 +1025,7 @@ namespace FlyingAcorn.Soil.Advertisement
         private static async UniTask RotateAsync(AdFormat format)
         {
             _rotatingFormats.Add(format);
+            _failedRotations.Remove(format);
             try
             {
                 var current = CachedAdGroupOf(format);
@@ -994,7 +1039,11 @@ namespace FlyingAcorn.Soil.Advertisement
                 }
 
                 var staged = await AssetCache.StageAdGroupAsync(adGroup, format);
-                if (staged == null) return;
+                if (staged == null)
+                {
+                    _failedRotations.Add(format);
+                    return;
+                }
                 if (_slots == null || !_rotatingFormats.Contains(format))
                 {
                     // The SDK was reset meanwhile.
@@ -1007,6 +1056,7 @@ namespace FlyingAcorn.Soil.Advertisement
             }
             catch (Exception ex)
             {
+                _failedRotations.Add(format);
                 MyDebug.Verbose($"[Advertisement] {format} rotation failed, keeping the current ad: {ex.Message}");
             }
             finally
@@ -1036,7 +1086,8 @@ namespace FlyingAcorn.Soil.Advertisement
                     continue;
                 }
 
-                if (!AdRotation.CanSwitchNow(slot.IsReady, slot.IsShowing, slot.IsCaching || _cachingFormats.Contains(format)))
+                if (!AdRotation.CanSwitchNow(slot.IsReady, slot.IsPreparing, slot.IsShowing,
+                        slot.IsCaching || _cachingFormats.Contains(format), _slots.IsFullscreenShowing))
                     continue;
 
                 _stagedRotations.Remove(format);
@@ -1053,10 +1104,6 @@ namespace FlyingAcorn.Soil.Advertisement
 
                 MyDebug.Verbose($"[Advertisement] {format} switched to ad group {staged.adGroup.id}");
                 PrepareFormat(format);
-
-                // Fetched now, so the close of this ad finds the next one ready.
-                if (AdRotation.FetchesAheadAfterSwitch(format.ToString()))
-                    FetchNextAdGroup(format);
             }
         }
 

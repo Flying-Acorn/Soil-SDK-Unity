@@ -34,12 +34,42 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         }
 
         [Test]
-        public void OnlyInterstitials_FetchAheadAfterSwitching()
+        public void TheCloseRetries_OnlyAFetchThatFailed()
         {
-            Assert.IsTrue(AdRotation.FetchesAheadAfterSwitch(AdFormats.Interstitial));
-            Assert.IsFalse(AdRotation.FetchesAheadAfterSwitch(AdFormats.Rewarded));
-            Assert.IsFalse(AdRotation.FetchesAheadAfterSwitch(AdFormats.Banner));
-            Assert.IsFalse(AdRotation.FetchesAheadAfterSwitch(null));
+            Assert.IsTrue(AdRotation.RetriesAfterClose(AdFormats.Interstitial, lastFetchFailed: true, fetching: false, waitingToSwitch: false));
+            Assert.IsFalse(AdRotation.RetriesAfterClose(AdFormats.Interstitial, lastFetchFailed: false, fetching: false, waitingToSwitch: false));
+            Assert.IsFalse(AdRotation.RetriesAfterClose(AdFormats.Rewarded, lastFetchFailed: true, fetching: true, waitingToSwitch: false));
+            Assert.IsFalse(AdRotation.RetriesAfterClose(AdFormats.Rewarded, lastFetchFailed: true, fetching: false, waitingToSwitch: true));
+            Assert.IsFalse(AdRotation.RetriesAfterClose(AdFormats.Banner, lastFetchFailed: true, fetching: false, waitingToSwitch: false));
+        }
+
+        [Test]
+        public void AClosedInterstitialWaitsForItsNextAdGroup_ForAWhile()
+        {
+            Assert.IsTrue(AdRotation.HoldsAfterClose(AdFormats.Interstitial, nextAdPending: true, secondsSinceClose: 0));
+            Assert.IsTrue(AdRotation.HoldsAfterClose(AdFormats.Interstitial, nextAdPending: true, secondsSinceClose: 5.9));
+            Assert.IsFalse(AdRotation.HoldsAfterClose(AdFormats.Interstitial, nextAdPending: true, secondsSinceClose: AdRotation.HoldAfterCloseSeconds));
+            Assert.IsFalse(AdRotation.HoldsAfterClose(AdFormats.Interstitial, nextAdPending: false, secondsSinceClose: 1));
+        }
+
+        [Test]
+        public void ARewardedAdIsHeldToo_ItsCooldownCanEndWhileUnityIsPaused()
+        {
+            Assert.IsTrue(AdRotation.HoldsAfterClose(AdFormats.Rewarded, nextAdPending: true, secondsSinceClose: 1));
+            Assert.IsFalse(AdRotation.HoldsAfterClose(AdFormats.Rewarded, nextAdPending: false, secondsSinceClose: 1));
+        }
+
+        [Test]
+        public void BannersAreNeverHeld()
+        {
+            Assert.IsFalse(AdRotation.HoldsAfterClose(AdFormats.Banner, nextAdPending: true, secondsSinceClose: 1));
+            Assert.IsFalse(AdRotation.HoldsAfterClose("native", nextAdPending: true, secondsSinceClose: 1));
+        }
+
+        [Test]
+        public void NoHoldBeforeAnyClose()
+        {
+            Assert.IsFalse(AdRotation.HoldsAfterClose(AdFormats.Interstitial, nextAdPending: true, secondsSinceClose: -1));
         }
 
         [Test]
@@ -79,10 +109,24 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         [Test]
         public void SwitchesOnlyWhenTheSlotHasNothingReadyOrOnScreen()
         {
-            Assert.IsTrue(AdRotation.CanSwitchNow(slotReady: false, slotShowing: false, formatCaching: false));
-            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: true, slotShowing: false, formatCaching: false));
-            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotShowing: true, formatCaching: false));
-            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotShowing: false, formatCaching: true));
+            Assert.IsTrue(AdRotation.CanSwitchNow(slotReady: false, slotPreparing: false, slotShowing: false, formatCaching: false, fullscreenOnScreen: false));
+            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: true, slotPreparing: false, slotShowing: false, formatCaching: false, fullscreenOnScreen: false));
+            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotPreparing: false, slotShowing: true, formatCaching: false, fullscreenOnScreen: false));
+            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotPreparing: false, slotShowing: false, formatCaching: true, fullscreenOnScreen: false));
+        }
+
+        [Test]
+        public void NeverSwitchesWhileTheSlotIsStillPreparing()
+        {
+            // The answer to the old load could be taken for the answer to the new one.
+            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotPreparing: true, slotShowing: false, formatCaching: false, fullscreenOnScreen: false));
+        }
+
+        [Test]
+        public void NeverSwitchesWhileAnotherFullscreenAdIsOnScreen()
+        {
+            // A rewarded video playing would leave the interstitial's new video undecodable.
+            Assert.IsFalse(AdRotation.CanSwitchNow(slotReady: false, slotPreparing: false, slotShowing: false, formatCaching: false, fullscreenOnScreen: true));
         }
     }
 }

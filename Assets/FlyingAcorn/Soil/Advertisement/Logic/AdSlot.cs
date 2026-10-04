@@ -382,11 +382,12 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
         /// <param name="isRewardedGated">The rewarded cooldown.</param>
         /// <param name="clock">See <see cref="AdSlot(string, IAdPlayer, Func{bool}, Func{double}, Action{Exception})"/>.</param>
         /// <param name="onHandlerError">Receives exceptions thrown by notice handlers.</param>
+        /// <param name="isInterstitialGated">Holds the interstitial back, e.g. while its next ad arrives.</param>
         public AdSlots(IAdPlayer player, Func<bool> isRewardedGated = null, Func<double> clock = null,
-            Action<Exception> onHandlerError = null)
+            Action<Exception> onHandlerError = null, Func<bool> isInterstitialGated = null)
         {
             _slots[AdFormats.Banner] = new AdSlot(AdFormats.Banner, player, null, clock, onHandlerError);
-            _slots[AdFormats.Interstitial] = new AdSlot(AdFormats.Interstitial, player, null, clock, onHandlerError);
+            _slots[AdFormats.Interstitial] = new AdSlot(AdFormats.Interstitial, player, isInterstitialGated, clock, onHandlerError);
             _slots[AdFormats.Rewarded] = new AdSlot(AdFormats.Rewarded, player, isRewardedGated, clock, onHandlerError);
         }
 

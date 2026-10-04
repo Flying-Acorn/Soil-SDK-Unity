@@ -20,6 +20,8 @@ final class FullscreenSession {
 
     private static final Map<Integer, FullscreenSession> registry = new HashMap<>();
     private static int nextId = 1;
+    /** How many fullscreen ads are up; the registry is main-thread only, this is read anywhere. */
+    private static volatile int activeCount;
 
     final int id;
     final String format;
@@ -71,6 +73,7 @@ final class FullscreenSession {
                                    SoilAdsManager.PresentationListener listener) {
         FullscreenSession session = new FullscreenSession(format, ad, options, listener, handler);
         registry.put(session.id, session);
+        activeCount = registry.size();
         try {
             Intent intent = new Intent(host, SoilAdActivity.class);
             intent.putExtra(SoilAdActivity.EXTRA_SESSION_ID, session.id);
@@ -78,6 +81,7 @@ final class FullscreenSession {
         } catch (RuntimeException e) {
             Log.e(SoilAdsBridge.TAG, "Could not start the ad activity", e);
             registry.remove(session.id);
+            activeCount = registry.size();
             return null;
         }
         handler.postDelayed(session.attachTimeout, ATTACH_TIMEOUT_MS);
@@ -86,6 +90,11 @@ final class FullscreenSession {
 
     static FullscreenSession find(int id) {
         return registry.get(id);
+    }
+
+    /** Whether a fullscreen ad is on screen (or starting); safe to call from any thread. */
+    static boolean isAnyActive() {
+        return activeCount > 0;
     }
 
     void attach(SoilAdActivity activity) {
@@ -130,6 +139,7 @@ final class FullscreenSession {
         if (ended) return;
         ended = true;
         registry.remove(id);
+        activeCount = registry.size();
         handler.removeCallbacks(attachTimeout);
         SoilAdActivity current = activity;
         if (current != null && !current.isFinishing()) current.finish();
