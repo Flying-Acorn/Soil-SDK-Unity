@@ -125,11 +125,12 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                     if (player.isPlaying()) player.pause();
                 }
             }
-            super.onPause();
         } catch (Throwable t) {
             fail("onPause", t);
+        } finally {
+            // Always reached: skipping it makes Android throw SuperNotCalledException.
+            super.onPause();
         }
-
     }
 
     @Override
@@ -152,11 +153,11 @@ public final class SoilAdActivity extends Activity implements TextureView.Surfac
                 if (!isChangingConfigurations()) current.end();
                 current.detach(this);
             }
-            super.onDestroy();
         } catch (Throwable t) {
             fail("onDestroy", t);
+        } finally {
+            super.onDestroy();
         }
-
     }
 
     @Override
