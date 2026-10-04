@@ -56,15 +56,7 @@ final class BannerView extends FrameLayout {
                 Guard.run("Banner insets", new Runnable() {
                     @Override
                     public void run() {
-                        int[] insetsNow = Ui.cutoutInsets(insets);
-                        if (Arrays.equals(insetsNow, safeInsets)) return;
-                        safeInsets = insetsNow;
-                        post(Guard.wrap("Banner layout", new Runnable() {
-                            @Override
-                            public void run() {
-                                if (!closed) setLayoutParams(layoutParams());
-                            }
-                        }));
+                        updateInsets(Ui.cutoutInsets(insets));
                     }
                 });
                 return insets;
@@ -86,6 +78,30 @@ final class BannerView extends FrameLayout {
                 });
             }
         });
+    }
+
+    @Override
+    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight);
+        // After a rotation the cutout moves; read it here too, as Unity's view may consume the
+        // insets before the listener above sees them.
+        Guard.run("Banner resize", new Runnable() {
+            @Override
+            public void run() {
+                updateInsets(Ui.cutoutInsets(activity.getWindow().getDecorView()));
+            }
+        });
+    }
+
+    private void updateInsets(int[] insetsNow) {
+        if (Arrays.equals(insetsNow, safeInsets)) return;
+        safeInsets = insetsNow;
+        post(Guard.wrap("Banner layout", new Runnable() {
+            @Override
+            public void run() {
+                if (!closed) setLayoutParams(layoutParams());
+            }
+        }));
     }
 
     void show(String position) {
