@@ -14,6 +14,7 @@ Based on your needs, only import the package you need from <a href="https://gith
     - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
     - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
     - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking, friend leaderboards and referrals.
+    - [Feedback](./feedback/Introduction.md) - Support messages, ratings with a reason and suggestions from players.
 
 - Purchasing - `Soil-X.Y.Z-Purchasing.unitypackage`
     - [Purchasing](./purchasing/Introduction.md) - In-app purchases.
