@@ -1,0 +1,10 @@
+<!--
+  Keeps ClampedIntConverter for IL2CPP builds with managed code stripping. Newtonsoft creates it by reflection
+  from [JsonConverter(typeof(ClampedIntConverter))] on the Balance properties, so nothing calls its constructor
+  directly and the linker would otherwise remove it.
+-->
+<linker>
+    <assembly fullname="FlyingAcorn.Soil.Economy.Logic">
+        <type fullname="FlyingAcorn.Soil.Economy.Logic.ClampedIntConverter" preserve="all"/>
+    </assembly>
+</linker>

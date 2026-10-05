@@ -12,11 +12,16 @@ Two versions share the same friendships:
 - **Instant add** (old, marked obsolete): adding a player makes you friends at once, without asking. It keeps
   working for builds already shipped.
 
+**Referrals** reward players for bringing new players into the game. A new player enters the code of the player
+who invited them (`Socialization.RedeemReferralCode`, or a friend request by code when the app counts those),
+and the server adds both players' rewards to their Soil economy currency balances. The inviter's game finds
+their reward by their balance rising. See [Referrals](Integration.md#referrals-invite-codes-and-rewards).
+
 ## Finding Other Players
 
 The simplest way is the player code: show `SoilServices.UserInfo.public_id` (for example `K7M29QX4`) in your
 game, and let other players type it into `Socialization.SendFriendRequestByCode`. Every friend list and answer
-then gives you the UUID the other actions take.
+then gives you the UUID the other actions take. The same code is the player's referral code.
 
 The old instant add takes UUIDs only. Here are common ways to obtain them:
 
@@ -66,7 +71,7 @@ See [Integration](Integration.md) for detailed setup and usage.
 
 Demo scenes:
 
-- Friend requests: `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendRequestsExample.unity` - your code, the four lists with their counts, sending by code or UUID, and each list's actions. Needs the Friend requests feature.
+- Friend requests: `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendRequestsExample.unity` - your code, the four lists with their counts, sending by code or UUID, and each list's actions. Needs the Friend requests feature. Its "Enter invite code" and "Invites" buttons try referrals (need the Referrals feature).
 - Instant add (old): `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity`
 
 Both are also reachable from the scene switcher (`Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity`).

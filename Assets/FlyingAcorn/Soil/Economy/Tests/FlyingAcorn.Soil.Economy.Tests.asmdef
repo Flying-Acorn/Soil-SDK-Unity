@@ -1,0 +1,22 @@
+{
+    "name": "FlyingAcorn.Soil.Economy.Tests",
+    "rootNamespace": "FlyingAcorn.Soil.Economy.Tests",
+    "references": [
+        "FlyingAcorn.Soil.Economy.Logic"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll",
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": []
+}

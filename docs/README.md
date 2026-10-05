@@ -12,7 +12,7 @@ For installation instructions, see [Installation](./Installation.md). To move to
     - [Remote Config](./remoteconfig/Introduction.md) - Runtime configurations.
     - [Social Authentication](./socialauthentication/Introduction.md) - Third-party authentication.
     - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
-    - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking and friend leaderboards.
+    - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking, friend leaderboards and referrals.
 
 - Purchasing
     - [Purchasing](./purchasing/Introduction.md) - In-app purchases.
@@ -34,7 +34,7 @@ All demo Unity scenes are located under `Assets/FlyingAcorn/Soil/**/Demo/`.
 | Cloud Save     | `Assets/FlyingAcorn/Soil/CloudSave/Demo/SoilCloudSaveExample.unity`        |
 | Economy        | `Assets/FlyingAcorn/Soil/Economy/Demo/SoilUserEconomyExample.unity`        |
 | Leaderboard    | `Assets/FlyingAcorn/Soil/Leaderboard/Demo/SoilLeaderboardExample.unity`    |
-| Friend Requests | `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendRequestsExample.unity`|
+| Friend Requests and Referrals | `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilFriendRequestsExample.unity`|
 | Socialization (old instant add) | `Assets/FlyingAcorn/Soil/Socialization/Demo/SoilSocializationExample.unity`|
 | Scene Switcher | `Assets/FlyingAcorn/Soil/Demo/SoilSceneSwitcher.unity`                     |
 

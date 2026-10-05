@@ -17,7 +17,7 @@ OUT=$PROJECT/Build/Packages/$VERSION
 
 SOIL=Assets/FlyingAcorn/Soil
 THIRD_PARTY=$SOIL/Core/User/ThirdPartyAuthentication
-TESTS=($SOIL/Advertisement/Tests $SOIL/Advertisement/Editor/Tests $SOIL/Socialization/Tests $THIRD_PARTY/GoogleCredentialUnity/Tests)
+TESTS=($SOIL/Advertisement/Tests $SOIL/Economy/Tests $SOIL/Advertisement/Editor/Tests $SOIL/Socialization/Tests $THIRD_PARTY/GoogleCredentialUnity/Tests)
 
 cd "$PROJECT"
 mkdir -p "$OUT"

@@ -28,10 +28,12 @@ private void HandleInitializationFailed(SoilException exception)
     // Check error type for specific handling
     switch (exception.ErrorCode)
     {
-        case SoilExceptionErrorCode.NetworkError:
+        case SoilExceptionErrorCode.TransportError:
             // Handle network issues
             break;
-        case SoilExceptionErrorCode.AuthenticationError:
+        case SoilExceptionErrorCode.InvalidToken:
+        case SoilExceptionErrorCode.TokenExpired:
+        case SoilExceptionErrorCode.Forbidden:
             // Handle auth failures
             break;
         case SoilExceptionErrorCode.Timeout:
@@ -85,7 +87,9 @@ if (userInfo != null)
 `public_id` is a short, uppercase code (for example `K7M29QX4`) that is safe to show to
 players and easy to read out loud or retype — use it anywhere you would otherwise ask a
 player to share their `uuid`. Friend requests take it directly: `Socialization.SendFriendRequestByCode(code)`
-(see [Socialization](../socialization/Integration.md#friend-requests-send-accept-and-block)). The server assigns it when
+(see [Socialization](../socialization/Integration.md#friend-requests-send-accept-and-block)), and it is also the
+player's referral code for `Socialization.RedeemReferralCode(code)` (see
+[Referrals](../socialization/Integration.md#referrals-invite-codes-and-rewards)). The server assigns it when
 the account is created and never
 changes it, so it cannot be set through `UpdatePlayerInfo()`. It is `null` for users whose
 info was cached before this field existed, until the next fetch refreshes them.
@@ -105,16 +109,21 @@ catch (SoilException ex)
 {
     switch (ex.ErrorCode)
     {
-        case SoilExceptionErrorCode.NetworkError:
+        case SoilExceptionErrorCode.TransportError:
             // Network connectivity issues
             break;
-        case SoilExceptionErrorCode.AuthenticationError:
+        case SoilExceptionErrorCode.InvalidToken:
+        case SoilExceptionErrorCode.TokenExpired:
+        case SoilExceptionErrorCode.Forbidden:
             // Authentication failed
             break;
         case SoilExceptionErrorCode.Timeout:
             // Request timed out
             break;
-        case SoilExceptionErrorCode.InvalidConfiguration:
+        case SoilExceptionErrorCode.TooManyRequests:
+            // Rate limited: wait before trying again
+            break;
+        case SoilExceptionErrorCode.MisConfiguration:
             // SDK configuration issues
             break;
         default:

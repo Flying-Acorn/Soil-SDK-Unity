@@ -72,6 +72,10 @@ namespace FlyingAcorn.Soil.Socialization.Helpers
                 SocializationOperation.AddFriend => "adding friend",
                 SocializationOperation.RemoveFriend => "removing friend",
                 SocializationOperation.GetFriendsLeaderboard => "fetching friends leaderboard",
+                SocializationOperation.GetFriendList => "getting a friend list",
+                SocializationOperation.FriendAction => "calling a friend request action",
+                SocializationOperation.GetReferralInfo => "getting referral info",
+                SocializationOperation.RedeemReferralCode => "entering a referral code",
                 _ => "performing socialization operation"
             };
         }

@@ -143,8 +143,21 @@ gone, ask us to turn the old instant add off: until then a modified client could
 asking.
 
 A refusal is an answer, not an exception. Every action returns a `FriendActionResult`; check `Status`
-(`FriendStatus`) and `Succeeded`. Only a transport failure, an expired sign-in or the feature being off throws a
-`SocializationException`. Every action is safe to retry after a timeout.
+(`FriendStatus`) and `Succeeded`. Refusals include too many requests (`Throttled`, with `RetryAfterSeconds`), an
+invalid request and a server error (`FriendshipError`). A `SocializationException` (`ErrorCode`) is thrown, always
+through the awaited task, only when there is no answer of that kind:
+
+| Case | `ErrorCode` |
+|---|---|
+| No connection, or the request timed out | `TransportError` / `Timeout` |
+| The sign-in expired | `InvalidToken` |
+| The app does not have the feature (HTTP 403) | `Forbidden` |
+| The player's account was not found (HTTP 404) | `NotFound` |
+| `GetFriendList` read too often (HTTP 429) | `TooManyRequests`, with `RetryAfterSeconds` set |
+| A proxy error page, or the service is down | `TransportError` / `ServiceUnavailable` |
+| An empty `uuid` or code, or Soil not initialized | `InvalidRequest` / `NotReady` |
+
+Every action is safe to retry after a timeout.
 
 ```csharp
 using FlyingAcorn.Soil.Socialization;
@@ -185,57 +198,198 @@ Things to know:
   requests waiting per player (100) and players blocked per player (500). Sending requests is limited to
   20 a minute and 200 a day, blocking to 30 a minute and 300 a day.
 - **Reading** friends - the friend lists, old and new, and the friend leaderboard - is limited to 120 requests a
-  minute per player, together. Fetch when a screen opens rather than on a timer.
+  minute per player, together. Fetch when a screen opens rather than on a timer. Past it, `GetFriendList` throws
+  `TooManyRequests` with `RetryAfterSeconds`.
 - **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
   simply never gets an answer. Do not show anything else.
 - **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
   the lists again.
 - **The friend leaderboard** (`Socialization.GetFriendsLeaderboard`) works with either feature.
-- **Invite rewards**: friendships keep their original `since` when they move. If your game rewards a friend
+- **Invite rewards**: to reward players for bringing new players, use [Referrals](#referrals-invite-codes-and-rewards),
+  which the server rewards once per new player. If you reward friendships yourself instead: friendships keep their original `since` when they move. If your game rewards a friend
   it has not seen before whose friendship is recent, a friend made shortly before the player signed in shows up
   as unseen on the real account and would be rewarded again. Record rewarded friends in cloud save on the
   account that earned them, or skip friends whose `since` is older than the sign-in.
+
+## Referrals: invite codes and rewards
+
+Referrals let a new player name the player who invited them, and reward both. They need the **Referrals**
+feature on your app (ask your Soil contact). A player's referral code is their player code,
+`SoilServices.UserInfo.public_id` - the same code friend requests use, so there is nothing new to show.
+
+### The flow
+
+1. **The inviter shares their code**: show `SoilServices.UserInfo.public_id` with a share button that sends
+   the code and your game's store link (for example "Play with me! Enter my code K7M29QX4: https://...").
+2. **The new player enters it**, with `Socialization.RedeemReferralCode(code)` on an "Enter invite code"
+   screen. Or, if your app turned on **A friend request counts as entering the code** (dashboard, Friends →
+   Settings), simply by sending a friend request with `Socialization.SendFriendRequestByCode(code)`: when that
+   request made the invite, the answer carries it in `FriendActionResult.invite`.
+3. **Rewards are given on the server**, at that moment, to both players' Soil economy currency balances: the
+   currency and amount each side gets are set on the dashboard. Nothing needs to be called to grant them, and
+   they are never taken back. The new player's reward is also in the answer (`reward`, null when the app gives
+   none), **for showing only**: it is already in their balance. Do not add it to your own wallet as well; if your
+   game moves a Soil currency into its own wallet as below, the new player's reward arrives that way too, so
+   granting `reward` yourself would pay it twice.
+4. **The inviter learns of their reward by their currency balance rising** - there is no other call or
+   notification. Read the balance (`Economy.GetSummary()`, for example when the game starts or the invite
+   screen opens) and turn it into what your game uses. A simple way is a currency of its own, for example
+   `ReferralGem`, that the game drains into its local gems:
+
+```csharp
+using FlyingAcorn.Soil.Economy;
+
+// Call when the game starts and when the invite screen opens, once Economy is initialized.
+private async UniTask CollectReferralGems()
+{
+    var summary = await Economy.GetSummary();
+    var pending = summary.virtual_currencies.Find(c => c.Identifier == "ReferralGem")?.Balance ?? 0;
+    if (pending <= 0) return;
+    // Take them from Soil first, then give them locally, and save the wallet at once. This order never pays twice;
+    // its risk is the opposite one: a crash (or a decrease that went through but timed out) between the two lines
+    // loses these gems for the player.
+    await Economy.DecreaseVirtualCurrency("ReferralGem", pending);
+    LocalWallet.AddGems(pending);
+    LocalWallet.Save();
+    ShowToast($"Your friends joined! +{pending} gems");
+}
+```
+
+Decreasing by the amount you read (not setting the balance to 0) keeps a reward that lands in between for the
+next time. If your game keeps its gems in Soil economy itself, give the reward in that currency and skip the
+conversion.
+
+Balances are kept on the server as 64-bit numbers, while `Balance` is an `int`: a balance above `int.MaxValue`
+(2,147,483,647) reads as `int.MaxValue`. Decreasing by that much leaves the rest for the next read: calling
+`CollectReferralGems` again collects the rest.
+
+### Entering a code
+
+```csharp
+using FlyingAcorn.Soil.Socialization;
+using FlyingAcorn.Soil.Socialization.Logic;
+
+var info = await Socialization.GetReferralInfo();
+ShowMyCode(SoilServices.UserInfo.public_id);
+ShowInvitedCount(info.invited_count);
+SetEnterCodeVisible(info.can_redeem); // hide the screen once the player is invited or the window has closed
+if (info.RedeemUntilUtc is { } until) ShowDeadline(until.ToLocalTime());
+
+var result = await Socialization.RedeemReferralCode(typedCode);
+switch (result.Status)
+{
+    case ReferralStatus.Invited:
+        ShowThanks(result.inviter.name, result.reward); // reward: { currency, amount } or null
+        break;
+    case ReferralStatus.CodeNotFound: ShowNoSuchPlayer(); break;
+    case ReferralStatus.OwnCode: ShowThatIsYou(); break;
+    case ReferralStatus.AlreadyInvited:
+    case ReferralStatus.WindowClosed: HideEnterCode(); break;
+    case ReferralStatus.MutualInvite: ShowYouInvitedThem(); break;
+    case ReferralStatus.Throttled: RetryIn(result.RetryAfterSeconds); break;
+}
+```
+
+When the app counts friend requests as invites, check `invite` on the request's answer. It is there only when this
+request made a new invite: `Invited`, with the new player's `reward` (null when the app gives none; already in their
+balance, so show it only). The invite and the request stand on their own: an invite can be made while the request
+itself is refused (for example a full request list), and the other way round.
+
+```csharp
+var sent = await Socialization.SendFriendRequestByCode(typedCode);
+ShowRequestOutcome(sent.Status);
+// Only present when this request made the invite; reward is already in the balance.
+if (sent.invite is { Succeeded: true }) ShowThanks(sent.user.name, sent.invite.reward);
+```
+
+`invite` is null whenever the request did not make an invite: the player already has an inviter (the same one
+again too: unlike `RedeemReferralCode`, a request does not repeat an earlier invite), is past the window, sent their
+own code, or invited that player themselves; the code matches no player (`FriendNotFound`) or staff stopped it; the
+request was sent by UUID or was invalid; or the app has Referrals or the switch off. A friend request never answers
+why no invite was made: to tell the player, use `RedeemReferralCode`. One more case: when counting the invite
+failed on the server, `invite` has `Status` `ReferralError` and no reward while the request itself still went
+through. Let the player enter the code with `RedeemReferralCode`.
+
+As with friend requests, a refusal is an answer, not an exception. A `SocializationException` is thrown in the
+same cases as for friend requests: no connection or a timeout, an expired sign-in, the feature being off (HTTP 403,
+`SoilExceptionErrorCode.Forbidden`), the account not found (`NotFound`), and `GetReferralInfo` read too often
+(`TooManyRequests`, with `RetryAfterSeconds`). Entering a code is safe to retry, for example after a timeout: the
+same code again answers `Invited` with the reward given the first time (it is granted only once), while a
+different code answers `AlreadyInvited`.
+
+### Rules
+
+- **One inviter, ever.** Once a player has an inviter it never changes, whichever way it was entered.
+- **A window.** Only players whose account is younger than the app's window can enter a code (7 days by
+  default; it can be turned off so every player can enter one). `GetReferralInfo` gives `can_redeem` and
+  `redeem_until` (null when there is no window).
+- **A cap.** An inviter is rewarded for at most the app's cap of invites (20 by default; it can be turned off).
+  Invites past it still count in `invited_count`, unrewarded. The cap never applies to the new player: they are
+  rewarded whenever the app sets a reward for new players.
+- **Not their own code, and not mutual**: a player cannot enter a code of someone they invited themselves.
+- Codes are matched within the game only; casing, spaces and dashes do not matter. A code staff have stopped
+  answers as not found.
+- Entering codes is limited to 10 a minute and 30 a day per player (answered `Throttled`); `GetReferralInfo` to 60
+  a minute (throws `TooManyRequests` with `RetryAfterSeconds`).
+- **After signing in** onto an existing account, the player's inviter and the players they invited move with
+  them (an account keeps its own inviter if it already has one).
+
+### Codes
+
+`ReferralStatus` (`detail.code`); the server only appends new ones.
+
+| Code | `ReferralStatus` | HTTP | Meaning |
+|---|---|---|---|
+| 0 | `Invited` | 200 | The code was entered (now, or by this same code before); `reward` and `inviter` are set |
+| 1 | `CodeNotFound` | 404 | No player in this game has that code |
+| 2 | `OwnCode` | 400 | The player's own code |
+| 3 | `AlreadyInvited` | 409 | The player already has an inviter |
+| 4 | `WindowClosed` | 409 | The player's account is older than the window |
+| 5 | `MutualInvite` | 409 | The code's owner was invited by this player |
+| 6 | `InvalidRequest` | 400, 405 | The request was malformed, or used the wrong method |
+| 7 | `ReferralError` | 500 | A server error; try again later |
+| 8 | `Throttled` | 429 | Too many tries; `RetryAfterSeconds` says how long to wait |
+| 9 | `ReferralInfo` | 200 | The answer of `GetReferralInfo` |
 
 ## Advanced Integration Patterns
 
 ### Handling Friend Invites via Deep Links
 
-In your game, you can handle friend invites through deep links. When a user shares a link to invite friends, the app can parse the deep link to add the friend automatically upon app launch or link activation.
+In your game, you can handle friend invites through deep links. When a player shares a link with their player code, the app can send the friend request when the link opens it.
 
 ```csharp
 // Example deep link handler (integrate with your app's deep link system)
 private void OnDeepLinkActivated(string url)
 {
-    // Parse the URL for friend UUID (e.g., yourapp://invite?friend=uuid123)
+    // The link carries the inviter's player code, e.g. yourapp://invite?code=K7M29QX4
     var uri = new Uri(url);
     var query = HttpUtility.ParseQueryString(uri.Query);
-    var friendUuid = query["friend"];
+    var code = query["code"];
 
-    if (!string.IsNullOrEmpty(friendUuid))
-    {
-        // Add the friend asynchronously
-        _ = AddFriendFromInvite(friendUuid);
-    }
+    if (!string.IsNullOrEmpty(code))
+        _ = SendRequestFromInvite(code);
 }
 
-private async Task AddFriendFromInvite(string friendUuid)
+private async UniTask SendRequestFromInvite(string code)
 {
     try
     {
         // The inviter shared the link, so a request from the invitee is what they asked for.
-        var result = await Socialization.SendFriendRequest(friendUuid);
+        var result = await Socialization.SendFriendRequestByCode(code);
         Debug.Log($"Friend request from invite: {result.Status}");
-        
-        // Optionally award a prize once you are friends
-        if (result.Status == FriendStatus.FriendshipCreated)
-            AwardFriendInvitePrize();
-        
-        // Refresh friends list
-        LoadFriends();
+
+        // Do not reward friendships yourself (see "Invite rewards" above): with Referrals and
+        // "A friend request counts as entering the code" on, this request is the invite, rewarded by the server.
+        if (result.invite is { Succeeded: true })
+            ShowThanks(result.user.name, result.invite.reward); // already in the balance: show only
+
+        // Refresh the lists
+        var friends = await Socialization.GetFriendList(FriendListKind.Outgoing);
+        ShowSentRequests(friends.users);
     }
     catch (SoilException e)
     {
-        Debug.LogError($"Failed to add friend from invite: {e.Message}");
+        Debug.LogError($"Failed to send a friend request from invite: {e.Message}");
     }
 }
 ```
@@ -296,12 +450,12 @@ else
 
 ## Demo Scene
 
-See the [demo scenes](../README.md#demo-scenes) for complete working examples: `SoilFriendRequestsExample.unity` (friend requests) and `SoilSocializationExample.unity` (old instant add).
+See the [demo scenes](../README.md#demo-scenes) for complete working examples: `SoilFriendRequestsExample.unity` (friend requests, and referrals: "Enter invite code" and "Invites") and `SoilSocializationExample.unity` (old instant add).
 
 ## API Reference
 
 - `Socialization.Ready` (property)
-- `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)` → `Task<LeaderboardResponse>` (either feature)
+- `Socialization.GetFriendsLeaderboard(string leaderboardId, int count = 10, bool relative = false)` → `UniTask<LeaderboardResponse>` (either feature)
 
 Old instant add, marked `[Obsolete]`:
 
@@ -314,6 +468,14 @@ Friend requests (need the Friend requests feature):
 - `Socialization.GetFriendList(FriendListKind kind = FriendListKind.Friends)` → `UniTask<FriendList>`
 - `Socialization.SendFriendRequest(string uuid)`, `Socialization.SendFriendRequestByCode(string playerCode)` → `UniTask<FriendActionResult>`
 - `Socialization.AcceptFriendRequest`, `DeclineFriendRequest`, `CancelFriendRequest`, `RemoveFriend`, `BlockPlayer`, `UnblockPlayer` (`string uuid`) → `UniTask<FriendActionResult>`
+
+Referrals (need the Referrals feature):
+
+- `Socialization.GetReferralInfo()` → `UniTask<ReferralInfo>` (`invited`, `invited_by`, `can_redeem`, `redeem_until` / `RedeemUntilUtc`, `invited_count`)
+- `Socialization.RedeemReferralCode(string code)` → `UniTask<ReferralRedeemResult>` (`Status`, `Succeeded`, `reward`, `inviter`, `RetryAfterSeconds`)
+- `FriendActionResult.invite` → `ReferralInvite` (`Status`, `Succeeded`, `reward`), set on `SendFriendRequestByCode` only when that request made an invite (or counting it failed: `ReferralError`), in apps that count friend requests as invites
+
+Errors: `SocializationException` (a `SoilException`) with `ErrorCode`, `Operation` and `RetryAfterSeconds` (set when the server sent `Retry-After`, for example on `TooManyRequests`).
 
 ## Other Documentations
 

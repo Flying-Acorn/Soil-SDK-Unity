@@ -80,6 +80,11 @@ foreach (var item in items)
 }
 ```
 
+**Very large balances**: the server keeps balances as 64-bit numbers, while `Balance` is an `int`. Rewards the
+server grants (referrals, leaderboard prizes) can take a balance past `int.MaxValue` (2,147,483,647); such a
+balance reads as `int.MaxValue` rather than failing the whole response. Decreasing by that much leaves the rest
+for the next read. Avoid `SetVirtualCurrency` with a value computed from such a balance: it would drop the rest.
+
 ### 4. Modifying Virtual Currencies
 
 All currency modification methods automatically update the cached data in `EconomyPlayerPrefs`.

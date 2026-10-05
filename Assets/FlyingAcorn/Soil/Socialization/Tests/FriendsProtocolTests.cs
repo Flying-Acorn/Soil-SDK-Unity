@@ -29,12 +29,43 @@ namespace FlyingAcorn.Soil.Socialization.Tests
             var limit = FriendsProtocol.ParseAction(409,
                 "{\"detail\": {\"code\": 15, \"message\": \"request_limit_reached\"}, \"user\": " + Sara + "}");
             Assert.AreEqual(FriendStatus.RequestLimitReached, limit.Status);
+            Assert.AreEqual(409, limit.HttpStatus);
             Assert.IsFalse(limit.Succeeded);
             Assert.IsNotNull(limit.user);
+            Assert.IsNull(limit.RetryAfterSeconds);
 
             var missing = FriendsProtocol.ParseAction(404, "{\"detail\": {\"code\": 3, \"message\": \"friend_not_found\"}}");
             Assert.AreEqual(FriendStatus.FriendNotFound, missing.Status);
+            Assert.AreEqual(404, missing.HttpStatus);
+            Assert.IsFalse(missing.Succeeded);
             Assert.IsNull(missing.user);
+        }
+
+        // Errors keep the code shape: a wrong method (405), malformed JSON (400) and a server error (500).
+        [TestCase(405, 16, "invalid_request", FriendStatus.InvalidRequest)]
+        [TestCase(400, 16, "invalid_request", FriendStatus.InvalidRequest)]
+        [TestCase(500, 5, "friendship_error", FriendStatus.FriendshipError)]
+        public void ErrorsInTheCodeShapeAreAnswers(long http, int code, string message, FriendStatus status)
+        {
+            var body = $"{{\"detail\": {{\"code\": {code}, \"message\": \"{message}\"}}}}";
+            var result = FriendsProtocol.ParseAction(http, body);
+            Assert.AreEqual(status, result.Status);
+            Assert.AreEqual(message, result.detail.message);
+            Assert.AreEqual(http, result.HttpStatus);
+            Assert.IsFalse(result.Succeeded);
+            Assert.IsNull(result.user);
+            Assert.IsNull(result.invite);
+            Assert.AreEqual(status, FriendsProtocol.StatusOf(body));
+        }
+
+        [Test]
+        public void AlreadyFriendsIsASuccess()
+        {
+            // Retrying a request that already went through: done on an earlier try.
+            var result = FriendsProtocol.ParseAction(200,
+                "{\"detail\": {\"code\": 0, \"message\": \"friendship_exists\"}, \"user\": " + Sara + "}");
+            Assert.AreEqual(FriendStatus.FriendshipExists, result.Status);
+            Assert.IsTrue(result.Succeeded);
         }
 
         [Test]
@@ -42,15 +73,40 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         {
             var result = FriendsProtocol.ParseAction(429, "{\"detail\": {\"code\": 6, \"message\": \"throttled\"}}", "42");
             Assert.AreEqual(FriendStatus.Throttled, result.Status);
+            Assert.AreEqual(429, result.HttpStatus);
+            Assert.IsFalse(result.Succeeded);
+            Assert.IsNull(result.user);
             Assert.AreEqual(42, result.RetryAfterSeconds);
             Assert.IsNull(FriendsProtocol.ParseAction(429, "{\"detail\": {\"code\": 6}}", "soon").RetryAfterSeconds);
+            Assert.IsNull(FriendsProtocol.ParseAction(429, "{\"detail\": {\"code\": 6}}").RetryAfterSeconds);
+        }
+
+        [TestCase("42", 42)]
+        [TestCase("0", 0)]
+        [TestCase(" 7 ", 7)]
+        [TestCase("-5", null)]
+        [TestCase("+5", null)]
+        [TestCase("1.5", null)]
+        [TestCase("soon", null)]
+        [TestCase("Wed, 21 Oct 2026 07:28:00 GMT", null)]
+        [TestCase("", null)]
+        [TestCase(null, null)]
+        public void RetryAfterReadsWholeSecondsOnly(string header, int? expected)
+        {
+            Assert.AreEqual(expected, FriendsProtocol.RetryAfter(header));
         }
 
         [TestCase(401, "{\"detail\": \"Authentication credentials were not provided.\"}")]
         [TestCase(403, "{\"detail\": \"This API is not available for you\"}")]
+        [TestCase(404, "{\"detail\": \"User not found\"}")]
+        [TestCase(429, "<html>Too many requests</html>")]
         [TestCase(502, "<html>Bad gateway</html>")]
+        [TestCase(0, null)]
         [TestCase(200, "")]
+        [TestCase(200, null)]
         [TestCase(200, "[]")]
+        [TestCase(200, "{\"detail\": [1, 2]}")]
+        [TestCase(200, "{\"detail\": {\"code\": 7")]
         public void BodiesThatAreNotFriendAnswersAreNotParsed(long status, string body)
         {
             Assert.IsNull(FriendsProtocol.ParseAction(status, body));
@@ -63,6 +119,21 @@ namespace FlyingAcorn.Soil.Socialization.Tests
             var result = FriendsProtocol.ParseAction(200, "{\"detail\": {\"code\": 99, \"message\": \"something_new\"}}");
             Assert.AreEqual(99, (int)result.Status);
             Assert.AreEqual("something_new", result.detail.message);
+            Assert.IsTrue(result.Succeeded);
+
+            var refused = FriendsProtocol.ParseAction(409, "{\"detail\": {\"code\": 99, \"message\": \"something_new\"}}");
+            Assert.AreEqual(99, (int)refused.Status);
+            Assert.IsFalse(refused.Succeeded);
+        }
+
+        [Test]
+        public void NewFieldsFromANewerServerAreIgnored()
+        {
+            var result = FriendsProtocol.ParseAction(200,
+                "{\"detail\": {\"code\": 7, \"message\": \"request_sent\", \"hint\": \"x\"}, \"user\": " + Sara +
+                ", \"something_new\": {\"a\": 1}}");
+            Assert.AreEqual(FriendStatus.RequestSent, result.Status);
+            Assert.AreEqual("LC88VN3T", result.user.public_id);
         }
 
         [Test]
@@ -84,9 +155,19 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         public void List_FailuresAndMissingPartsAreSafe()
         {
             Assert.IsNull(FriendsProtocol.ParseList(400, "{\"detail\": {\"code\": 16, \"message\": \"invalid_request\"}}"));
+            // A throttled read is not a list: the call throws TooManyRequests with the Retry-After.
+            Assert.IsNull(FriendsProtocol.ParseList(429, "{\"detail\": {\"code\": 6, \"message\": \"throttled\"}}"));
+            Assert.IsNull(FriendsProtocol.ParseList(404, "{\"detail\": \"User not found\"}"));
+            Assert.IsNull(FriendsProtocol.ParseList(200, null));
+            Assert.IsNull(FriendsProtocol.ParseList(200, "{\"users\": []}"));
             var bare = FriendsProtocol.ParseList(200, "{\"detail\": {\"code\": 17, \"message\": \"friends_listed\"}}");
             Assert.IsNotNull(bare.users);
+            Assert.AreEqual(0, bare.users.Count);
             Assert.IsNotNull(bare.counts);
+            var nulls = FriendsProtocol.ParseList(200,
+                "{\"detail\": {\"code\": 17, \"message\": \"friends_listed\"}, \"users\": null, \"counts\": null}");
+            Assert.IsNotNull(nulls.users);
+            Assert.AreEqual(0, nulls.counts.friends);
         }
 
         [TestCase(FriendListKind.Friends, "friends")]

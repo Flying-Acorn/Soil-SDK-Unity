@@ -93,16 +93,32 @@ namespace FlyingAcorn.Soil.Socialization.Logic
     }
 
     /// <summary>
-    /// What an action did. A refusal - no such player, a limit, a block - is an answer, not an exception:
-    /// check <see cref="Status"/>. Only a transport failure, an expired sign-in, or the app lacking the Friend
-    /// requests feature throws.
+    /// What an action did. A refusal - no such player, a limit, a block, too many requests, a server error - is an
+    /// answer, not an exception: check <see cref="Status"/>. Only an answer that is not one of these throws: no
+    /// connection or a timeout, an expired sign-in, the app lacking the Friend requests feature, the player's
+    /// account not found, or a proxy error page.
     /// </summary>
     [Serializable]
     public class FriendActionResult
     {
         public FriendStatusDetail detail;
-        /// <summary>The other player. Null when they could not be found.</summary>
+        /// <summary>
+        /// The other player. Null when they could not be found, and on answers that name nobody: an invalid request,
+        /// Throttled, or a server error (FriendshipError).
+        /// </summary>
         public FriendProfile user;
+        /// <summary>
+        /// The invite this request made, as entering the other player's referral code. Only a request sent by code
+        /// (<c>SendFriendRequestByCode</c>), in an app with the Referrals feature and its "A friend request counts as
+        /// entering the code" switch on (dashboard, Friends → Settings), can carry it, and only when it made a new
+        /// invite: Invited, with this player's reward (already in their balance: show it only). Null whenever no
+        /// invite was made: already invited (even by the same player), outside the window, own code, mutual, a code
+        /// that matches nobody or that staff stopped, a request by UUID or an invalid one, or the switch off. When
+        /// counting the invite failed on the server it is ReferralError, while the request still went through: enter
+        /// the code with <c>RedeemReferralCode</c>. The invite and the request stand on their own: a request can be
+        /// refused while the invite was made, and the other way round.
+        /// </summary>
+        public ReferralInvite invite;
         /// <summary>The HTTP status the answer came with.</summary>
         [JsonIgnore] public long HttpStatus;
         /// <summary>Seconds to wait before trying again, when <see cref="Status"/> is Throttled.</summary>
@@ -151,9 +167,16 @@ namespace FlyingAcorn.Soil.Socialization.Logic
             var result = Parse<FriendActionResult>(body);
             if (result?.detail == null) return null;
             result.HttpStatus = httpStatus;
-            if (int.TryParse(retryAfter, out var seconds) && seconds >= 0) result.RetryAfterSeconds = seconds;
+            result.RetryAfterSeconds = RetryAfter(retryAfter);
             return result;
         }
+
+        /// <summary>A <c>Retry-After</c> header in seconds, or null when it is missing or not a number of seconds.</summary>
+        public static int? RetryAfter(string header) =>
+            int.TryParse(header?.Trim(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+                ? seconds
+                : null;
 
         /// <summary>A list, or null unless the body is a successful list answer.</summary>
         public static FriendList ParseList(long httpStatus, string body)
@@ -169,7 +192,7 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         /// <summary>The status code of any friends answer, or null when the body has none.</summary>
         public static FriendStatus? StatusOf(string body) => Parse<FriendActionResult>(body)?.detail?.Status;
 
-        private static T Parse<T>(string body) where T : class
+        internal static T Parse<T>(string body) where T : class
         {
             if (string.IsNullOrWhiteSpace(body)) return null;
             try

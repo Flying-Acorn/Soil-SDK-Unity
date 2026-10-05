@@ -4,6 +4,7 @@ using System.Globalization;
 using Cysharp.Threading.Tasks;
 using FlyingAcorn.Soil.Core;
 using FlyingAcorn.Soil.Core.Data;
+using FlyingAcorn.Soil.Socialization.Data;
 using FlyingAcorn.Soil.Socialization.Logic;
 using TMPro;
 using UnityEngine;
@@ -14,6 +15,11 @@ namespace FlyingAcorn.Soil.Socialization.Demo
     /// <summary>
     /// Friend requests: send, accept/decline, cancel, remove and block, one list at a time.
     /// Needs the app's Friend requests feature.
+    /// <para>
+    /// Referrals (needs the Referrals feature): "Enter invite code" enters the typed code as the player's
+    /// inviter, and "Invites" shows who invited them and how many they invited. Both buttons are copies of
+    /// Refresh made at runtime, so the scene needs no change.
+    /// </para>
     /// </summary>
     public class FriendRequestsDemoHandler : MonoBehaviour
     {
@@ -31,6 +37,9 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         [SerializeField] private TextMeshProUGUI headerText;
         [SerializeField] private TextMeshProUGUI statusText;
 
+        private Button _redeemButton;
+        private Button _referralInfoButton;
+
         private readonly List<FriendRequestRow> _rows = new();
         private FriendListKind _list = FriendListKind.Friends;
         private bool _busy;
@@ -40,6 +49,8 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             headerText.text = "Initializing...";
             statusText.text = "Initializing...";
             ClearRows();
+            _redeemButton = CopyButton(refreshButton, "Enter invite code");
+            _referralInfoButton = CopyButton(refreshButton, "Invites");
 
             SoilServices.OnServicesReady += OnSoilServicesReady;
             SoilServices.OnInitializationFailed += OnSoilServicesInitializationFailed;
@@ -52,6 +63,8 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             blockedTab.onClick.AddListener(ShowBlocked);
             copyCodeButton.onClick.AddListener(CopyMyCode);
             refreshButton.onClick.AddListener(Refresh);
+            _redeemButton.onClick.AddListener(RedeemTyped);
+            _referralInfoButton.onClick.AddListener(ShowReferralInfo);
 
             if (SoilServices.Ready)
                 OnSoilServicesReady();
@@ -74,12 +87,22 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         private IEnumerable<Button> Buttons() => new[]
         {
             sendRequestButton, blockButton, friendsTab, incomingTab, outgoingTab, blockedTab, copyCodeButton,
-            refreshButton
+            refreshButton, _redeemButton, _referralInfoButton
         };
+
+        /// <summary>A copy of a button beside it, with its own label and no listeners.</summary>
+        private static Button CopyButton(Button template, string label)
+        {
+            var copy = Instantiate(template, template.transform.parent);
+            copy.name = label;
+            copy.onClick.RemoveAllListeners();
+            copy.GetComponentInChildren<TextMeshProUGUI>().text = label;
+            return copy;
+        }
 
         private void OnSoilServicesReady()
         {
-            // The code other players type to send this player a request.
+            // The code other players type to send this player a request, and to name them as their inviter.
             headerText.text = $"My code: {SoilServices.UserInfo.public_id}";
             statusText.text = "Ready";
             Refresh();
@@ -140,6 +163,49 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             Run(() => Socialization.BlockPlayer(typed));
         }
 
+        /// <summary>Enters the typed code as this player's referral code.</summary>
+        private void RedeemTyped()
+        {
+            var typed = idInput.text.Trim();
+            if (string.IsNullOrEmpty(typed))
+            {
+                statusText.text = "Type the code of the player who invited you";
+                return;
+            }
+
+            RunReferral(async () => Describe(await Socialization.RedeemReferralCode(typed)));
+        }
+
+        private void ShowReferralInfo()
+        {
+            RunReferral(async () => Describe(await Socialization.GetReferralInfo()));
+        }
+
+        private void RunReferral(Func<UniTask<string>> action)
+        {
+            _ = RunReferralAsync(action);
+        }
+
+        private async UniTask RunReferralAsync(Func<UniTask<string>> action)
+        {
+            if (!SetBusy(true)) return;
+            statusText.text = "Working...";
+            string text;
+            try
+            {
+                text = await action();
+            }
+            catch (Exception e)
+            {
+                text = Message(e);
+            }
+
+            // The scene may have been left while the call was running.
+            if (this == null) return;
+            statusText.text = text;
+            SetBusy(false);
+        }
+
         /// <summary>Starts an action unless another call is still running, so a double tap sends once.</summary>
         private void Run(Func<UniTask<FriendActionResult>> action)
         {
@@ -150,18 +216,21 @@ namespace FlyingAcorn.Soil.Socialization.Demo
         {
             if (!SetBusy(true)) return;
             statusText.text = "Working...";
+            FriendActionResult result;
             try
             {
-                var result = await action();
-                statusText.text = Describe(result);
+                result = await action();
             }
             catch (Exception e)
             {
-                statusText.text = e.Message;
+                if (this == null) return;
+                statusText.text = Message(e);
                 SetBusy(false);
                 return;
             }
 
+            if (this == null) return;
+            statusText.text = Describe(result);
             SetBusy(false);
             await LoadListAsync(keepStatus: true);
         }
@@ -179,12 +248,14 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             }
             catch (Exception e)
             {
-                statusText.text = e.Message;
+                if (this == null) return;
+                statusText.text = Message(e);
                 ClearRows();
                 SetBusy(false);
                 return;
             }
 
+            if (this == null) return;
             SetBusy(false);
             ShowList(list, kind, keepStatus);
         }
@@ -251,10 +322,21 @@ namespace FlyingAcorn.Soil.Socialization.Demo
             _ => "friends",
         };
 
+        /// <summary>An exception's text, with how long to wait when the server said so (a list read too often).</summary>
+        private static string Message(Exception e) =>
+            e is SocializationException { RetryAfterSeconds: { } wait } ? $"{e.Message}\nTry again in {wait}s" : e.Message;
+
         /// <summary>A refusal is an answer: say what happened instead of treating it as an error.</summary>
         private static string Describe(FriendActionResult result)
         {
-            var name = result.user?.name ?? "the player";
+            var text = DescribeRequest(result);
+            // Only when the app counts requests by code as invites.
+            return result.invite == null ? text : $"{text}\nInvite: {Describe(result.invite, result.user)}";
+        }
+
+        private static string DescribeRequest(FriendActionResult result)
+        {
+            var name = result.user == null ? "the player" : Name(result.user);
             return result.Status switch
             {
                 FriendStatus.RequestSent => $"Request sent to {name}",
@@ -276,6 +358,54 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 _ => result.detail?.message ?? "Something went wrong",
             };
         }
+
+        private static string Describe(ReferralRedeemResult result)
+        {
+            var text = Describe(result, result.inviter);
+            return result.Status == ReferralStatus.Throttled
+                ? $"{text}. Try again in {result.RetryAfterSeconds ?? 60}s"
+                : text;
+        }
+
+        private static string Describe(ReferralInvite invite, FriendProfile inviter)
+        {
+            var name = inviter == null ? "the player" : Name(inviter);
+            return invite.Status switch
+            {
+                ReferralStatus.Invited => invite.reward == null
+                    ? $"{name} is now your inviter"
+                    // Already in the player's Soil balance: show it, do not grant it again.
+                    : $"{name} is now your inviter. You got {invite.reward.amount} {invite.reward.currency}",
+                ReferralStatus.CodeNotFound => "No player with that code in this game",
+                ReferralStatus.OwnCode => "That is your own code",
+                ReferralStatus.AlreadyInvited => "You already have an inviter",
+                ReferralStatus.WindowClosed => "Too late to enter a code",
+                ReferralStatus.MutualInvite => "You invited that player, so they cannot be your inviter",
+                ReferralStatus.Throttled => "Too many tries",
+                ReferralStatus.ReferralError => "Could not enter the code. Try again with Enter invite code",
+                _ => invite.detail?.message ?? "Something went wrong",
+            };
+        }
+
+        private static string Describe(ReferralInfo info)
+        {
+            var invitedBy = !info.invited
+                ? "No one invited you"
+                : info.invited_by == null
+                    ? "Invited by a deleted account"
+                    : $"Invited by {Name(info.invited_by)} ({info.invited_by.public_id})";
+            var redeem = !info.can_redeem
+                ? "You cannot enter a code"
+                : info.RedeemUntilUtc is { } until
+                    ? $"You can enter a code until {until.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)}"
+                    : "You can enter a code";
+            return $"{invitedBy}\n{redeem}\nYou invited {info.invited_count} player(s)";
+        }
+
+        private static string Name(FriendProfile player) =>
+            !string.IsNullOrEmpty(player.name) ? player.name
+            : !string.IsNullOrEmpty(player.username) ? player.username
+            : "the player";
 
         private static string Since(string iso)
         {

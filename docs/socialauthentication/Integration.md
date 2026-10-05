@@ -104,7 +104,7 @@ private void OnLinkFailed(ThirdParty party, SoilException exception)
         case SoilExceptionErrorCode.ServiceUnavailable:
             ShowErrorDialog("This service is currently unavailable.");
             break;
-        case SoilExceptionErrorCode.AuthenticationFailed:
+        case SoilExceptionErrorCode.InvalidToken:
             ShowErrorDialog("Authentication failed. Please check your credentials.");
             break;
     }

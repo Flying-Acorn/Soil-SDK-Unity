@@ -23,7 +23,7 @@ Flying Acorn is the studio behind Soil — bringing design and engineering exper
 - ⚙️ **Remote Config**: Update game configurations in real-time without app updates.
 - 🧪 **A/B Testing**: Run experiments to optimize game features and player experience.
 - 💰 **Economy**: Manage virtual currency and inventory for your game.
-- 👥 **Socialization**: Friend requests, blocking, adding friends by player code, and friend leaderboards.
+- 👥 **Socialization**: Friend requests, blocking, adding friends by player code, friend leaderboards, and referrals (invite codes with rewards).
 - 💳 **Purchasing**: Integrated purchasing system for in-game items and currencies.
 - 📢 **In-App Advertisement**: Monetize your game with integrated advertisement solutions.
 
