@@ -112,6 +112,25 @@ var problem = FeedbackProtocol.Check(support, new FeedbackSubmission("support") 
 if (problem != null) ShowError(problem.ToString());
 ```
 
+## 7. Grouped channels: many players, one item
+
+A channel can **group by target** (set on the dashboard): every distinct target is one item with a status and a
+count of distinct players, reviewed once under **Feedback → Targets**. With **once per target**, a player counts
+once per target, ever. Use it when many players send the same small thing: a word they want accepted, a level they
+find too hard.
+
+- The target is required (`TargetRequired` otherwise); a rating and a message may both be left out.
+- The server only matches targets ignoring case and spacing. **Settle everything else in the game before sending**
+  (letter variants, diacritics, your own format): what you send is what the dashboard groups and exports, one per
+  line. For example, a word game can send `"BAR, English"`.
+- Sending the same target again answers `AlreadyReceived` and saves nothing, so a double tap or a retry is harmless.
+- When staff decide the item, every player who sent it sees that status in `GetMyFeedback`.
+
+```csharp
+var result = await Feedback.Send(new FeedbackSubmission("word_suggestion") { Target = $"{word}, {language}" });
+if (result.Succeeded) ShowThanks();   // FeedbackSent or AlreadyReceived
+```
+
 ## Things to know
 
 - A refusal (unknown channel, a rule, a limit) is a `FeedbackSendResult` with a `Status`, not an exception. Only a
@@ -122,6 +141,8 @@ if (problem != null) ShowError(problem.ToString());
 - Each player can read back their latest 50 submissions. Staff notes are never sent to the game, and feedback set
   aside as spam reads as `New`.
 - Hard limits whatever the channel says: message 4000 characters, target 100, data 2 KB.
+- `FeedbackProtocol.Check` cannot know a target was already sent: under once-per-target a repeat past the daily
+  limit is answered `AlreadyReceived` by the server, while `Check` says `DailyLimitReached`.
 
 ## API Reference
 

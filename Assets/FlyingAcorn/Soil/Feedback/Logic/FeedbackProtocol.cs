@@ -31,6 +31,8 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         /// <summary>Too many sends in a short time, across all channels. See RetryAfterSeconds.</summary>
         Throttled = 14,
         FeedbackError = 15,
+        /// <summary>The channel groups by target (see <see cref="FeedbackChannelInfo.group_by_target"/>) and none was sent.</summary>
+        TargetRequired = 16,
     }
 
     /// <summary>Whether a channel takes a 1 to 5 rating.</summary>
@@ -73,6 +75,13 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         public int max_message_length;
         public int daily_limit;
         public int remaining_today;
+        /// <summary>
+        /// Every distinct target is one item reviewed once, ranked by how many players sent it: the target is required,
+        /// and is what the dashboard exports. A rating and a message may both be left out.
+        /// </summary>
+        public bool group_by_target;
+        /// <summary>A player counts once per target, ever: sending the same target again answers AlreadyReceived.</summary>
+        public bool once_per_target;
 
         [JsonIgnore]
         public RatingMode Rating => rating switch
@@ -204,7 +213,9 @@ namespace FlyingAcorn.Soil.Feedback.Logic
             if (channel == null) return FeedbackStatus.ChannelNotFound;
             var message = submission.Message?.Trim() ?? "";
             // In the server's order, so a submission with two problems is told the same one.
-            if ((submission.Target?.Trim().Length ?? 0) > MaxTargetLength) return FeedbackStatus.TargetTooLong;
+            var target = submission.Target?.Trim() ?? "";
+            if (target.Length > MaxTargetLength) return FeedbackStatus.TargetTooLong;
+            if (channel.group_by_target && target.Length == 0) return FeedbackStatus.TargetRequired;
             if (submission.Rating.HasValue)
             {
                 if (submission.Rating < MinRating || submission.Rating > MaxRating) return FeedbackStatus.InvalidRating;
@@ -214,9 +225,11 @@ namespace FlyingAcorn.Soil.Feedback.Logic
             {
                 return FeedbackStatus.RatingRequired;
             }
-            if (message.Length == 0 && (channel.message_required || !submission.Rating.HasValue))
+            // Something must be sent: a message, a rating, or in a grouped channel the target itself.
+            if (message.Length == 0 && (channel.message_required || (!submission.Rating.HasValue && !channel.group_by_target)))
                 return FeedbackStatus.MessageRequired;
             if (message.Length > channel.max_message_length) return FeedbackStatus.MessageTooLong;
+            // The server answers a repeat under once_per_target with AlreadyReceived even past the limit; this cannot tell.
             if (channel.remaining_today <= 0) return FeedbackStatus.DailyLimitReached;
             return null;
         }

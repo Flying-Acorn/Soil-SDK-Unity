@@ -22,6 +22,10 @@ rules:
 The dashboard offers ready-made starting points: **Support**, **Rating with a reason**, **Ideas** and **Word
 suggestion**. Rules can be changed at any time without a new build; the key cannot, because your game sends it.
 
+A channel can also **group by target**: many players sending the same small thing (a word, a level) become one
+item with a player count, reviewed once, exported one per line. See
+[Grouped channels](Integration.md#7-grouped-channels-many-players-one-item).
+
 ## What each submission carries
 
 - `Target` (optional): what it is about - a word, a level id, a feature. The dashboard groups and counts by it,
