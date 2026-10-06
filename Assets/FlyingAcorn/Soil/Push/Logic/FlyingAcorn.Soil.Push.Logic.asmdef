@@ -1,0 +1,16 @@
+{
+    "name": "FlyingAcorn.Soil.Push.Logic",
+    "rootNamespace": "FlyingAcorn.Soil.Push.Logic",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

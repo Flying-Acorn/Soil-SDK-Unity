@@ -14,6 +14,7 @@ For installation instructions, see [Installation](./Installation.md). To move to
     - [Economy](./economy/Introduction.md) - Virtual currencies and inventory.
     - [Socialization](./socialization/Introduction.md) - Friends: requests, blocking, friend leaderboards and referrals.
     - [Feedback](./feedback/Introduction.md) - Support messages, ratings with a reason and suggestions from players.
+    - [Push](./push/Introduction.md) - Notifications for friend requests, leaderboard prizes and invite rewards.
 
 - Purchasing
     - [Purchasing](./purchasing/Introduction.md) - In-app purchases.

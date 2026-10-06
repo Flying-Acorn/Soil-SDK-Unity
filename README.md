@@ -25,6 +25,7 @@ Flying Acorn is the studio behind Soil — bringing design and engineering exper
 - 💰 **Economy**: Manage virtual currency and inventory for your game.
 - 👥 **Socialization**: Friend requests, blocking, adding friends by player code, friend leaderboards, and referrals (invite codes with rewards).
 - 💬 **Feedback**: Support messages, in-game ratings with a reason, and suggestions, with spam protection built in.
+- 🔔 **Push**: Notifications for friend requests, accepted requests, leaderboard prizes and invite rewards, sent by Soil through Firebase; no game code needed.
 - 💳 **Purchasing**: Integrated purchasing system for in-game items and currencies.
 - 📢 **In-App Advertisement**: Monetize your game with integrated advertisement solutions.
 

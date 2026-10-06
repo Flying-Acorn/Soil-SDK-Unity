@@ -1,0 +1,24 @@
+{
+    "name": "FlyingAcorn.Soil.Push.Firebase",
+    "rootNamespace": "FlyingAcorn.Soil.Push.FirebaseBridge",
+    "references": [
+        "FlyingAcorn.Soil.Push.Logic"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "SOIL_FIREBASE_MESSAGING"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.google.firebase.messaging",
+            "expression": "",
+            "define": "SOIL_FIREBASE_MESSAGING"
+        }
+    ],
+    "noEngineReferences": false
+}

@@ -17,7 +17,7 @@ OUT=$PROJECT/Build/Packages/$VERSION
 
 SOIL=Assets/FlyingAcorn/Soil
 THIRD_PARTY=$SOIL/Core/User/ThirdPartyAuthentication
-TESTS=($SOIL/Advertisement/Tests $SOIL/Economy/Tests $SOIL/Advertisement/Editor/Tests $SOIL/Socialization/Tests $SOIL/Feedback/Tests $THIRD_PARTY/GoogleCredentialUnity/Tests)
+TESTS=($SOIL/Advertisement/Tests $SOIL/Economy/Tests $SOIL/Advertisement/Editor/Tests $SOIL/Socialization/Tests $SOIL/Feedback/Tests $SOIL/Push/Tests $THIRD_PARTY/GoogleCredentialUnity/Tests)
 
 cd "$PROJECT"
 mkdir -p "$OUT"
@@ -49,7 +49,7 @@ export_package() {
 BASE=(Assets/FlyingAcorn/Analytics $SOIL/Core Assets/Plugins/UniTask)
 
 EXCLUDE=($THIRD_PARTY "${TESTS[@]}")
-export_package BoosterPack "${BASE[@]}" $SOIL/CloudSave $SOIL/Economy $SOIL/Leaderboard $SOIL/RemoteConfig $SOIL/Socialization $SOIL/Feedback
+export_package BoosterPack "${BASE[@]}" $SOIL/CloudSave $SOIL/Economy $SOIL/Leaderboard $SOIL/RemoteConfig $SOIL/Socialization $SOIL/Feedback $SOIL/Push
 export_package Purchasing "${BASE[@]}" $SOIL/Purchasing $SOIL/RemoteConfig $SOIL/Economy
 export_package Advertisement "${BASE[@]}" $SOIL/Advertisement
 
