@@ -211,10 +211,11 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         public static FeedbackStatus? Check(FeedbackChannelInfo channel, FeedbackSubmission submission)
         {
             if (channel == null) return FeedbackStatus.ChannelNotFound;
-            var message = submission.Message?.Trim() ?? "";
+            // Cleaned and counted as the server does: control characters dropped, lengths in characters, not UTF-16.
+            var message = Clean(submission.Message);
             // In the server's order, so a submission with two problems is told the same one.
-            var target = submission.Target?.Trim() ?? "";
-            if (target.Length > MaxTargetLength) return FeedbackStatus.TargetTooLong;
+            var target = Clean(submission.Target);
+            if (CountCharacters(target) > MaxTargetLength) return FeedbackStatus.TargetTooLong;
             if (channel.group_by_target && target.Length == 0) return FeedbackStatus.TargetRequired;
             if (submission.Rating.HasValue)
             {
@@ -228,10 +229,33 @@ namespace FlyingAcorn.Soil.Feedback.Logic
             // Something must be sent: a message, a rating, or in a grouped channel the target itself.
             if (message.Length == 0 && (channel.message_required || (!submission.Rating.HasValue && !channel.group_by_target)))
                 return FeedbackStatus.MessageRequired;
-            if (message.Length > channel.max_message_length) return FeedbackStatus.MessageTooLong;
+            if (CountCharacters(message) > channel.max_message_length) return FeedbackStatus.MessageTooLong;
             // The server answers a repeat under once_per_target with AlreadyReceived even past the limit; this cannot tell.
             if (channel.remaining_today <= 0) return FeedbackStatus.DailyLimitReached;
             return null;
+        }
+
+        /// <summary>The text as the server keeps it: control characters other than tab and newline gone, trimmed.</summary>
+        public static string Clean(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            var kept = new System.Text.StringBuilder(text.Length);
+            foreach (var c in text)
+            {
+                if ((c < '\u0020' && c != '\t' && c != '\n') || c == '\u007f') continue;
+                kept.Append(c);
+            }
+            return kept.ToString().Trim();
+        }
+
+        /// <summary>Characters as the server counts them: an emoji outside the basic plane is one, not two.</summary>
+        public static int CountCharacters(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            var count = text.Length;
+            foreach (var c in text)
+                if (char.IsLowSurrogate(c)) count--;
+            return count;
         }
 
         /// <summary>

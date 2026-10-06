@@ -183,6 +183,20 @@ namespace FlyingAcorn.Soil.Feedback.Tests
         }
 
         [Test]
+        public void Check_CleansAndCountsLikeTheServer()
+        {
+            var words = FeedbackProtocol.ParseChannels(200, GroupedChannels).Find("word_suggestion");
+            // Only control characters: nothing left, as the server sees it.
+            Assert.AreEqual(FeedbackStatus.TargetRequired,
+                FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = "\u0001\u0007 " }));
+            // 100 emoji are 200 UTF-16 units but 100 characters: allowed, as on the server.
+            var emoji = string.Concat(System.Linq.Enumerable.Repeat("\U0001F600", 100));
+            Assert.AreEqual(100, FeedbackProtocol.CountCharacters(emoji));
+            Assert.IsNull(FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = emoji }));
+            Assert.AreEqual("a\tb\nc", FeedbackProtocol.Clean(" a\tb\u0000\nc\u007f "));
+        }
+
+        [Test]
         public void TargetRequired_IsARefusal()
         {
             var result = FeedbackProtocol.ParseSend(400, "{\"detail\":{\"code\":16,\"message\":\"target_required\"}}");
