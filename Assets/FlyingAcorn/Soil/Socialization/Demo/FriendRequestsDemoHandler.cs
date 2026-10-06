@@ -354,7 +354,6 @@ namespace FlyingAcorn.Soil.Socialization.Demo
                 FriendStatus.FriendLimitReached => "A friend list is full",
                 FriendStatus.RequestLimitReached => "Too many requests waiting for an answer",
                 FriendStatus.BlockLimitReached => "Too many blocked players",
-                FriendStatus.SocializationRestricted => "Friend requests are paused for this player",
                 FriendStatus.RequestCooldown => $"You asked {name} recently. Try again tomorrow",
                 FriendStatus.Throttled => $"Too many requests. Try again in {result.RetryAfterSeconds ?? 60}s",
                 _ => result.detail?.message ?? "Something went wrong",

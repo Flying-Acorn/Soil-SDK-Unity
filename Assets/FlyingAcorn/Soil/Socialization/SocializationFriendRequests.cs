@@ -44,11 +44,7 @@ namespace FlyingAcorn.Soil.Socialization
                    ?? throw Failure(response, SocializationOperation.GetFriendList);
         }
 
-        /// <summary>
-        /// Asks a player to be friends. If they already asked, this accepts and answers FriendshipCreated, unless
-        /// their friendships are paused (see <see cref="FriendStatus.SocializationRestricted"/>): then it waits as
-        /// RequestSent like any other request.
-        /// </summary>
+        /// <summary>Asks a player to be friends. If they already asked, this accepts and answers FriendshipCreated.</summary>
         public static UniTask<FriendActionResult> SendFriendRequest(string uuid) => ByUuid(FriendsProtocol.Request, uuid);
 
         /// <summary>
