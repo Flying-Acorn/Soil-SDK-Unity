@@ -31,6 +31,11 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         InvalidRequest = 16,
         FriendsListed = 17,
         BlockLimitReached = 18,
+        /// <summary>
+        /// Enough players block one of the two players that new friendships with them are paused: they cannot send or
+        /// accept requests, and their waiting requests cannot be accepted. Blocking still works.
+        /// </summary>
+        SocializationRestricted = 19,
     }
 
     public enum FriendListKind
