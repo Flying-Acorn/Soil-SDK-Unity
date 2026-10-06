@@ -41,6 +41,36 @@ namespace FlyingAcorn.Soil.Socialization.Tests
             Assert.IsNull(missing.user);
         }
 
+        [Test]
+        public void RequestCooldown_IsARefusalWithTheOtherPlayer()
+        {
+            // A request within 24 hours of cancelling it, or of the other player declining it.
+            var body = "{\"detail\": {\"code\": 20, \"message\": \"request_cooldown\"}, \"user\": " + Sara + "}";
+            var result = FriendsProtocol.ParseAction(409, body);
+            Assert.IsNotNull(result);
+            Assert.AreEqual(FriendStatus.RequestCooldown, result.Status);
+            Assert.AreEqual("request_cooldown", result.detail.message);
+            Assert.AreEqual(409, result.HttpStatus);
+            Assert.IsFalse(result.Succeeded);
+            Assert.AreEqual("LC88VN3T", result.user.public_id);
+            Assert.IsNull(result.invite);
+            Assert.IsNull(result.RetryAfterSeconds);
+            Assert.AreEqual(FriendStatus.RequestCooldown, FriendsProtocol.StatusOf(body));
+        }
+
+        [Test]
+        public void SocializationRestricted_IsARefusalNotAFeatureFailure()
+        {
+            // A 403 in the code shape is an answer; the feature being off ({"detail": "text"}) is not.
+            var result = FriendsProtocol.ParseAction(403,
+                "{\"detail\": {\"code\": 19, \"message\": \"socialization_restricted\"}, \"user\": " + Sara + "}");
+            Assert.IsNotNull(result);
+            Assert.AreEqual(FriendStatus.SocializationRestricted, result.Status);
+            Assert.AreEqual(403, result.HttpStatus);
+            Assert.IsFalse(result.Succeeded);
+            Assert.AreEqual("LC88VN3T", result.user.public_id);
+        }
+
         // Errors keep the code shape: a wrong method (405), malformed JSON (400) and a server error (500).
         [TestCase(405, 16, "invalid_request", FriendStatus.InvalidRequest)]
         [TestCase(400, 16, "invalid_request", FriendStatus.InvalidRequest)]
@@ -202,7 +232,7 @@ namespace FlyingAcorn.Soil.Socialization.Tests
                 "friendship_illegal_self", "friendship_error", "throttled", "request_sent", "request_declined",
                 "request_cancelled", "request_not_found", "user_blocked", "user_unblocked", "friend_blocked",
                 "friend_limit_reached", "request_limit_reached", "invalid_request", "friends_listed",
-                "block_limit_reached", "socialization_restricted",
+                "block_limit_reached", "socialization_restricted", "request_cooldown",
             };
             Assert.AreEqual(expected.Length, Enum.GetValues(typeof(FriendStatus)).Length);
             for (var code = 0; code < expected.Length; code++)

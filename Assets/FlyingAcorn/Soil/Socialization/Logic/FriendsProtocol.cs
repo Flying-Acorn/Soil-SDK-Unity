@@ -33,10 +33,16 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         BlockLimitReached = 18,
         /// <summary>
         /// Enough players block this player, or the one whose request is being accepted, that new friendships with
-        /// them are paused: they cannot send or accept requests, and a request they sent cannot be accepted. Blocking
-        /// still works. Sending a request to such a player answers RequestSent as usual and waits until it lifts.
+        /// them are paused: they cannot send or accept requests, or block anyone, and a request they sent cannot be
+        /// accepted. Sending a request to such a player answers RequestSent as usual and waits until it lifts.
         /// </summary>
         SocializationRestricted = 19,
+        /// <summary>
+        /// HTTP 409, on a request only. This player cancelled their own request to that player, or that player
+        /// declined it, less than 24 hours ago: wait before asking again. If that player has asked this one
+        /// meanwhile, the request answers FriendshipCreated instead: the wait never blocks becoming friends.
+        /// </summary>
+        RequestCooldown = 20,
     }
 
     public enum FriendListKind

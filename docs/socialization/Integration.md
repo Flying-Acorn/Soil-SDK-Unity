@@ -172,6 +172,7 @@ switch (sent.Status)
     case FriendStatus.FriendNotFound: ShowNoSuchPlayer(); break;
     case FriendStatus.RequestLimitReached:
     case FriendStatus.FriendLimitReached: ShowLimit(); break;
+    case FriendStatus.RequestCooldown: ShowAskedRecently(sent.user.name); break; // try again tomorrow
     case FriendStatus.Throttled: RetryIn(sent.RetryAfterSeconds); break;
 }
 
@@ -186,7 +187,7 @@ foreach (var player in incoming.users)
 | Call | Does |
 |---|---|
 | `GetFriendList(FriendListKind kind = Friends)` | `Friends`, `Incoming`, `Outgoing` or `Blocked`, newest first (up to 1000), with `counts` |
-| `SendFriendRequest(uuid)` / `SendFriendRequestByCode(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`) |
+| `SendFriendRequest(uuid)` / `SendFriendRequestByCode(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`). Not again within 24 hours of a cancel or decline (`RequestCooldown`) |
 | `AcceptFriendRequest(uuid)` / `DeclineFriendRequest(uuid)` | Answers a request this player received |
 | `CancelFriendRequest(uuid)` | Withdraws a request this player sent |
 | `RemoveFriend(uuid)` | Ends a friendship for both players |
@@ -200,6 +201,14 @@ Things to know:
 - **Reading** friends - the friend lists, old and new, and the friend leaderboard - is limited to 120 requests a
   minute per player, together. Fetch when a screen opens rather than on a timer. Past it, `GetFriendList` throws
   `TooManyRequests` with `RetryAfterSeconds`.
+- **Asking again waits 24 hours.** After a player cancels their own request to someone, or that player declines
+  it, a new request from them to that player answers `RequestCooldown` (HTTP 409, with `user`) for 24 hours. This
+  stops request spam: cancel-and-resend, or asking over and over after a no. Tell the player they can try again
+  tomorrow. It never blocks becoming friends: if the other player has asked in the meantime, sending still answers
+  `FriendshipCreated`, and accepting their request works as usual.
+- **Too many blocks restrict a player.** When the app's threshold of players blocking someone is reached
+  (dashboard, Friends → Settings), that player's requests, accepts and blocks answer `SocializationRestricted`
+  (HTTP 403). It is an answer like the other refusals; only the app lacking the feature throws `Forbidden`.
 - **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
   simply never gets an answer. Do not show anything else.
 - **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
@@ -210,6 +219,35 @@ Things to know:
   it has not seen before whose friendship is recent, a friend made shortly before the player signed in shows up
   as unseen on the real account and would be rewarded again. Record rewarded friends in cloud save on the
   account that earned them, or skip friends whose `since` is older than the sign-in.
+
+### Codes
+
+`FriendStatus` (`detail.code`); the server only appends new ones, so treat an unknown number as a refusal you
+cannot name (`Succeeded` still tells you whether it went through).
+
+| Code | `FriendStatus` | HTTP | Meaning |
+|---|---|---|---|
+| 0 | `FriendshipExists` | 200 | Already friends (a request or accept that went through before) |
+| 1 | `FriendshipCreated` | 200 | Now friends: an accept, or a request to a player who had already asked |
+| 2 | `FriendshipDeleted` | 200 | The friendship is gone (also when there was none) |
+| 3 | `FriendNotFound` | 404 | No such player in this game |
+| 4 | `FriendshipIllegalSelf` | 400 | The player named themselves |
+| 5 | `FriendshipError` | 500 | A server error; try again later |
+| 6 | `Throttled` | 429 | Too many actions; `RetryAfterSeconds` says how long to wait |
+| 7 | `RequestSent` | 200 | The request is waiting for an answer (now, or sent before) |
+| 8 | `RequestDeclined` | 200 | The request was declined (also when there was none) |
+| 9 | `RequestCancelled` | 200 | The request was withdrawn (also when there was none) |
+| 10 | `RequestNotFound` | 404 | No request from that player to accept |
+| 11 | `UserBlocked` | 200 | The player is blocked |
+| 12 | `UserUnblocked` | 200 | The player is unblocked |
+| 13 | `FriendBlocked` | 409 | This player blocked that one; unblock them first |
+| 14 | `FriendLimitReached` | 409 | One of the two friend lists is full |
+| 15 | `RequestLimitReached` | 409 | Too many sent requests waiting for an answer |
+| 16 | `InvalidRequest` | 400, 405 | The request was malformed, or used the wrong method |
+| 17 | `FriendsListed` | 200 | The answer of `GetFriendList` |
+| 18 | `BlockLimitReached` | 409 | Too many blocked players |
+| 19 | `SocializationRestricted` | 403 | Too many players block this one: no requests, accepts or blocks |
+| 20 | `RequestCooldown` | 409 | Asked again within 24 hours of cancelling, or of being declined |
 
 ## Referrals: invite codes and rewards
 
