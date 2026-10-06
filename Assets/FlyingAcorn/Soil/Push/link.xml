@@ -1,0 +1,12 @@
+<!-- For IL2CPP builds with managed code stripping.
+     - Nothing references the Firebase bridge (it starts itself), so its assembly must be kept. ignoreIfMissing:
+       projects without Firebase Messaging have no such assembly.
+     - Newtonsoft builds the answer and the saved registration by reflection, so nothing calls their constructors. -->
+<linker>
+    <assembly fullname="FlyingAcorn.Soil.Push.Firebase" preserve="all" ignoreIfMissing="1"/>
+    <assembly fullname="FlyingAcorn.Soil.Push.Logic">
+        <type fullname="FlyingAcorn.Soil.Push.Logic.PushRegisterResult" preserve="all"/>
+        <type fullname="FlyingAcorn.Soil.Push.Logic.PushStatusDetail" preserve="all"/>
+        <type fullname="FlyingAcorn.Soil.Push.Logic.PushRegistrationRecord" preserve="all"/>
+    </assembly>
+</linker>
