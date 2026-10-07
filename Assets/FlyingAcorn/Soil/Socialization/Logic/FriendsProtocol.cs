@@ -38,8 +38,9 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         /// </summary>
         SocializationRestricted = 19,
         /// <summary>
-        /// HTTP 409, on a request only. This player cancelled their own request to that player, or that player
-        /// declined it, less than 24 hours ago: wait before asking again. If that player has asked this one
+        /// HTTP 409, on a request only. This player cancelled (or withdrew by blocking) their own request to that
+        /// player, or that player declined it or dropped it by unblocking, less than 24 hours ago: wait before asking
+        /// again. If that player has asked this one
         /// meanwhile, the request answers FriendshipCreated instead: the wait never blocks becoming friends.
         /// </summary>
         RequestCooldown = 20,
@@ -126,7 +127,7 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         /// invite: Invited, with this player's reward (already in their balance: show it only). Null whenever no
         /// invite was made: already invited (even by the same player), outside the window, own code, mutual, a code
         /// that matches nobody or that staff stopped, a request by UUID or an invalid one, or the switch off. When
-        /// counting the invite failed on the server it is ReferralError, while the request still went through: enter
+        /// counting the invite failed on the server it is ReferralError, while the request was still handled: enter
         /// the code with <c>RedeemReferralCode</c>. The invite and the request stand on their own: a request can be
         /// refused while the invite was made, and the other way round.
         /// </summary>

@@ -145,7 +145,8 @@ asking.
 A refusal is an answer, not an exception. Every action returns a `FriendActionResult`; check `Status`
 (`FriendStatus`) and `Succeeded`. Refusals include too many requests (`Throttled`, with `RetryAfterSeconds`), an
 invalid request and a server error (`FriendshipError`). A `SocializationException` (`ErrorCode`) is thrown, always
-through the awaited task, only when there is no answer of that kind:
+through the awaited task, only when there is no answer of that kind. Reads (`GetFriendList`, and `GetReferralInfo`
+below) have no refusal answers: anything but their list throws.
 
 | Case | `ErrorCode` |
 |---|---|
@@ -153,8 +154,9 @@ through the awaited task, only when there is no answer of that kind:
 | The sign-in expired | `InvalidToken` |
 | The app does not have the feature (HTTP 403) | `Forbidden` |
 | The player's account was not found (HTTP 404) | `NotFound` |
-| `GetFriendList` read too often (HTTP 429) | `TooManyRequests`, with `RetryAfterSeconds` set |
-| A proxy error page, or the service is down | `TransportError` / `ServiceUnavailable` |
+| `GetFriendList` read too often, or a proxy refusing any call (HTTP 429) | `TooManyRequests`, with `RetryAfterSeconds` set |
+| A proxy error page, a server error on a read, or the service is down | `TransportError` / `ServiceUnavailable` |
+| A success answer the SDK cannot read | `InvalidResponse` |
 | An empty `uuid` or code, or Soil not initialized | `InvalidRequest` / `NotReady` |
 
 Every action is safe to retry after a timeout.
@@ -187,11 +189,11 @@ foreach (var player in incoming.users)
 | Call | Does |
 |---|---|
 | `GetFriendList(FriendListKind kind = Friends)` | `Friends`, `Incoming`, `Outgoing` or `Blocked`, newest first (up to 1000), with `counts` |
-| `SendFriendRequest(uuid)` / `SendFriendRequestByCode(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`). Not again within 24 hours of a cancel or decline (`RequestCooldown`) |
+| `SendFriendRequest(uuid)` / `SendFriendRequestByCode(code)` | Asks to be friends. If they already asked, you become friends (`FriendshipCreated`). Not again within 24 hours of a cancel, decline, or block (`RequestCooldown`) |
 | `AcceptFriendRequest(uuid)` / `DeclineFriendRequest(uuid)` | Answers a request this player received |
 | `CancelFriendRequest(uuid)` | Withdraws a request this player sent |
 | `RemoveFriend(uuid)` | Ends a friendship for both players |
-| `BlockPlayer(uuid)` / `UnblockPlayer(uuid)` | Hides a player: ends the friendship and their requests. They are not told |
+| `BlockPlayer(uuid)` / `UnblockPlayer(uuid)` | Hides a player: ends the friendship and withdraws this player's request to them. Their request to this player stays, hidden, and goes on unblock. They are not told |
 
 Things to know:
 
@@ -201,14 +203,16 @@ Things to know:
 - **Reading** friends - the friend lists, old and new, and the friend leaderboard - is limited to 120 requests a
   minute per player, together. Fetch when a screen opens rather than on a timer. Past it, `GetFriendList` throws
   `TooManyRequests` with `RetryAfterSeconds`.
-- **Asking again waits 24 hours.** After a player cancels their own request to someone, or that player declines
-  it, a new request from them to that player answers `RequestCooldown` (HTTP 409, with `user`) for 24 hours. This
+- **Asking again waits 24 hours.** After a player cancels their own request to someone (blocking them withdraws it
+  the same way), or that player declines it or blocks and later unblocks them, a new request from them to that player answers `RequestCooldown` (HTTP 409, with `user`) for 24 hours. This
   stops request spam: cancel-and-resend, or asking over and over after a no. Tell the player they can try again
   tomorrow. It never blocks becoming friends: if the other player has asked in the meantime, sending still answers
-  `FriendshipCreated`, and accepting their request works as usual.
+  `FriendshipCreated`, and accepting their request works as usual. (A request the player cannot see, from someone
+  who is restricted, does not count: sending then answers `RequestCooldown` as if it were not there.)
 - **Too many blocks restrict a player.** When the app's threshold of players blocking someone is reached
-  (dashboard, Friends → Settings), that player's sends and accepts answer `SocializationRestricted` (HTTP 409)
-  until enough of them unblock. Tell them they can't add friends right now; don't send them off to clear a list.
+  (dashboard, Friends → Settings; off until set), that player's sends and accepts answer `SocializationRestricted`
+  (HTTP 409) until enough of them unblock or delete their accounts, or the threshold is raised or turned off. Tell
+  them they can't add friends right now; don't send them off to clear a list.
   Only the restricted player is ever told: their waiting requests are hidden from the players they asked, and a
   request to them answers `RequestSent` as usual. When the restriction lifts, the requests they sent are dropped,
   so fetch the outgoing list again rather than assuming they still wait. Blocking, declining and cancelling still
@@ -251,7 +255,7 @@ cannot name (`Succeeded` still tells you whether it went through).
 | 17 | `FriendsListed` | 200 | The answer of `GetFriendList` |
 | 18 | `BlockLimitReached` | 409 | Too many blocked players |
 | 19 | `SocializationRestricted` | 409 | Too many players block this one: no sends or accepts for now |
-| 20 | `RequestCooldown` | 409 | Asked again within 24 hours of cancelling, or of being declined |
+| 20 | `RequestCooldown` | 409 | Asked again within 24 hours of cancelling, of being declined, or of a block between them |
 
 ## Referrals: invite codes and rewards
 
@@ -349,19 +353,21 @@ again too: unlike `RedeemReferralCode`, a request does not repeat an earlier inv
 own code, or invited that player themselves; the code matches no player (`FriendNotFound`) or staff stopped it; the
 request was sent by UUID or was invalid; or the app has Referrals or the switch off. A friend request never answers
 why no invite was made: to tell the player, use `RedeemReferralCode`. One more case: when counting the invite
-failed on the server, `invite` has `Status` `ReferralError` and no reward while the request itself still went
-through. Let the player enter the code with `RedeemReferralCode`.
+failed on the server, `invite` has `Status` `ReferralError` and no reward, while the request itself was still
+handled (and may have been sent or refused on its own). Let the player enter the code with `RedeemReferralCode`.
 
 As with friend requests, a refusal is an answer, not an exception. A `SocializationException` is thrown in the
 same cases as for friend requests: no connection or a timeout, an expired sign-in, the feature being off (HTTP 403,
 `SoilExceptionErrorCode.Forbidden`), the account not found (`NotFound`), and `GetReferralInfo` read too often
 (`TooManyRequests`, with `RetryAfterSeconds`). Entering a code is safe to retry, for example after a timeout: the
-same code again answers `Invited` with the reward given the first time (it is granted only once), while a
-different code answers `AlreadyInvited`.
+same code again answers `Invited` with the reward given the first time (it is granted only once), unless staff
+stopped that code or its owner's account is gone since (`CodeNotFound`). Another player's code answers
+`AlreadyInvited`.
 
 ### Rules
 
-- **One inviter, ever.** Once a player has an inviter it never changes, whichever way it was entered.
+- **One inviter.** Once a player has an inviter the game cannot change it, whichever way it was entered. Only
+  staff can remove it (to fix a wrong code); the player can then enter a code again.
 - **A window.** Only players whose account is younger than the app's window can enter a code (7 days by
   default; it can be turned off so every player can enter one). `GetReferralInfo` gives `can_redeem` and
   `redeem_until` (null when there is no window).
@@ -382,7 +388,7 @@ different code answers `AlreadyInvited`.
 
 | Code | `ReferralStatus` | HTTP | Meaning |
 |---|---|---|---|
-| 0 | `Invited` | 200 | The code was entered (now, or by this same code before); `reward` and `inviter` are set |
+| 0 | `Invited` | 200 | The code was entered (now, or by this same code before); `inviter` is set, and `reward` unless the app gives new players none |
 | 1 | `CodeNotFound` | 404 | No player in this game has that code |
 | 2 | `OwnCode` | 400 | The player's own code |
 | 3 | `AlreadyInvited` | 409 | The player already has an inviter |
