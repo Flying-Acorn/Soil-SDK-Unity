@@ -166,5 +166,19 @@ namespace FlyingAcorn.Soil.Advertisement.Tests
         {
             Assert.AreEqual(expected, AssetCachePlan.SafeExtension(extension, fallback));
         }
+
+        [TestCase("/advertisement/assets/1/a.png", "https://soil.example", "https://soil.example/advertisement/assets/1/a.png")]
+        [TestCase("advertisement/assets/1/a.png", "https://soil.example/", "https://soil.example/advertisement/assets/1/a.png")]
+        [TestCase("https://cdn.example/a.png", "https://soil.example", "https://cdn.example/a.png")]
+        [TestCase("http://cdn.example/a.png", "https://soil.example", "http://cdn.example/a.png")]
+        [TestCase("HTTPS://cdn.example/a.png", "https://soil.example", "HTTPS://cdn.example/a.png")]
+        [TestCase("//cdn.example/a.png", "https://soil.example", "https://cdn.example/a.png")]
+        [TestCase("//cdn.example/a.png", "http://localhost:8000", "http://cdn.example/a.png")]
+        [TestCase("", "https://soil.example", "")]
+        [TestCase(null, "https://soil.example", null)]
+        public void ResolveAssetUrl_CompletesRelativeUrlsOnly(string url, string baseDomain, string expected)
+        {
+            Assert.AreEqual(expected, AssetCachePlan.ResolveAssetUrl(url, baseDomain));
+        }
     }
 }
