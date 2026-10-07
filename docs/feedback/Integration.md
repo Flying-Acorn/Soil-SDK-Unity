@@ -131,6 +131,34 @@ var result = await Feedback.Send(new FeedbackSubmission("word_suggestion") { Tar
 if (result.Succeeded) ShowThanks();   // FeedbackSent or AlreadyReceived
 ```
 
+## 8. Several targets in one send
+
+A grouped channel whose `max_targets_per_send` is above 1 (set on the dashboard, up to 10) takes a list, such as
+words a player added one by one with a **+**. It is only a lighter way to send: each distinct target is saved,
+counted and reviewed exactly as if sent alone, so keep building each target as in section 7. Don't pack the list
+into a message or `data` yourself, or the server cannot count or merge the words.
+
+- Cap the list at the channel's `max_targets_per_send`; more is refused whole with `TooManyTargets`. So is any
+  empty or too-long item (`TargetRequired`, `TargetTooLong`). `FeedbackProtocol.Check` tells you first.
+- The same target twice in one list is sent once.
+- Each target counts toward the daily limit, so a list can be partly saved. The first ones that fit go through.
+- `result.targets` has each distinct target's own result. `Accepted` is true when the server has it from this
+  player (sent now or before), and `retry_after` is set when the limit left it out. `result.Status` is for the send
+  as a whole: `FeedbackSent` if any was saved, else `DailyLimitReached` if any hit the limit, else `AlreadyReceived`.
+- Retrying the same `FeedbackSubmission` after a timeout saves nothing twice, and still tries the targets the limit
+  left out.
+
+```csharp
+var channel = (await Feedback.GetChannels()).Find("word_suggestion");
+var submission = new FeedbackSubmission("word_suggestion") { Targets = words.Select(w => $"{w}, {language}").ToList() };
+if (FeedbackProtocol.Check(channel, submission) is { } problem) { ShowError(problem); return; }
+
+var result = await Feedback.Send(submission);        // or Feedback.SendTargets("word_suggestion", targets)
+foreach (var each in result.targets ?? new List<FeedbackTargetResult>())
+    if (each.Accepted) RememberSuggested(each.target);
+ShowThanks();
+```
+
 ## Things to know
 
 - A refusal (unknown channel, a rule, a limit) is a `FeedbackSendResult` with a `Status`, not an exception. Only a
@@ -152,6 +180,7 @@ if (result.Succeeded) ShowThanks();   // FeedbackSent or AlreadyReceived
 | `Feedback.Send(FeedbackSubmission submission)` | `UniTask<FeedbackSendResult>` |
 | `Feedback.SendMessage(string channel, string message, string target = null, IDictionary<string, object> data = null)` | `UniTask<FeedbackSendResult>` |
 | `Feedback.SendRating(string channel, int rating, string reason = null, string target = null, IDictionary<string, object> data = null)` | `UniTask<FeedbackSendResult>` |
+| `Feedback.SendTargets(string channel, IList<string> targets, IDictionary<string, object> data = null)` | `UniTask<FeedbackSendResult>` with `targets` |
 | `Feedback.GetMyFeedback(string channel = null)` | `UniTask<FeedbackList>` |
 | `FeedbackProtocol.Check(FeedbackChannelInfo channel, FeedbackSubmission submission)` | `FeedbackStatus?` |
 

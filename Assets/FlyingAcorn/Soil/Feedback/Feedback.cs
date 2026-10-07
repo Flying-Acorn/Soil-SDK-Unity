@@ -73,6 +73,15 @@ namespace FlyingAcorn.Soil.Feedback
             Send(new FeedbackSubmission(channel) { Rating = rating, Message = reason, Target = target, Data = data });
 
         /// <summary>
+        /// Several targets in one send - say, words a player added one by one - for a grouped channel whose
+        /// <see cref="FeedbackChannelInfo.max_targets_per_send"/> is above 1. Each distinct target is saved and counted
+        /// as if sent alone; <see cref="FeedbackSendResult.targets"/> tells what became of each.
+        /// </summary>
+        public static UniTask<FeedbackSendResult> SendTargets(string channel, IList<string> targets,
+            IDictionary<string, object> data = null) =>
+            Send(new FeedbackSubmission(channel) { Targets = targets, Data = data });
+
+        /// <summary>
         /// The player's latest submissions (up to 50), newest first, with what the team did with each:
         /// planned, applied or declined. Pass a channel to see only that one.
         /// </summary>

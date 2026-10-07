@@ -33,6 +33,8 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         FeedbackError = 15,
         /// <summary>The channel groups by target (see <see cref="FeedbackChannelInfo.group_by_target"/>) and none was sent.</summary>
         TargetRequired = 16,
+        /// <summary>More <see cref="FeedbackSubmission.Targets"/> than the channel's <see cref="FeedbackChannelInfo.max_targets_per_send"/>.</summary>
+        TooManyTargets = 17,
     }
 
     /// <summary>Whether a channel takes a 1 to 5 rating.</summary>
@@ -82,6 +84,11 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         public bool group_by_target;
         /// <summary>A player counts once per target, ever: sending the same target again answers AlreadyReceived.</summary>
         public bool once_per_target;
+        /// <summary>
+        /// How many targets one send may carry in <see cref="FeedbackSubmission.Targets"/>. Above 1 only in a grouped
+        /// channel; each target counts as one send toward <see cref="daily_limit"/>.
+        /// </summary>
+        public int max_targets_per_send = 1;
 
         [JsonIgnore]
         public RatingMode Rating => rating switch
@@ -137,6 +144,25 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         public List<FeedbackEntry> feedback = new();
     }
 
+    /// <summary>What became of one target of a send with several (<see cref="FeedbackSubmission.Targets"/>).</summary>
+    [Serializable]
+    public class FeedbackTargetResult
+    {
+        /// <summary>The target as sent; the same target twice in one send is answered once.</summary>
+        public string target;
+        public FeedbackStatusDetail detail;
+        /// <summary>The saved submission, or the earlier one for AlreadyReceived. Null when the daily limit left it out.</summary>
+        public FeedbackEntry feedback;
+        /// <summary>Seconds until the daily limit frees a slot, for DailyLimitReached.</summary>
+        public int? retry_after;
+
+        [JsonIgnore] public FeedbackStatus Status => detail?.Status ?? FeedbackStatus.FeedbackError;
+
+        /// <summary>The server has this target from this player: sent now, or before.</summary>
+        [JsonIgnore]
+        public bool Accepted => Status == FeedbackStatus.FeedbackSent || Status == FeedbackStatus.AlreadyReceived;
+    }
+
     /// <summary>
     /// What a send did. A refusal - unknown channel, a rule, the daily limit - is an answer, not an exception:
     /// check <see cref="Status"/>. Only a transport failure, an expired sign-in, or the app lacking the Feedback
@@ -148,6 +174,12 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         public FeedbackStatusDetail detail;
         /// <summary>What was saved: the new submission, or the earlier one for AlreadyReceived. Null on a refusal.</summary>
         public FeedbackEntry feedback;
+        /// <summary>
+        /// For a send of several <see cref="FeedbackSubmission.Targets"/>: each distinct target's own result, in order.
+        /// <see cref="Status"/> is then for the send as a whole: FeedbackSent if any was saved, else DailyLimitReached
+        /// if any hit the limit, else AlreadyReceived. Null for a single target or a refusal of the whole send.
+        /// </summary>
+        public List<FeedbackTargetResult> targets;
         [JsonIgnore] public long HttpStatus;
         /// <summary>Seconds to wait before sending again, for Throttled and DailyLimitReached.</summary>
         [JsonIgnore] public int? RetryAfterSeconds;
@@ -168,6 +200,12 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         public string Channel;
         /// <summary>Optional: what it is about - a word, a level id, a feature. Up to 100 characters.</summary>
         public string Target;
+        /// <summary>
+        /// Instead of <see cref="Target"/>: several targets in one send, for a grouped channel whose
+        /// <see cref="FeedbackChannelInfo.max_targets_per_send"/> is above 1. Each distinct target is saved and counted as
+        /// if sent alone; <see cref="FeedbackSendResult.targets"/> tells what became of each. The other fields apply to all.
+        /// </summary>
+        public IList<string> Targets;
         /// <summary>Optional 1 to 5, where the channel takes ratings.</summary>
         public int? Rating;
         public string Message;
@@ -198,6 +236,7 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         {
             var body = new JObject { ["channel"] = submission.Channel, ["client_id"] = submission.ClientId };
             if (!string.IsNullOrEmpty(submission.Target)) body["target"] = submission.Target;
+            if (submission.Targets != null) body["targets"] = new JArray(submission.Targets);
             if (submission.Rating.HasValue) body["rating"] = submission.Rating.Value;
             if (!string.IsNullOrEmpty(submission.Message)) body["message"] = submission.Message;
             if (submission.Data != null && submission.Data.Count > 0) body["data"] = JObject.FromObject(submission.Data);
@@ -214,9 +253,21 @@ namespace FlyingAcorn.Soil.Feedback.Logic
             // Cleaned and counted as the server does: control characters dropped, lengths in characters, not UTF-16.
             var message = Clean(submission.Message);
             // In the server's order, so a submission with two problems is told the same one.
-            var target = Clean(submission.Target);
-            if (CountCharacters(target) > MaxTargetLength) return FeedbackStatus.TargetTooLong;
-            if (channel.group_by_target && target.Length == 0) return FeedbackStatus.TargetRequired;
+            var targets = submission.Targets;
+            if (targets != null)
+            {
+                if (!string.IsNullOrEmpty(submission.Target) || !channel.group_by_target) return FeedbackStatus.InvalidRequest;
+                if (targets.Count > channel.max_targets_per_send) return FeedbackStatus.TooManyTargets;
+                if (targets.Count == 0) return FeedbackStatus.TargetRequired;
+                foreach (var each in targets)
+                    if (each == null) return FeedbackStatus.InvalidRequest;
+            }
+            foreach (var each in targets ?? new[] { submission.Target })
+            {
+                var target = Clean(each);
+                if (CountCharacters(target) > MaxTargetLength) return FeedbackStatus.TargetTooLong;
+                if (channel.group_by_target && target.Length == 0) return FeedbackStatus.TargetRequired;
+            }
             if (submission.Rating.HasValue)
             {
                 if (submission.Rating < MinRating || submission.Rating > MaxRating) return FeedbackStatus.InvalidRating;

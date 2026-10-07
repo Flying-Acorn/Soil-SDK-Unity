@@ -212,6 +212,103 @@ namespace FlyingAcorn.Soil.Feedback.Tests
             Assert.AreEqual(13, (int)FeedbackStatus.DailyLimitReached);
             Assert.AreEqual(15, (int)FeedbackStatus.FeedbackError);
             Assert.AreEqual(16, (int)FeedbackStatus.TargetRequired);
+            Assert.AreEqual(17, (int)FeedbackStatus.TooManyTargets);
+        }
+
+        private const string ListChannels =
+            "{\"detail\":{\"code\":3,\"message\":\"channels_listed\"},\"channels\":[{\"key\":\"word_suggestion\"," +
+            "\"name\":\"Word suggestions\",\"rating\":\"none\",\"message_required\":false,\"max_message_length\":200," +
+            "\"daily_limit\":20,\"remaining_today\":20,\"group_by_target\":true,\"once_per_target\":true," +
+            "\"max_targets_per_send\":5}]}";
+
+        // A send of three: one saved, one sent before, one past the daily limit (feedback/views.py target_result).
+        private const string SentSeveral =
+            "{\"detail\":{\"code\":0,\"message\":\"feedback_sent\"},\"targets\":[" +
+            "{\"target\":\"\u0628\u0627\u0631, Persian\",\"detail\":{\"code\":0,\"message\":\"feedback_sent\"}," +
+            "\"feedback\":{\"id\":\"5e0c1f7a-3b8e-4f43-9a1e-0b8d2a7c6e11\",\"channel\":\"word_suggestion\"," +
+            "\"target\":\"\u0628\u0627\u0631, Persian\",\"rating\":null,\"message\":\"\",\"data\":{}," +
+            "\"client_id\":\"8d1f2b5c-6a3e-5f71-9c2d-4e8b0a7f3d21\",\"status\":\"new\",\"seen\":false," +
+            "\"created_at\":\"2026-10-07T09:12:03.120511+00:00\"},\"retry_after\":null}," +
+            "{\"target\":\"bar, english\",\"detail\":{\"code\":1,\"message\":\"already_received\"}," +
+            "\"feedback\":{\"id\":\"1b7a9c3e-2d4f-4a6b-8c0e-f1a2b3c4d5e6\",\"channel\":\"word_suggestion\"," +
+            "\"target\":\"BAR, English\",\"rating\":null,\"message\":\"\",\"data\":{},\"client_id\":null," +
+            "\"status\":\"applied\",\"seen\":true,\"created_at\":\"2026-10-05T10:00:00+00:00\"},\"retry_after\":null}," +
+            "{\"target\":\"KITE, English\",\"detail\":{\"code\":13,\"message\":\"daily_limit_reached\"}," +
+            "\"feedback\":null,\"retry_after\":41230}]}";
+
+        [Test]
+        public void SeveralTargets_ParseEachOnesResult()
+        {
+            var result = FeedbackProtocol.ParseSend(201, SentSeveral);
+            Assert.AreEqual(FeedbackStatus.FeedbackSent, result.Status);
+            Assert.IsTrue(result.Succeeded);
+            Assert.IsNull(result.feedback);
+            Assert.AreEqual(3, result.targets.Count);
+            Assert.AreEqual("\u0628\u0627\u0631, Persian", result.targets[0].target);
+            Assert.AreEqual(FeedbackStatus.FeedbackSent, result.targets[0].Status);
+            Assert.IsTrue(result.targets[0].Accepted);
+            Assert.AreEqual(FeedbackStatus.AlreadyReceived, result.targets[1].Status);
+            Assert.IsTrue(result.targets[1].Accepted);
+            Assert.AreEqual(FeedbackReviewStatus.Applied, result.targets[1].feedback.ReviewStatus);
+            Assert.AreEqual(FeedbackStatus.DailyLimitReached, result.targets[2].Status);
+            Assert.IsFalse(result.targets[2].Accepted);
+            Assert.IsNull(result.targets[2].feedback);
+            Assert.AreEqual(41230, result.targets[2].retry_after);
+            Assert.IsNull(result.targets[0].retry_after);
+            // A single send has none.
+            Assert.IsNull(FeedbackProtocol.ParseSend(201, Sent).targets);
+        }
+
+        [Test]
+        public void SeveralTargets_NothingSavedForTheLimitIsARefusalWithEachResult()
+        {
+            var body = SentSeveral.Replace("{\"detail\":{\"code\":0,\"message\":\"feedback_sent\"},\"targets\"",
+                "{\"detail\":{\"code\":13,\"message\":\"daily_limit_reached\"},\"targets\"");
+            var result = FeedbackProtocol.ParseSend(429, body, "41230");
+            Assert.AreEqual(FeedbackStatus.DailyLimitReached, result.Status);
+            Assert.IsFalse(result.Succeeded);
+            Assert.AreEqual(41230, result.RetryAfterSeconds);
+            Assert.AreEqual(3, result.targets.Count);
+        }
+
+        [Test]
+        public void SeveralTargets_ToJsonSendsTheList()
+        {
+            var submission = new FeedbackSubmission("word_suggestion") { Targets = new List<string> { "BAR, English", "\u0628\u0627\u0631, Persian" } };
+            var body = JObject.Parse(FeedbackProtocol.ToJson(submission));
+            CollectionAssert.AreEqual(new[] { "BAR, English", "\u0628\u0627\u0631, Persian" }, body["targets"].ToObject<string[]>());
+            Assert.IsNull(body["target"]);
+            Assert.AreEqual(submission.ClientId, body["client_id"].Value<string>());
+            Assert.IsNull(JObject.Parse(FeedbackProtocol.ToJson(new FeedbackSubmission("support") { Message = "hi" }))["targets"]);
+        }
+
+        [Test]
+        public void SeveralTargets_CheckMirrorsTheServer()
+        {
+            var words = FeedbackProtocol.ParseChannels(200, ListChannels).Find("word_suggestion");
+            Assert.AreEqual(5, words.max_targets_per_send);
+            FeedbackStatus? Check(FeedbackChannelInfo channel, params string[] targets) =>
+                FeedbackProtocol.Check(channel, new FeedbackSubmission(channel.key) { Targets = targets });
+
+            Assert.IsNull(Check(words, "A, English", "B, English", "C, English", "D, English", "E, English"));
+            Assert.AreEqual(FeedbackStatus.TooManyTargets, Check(words, "A", "B", "C", "D", "E", "F"));
+            Assert.AreEqual(FeedbackStatus.TargetRequired, Check(words));
+            Assert.AreEqual(FeedbackStatus.TargetRequired, Check(words, "A, English", " \u0001 "));
+            Assert.AreEqual(FeedbackStatus.TargetTooLong, Check(words, "A, English", new string('t', 101)));
+            Assert.AreEqual(FeedbackStatus.InvalidRequest, Check(words, "A, English", null));
+            Assert.AreEqual(FeedbackStatus.InvalidRequest, FeedbackProtocol.Check(words,
+                new FeedbackSubmission("word_suggestion") { Target = "A, English", Targets = new[] { "B, English" } }));
+            // Too many is told before an empty item, as the server does.
+            Assert.AreEqual(FeedbackStatus.TooManyTargets, Check(words, "", "", "", "", "", ""));
+
+            // A channel that does not group takes no list; one left at a single target takes a list of one.
+            var rate = FeedbackProtocol.ParseChannels(200, Channels).Find("rate_app");
+            Assert.AreEqual(FeedbackStatus.InvalidRequest, FeedbackProtocol.Check(rate,
+                new FeedbackSubmission("rate_app") { Rating = 5, Targets = new[] { "x" } }));
+            var single = FeedbackProtocol.ParseChannels(200, GroupedChannels).Find("word_suggestion");
+            Assert.AreEqual(1, single.max_targets_per_send);
+            Assert.IsNull(Check(single, "A, English"));
+            Assert.AreEqual(FeedbackStatus.TooManyTargets, Check(single, "A, English", "B, English"));
         }
     }
 }

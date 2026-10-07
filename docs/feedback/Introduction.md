@@ -24,7 +24,9 @@ suggestion**. Rules can be changed at any time without a new build; the key cann
 
 A channel can also **group by target**: many players sending the same small thing (a word, a level) become one
 item with a player count, reviewed once, exported one per line. See
-[Grouped channels](Integration.md#7-grouped-channels-many-players-one-item).
+[Grouped channels](Integration.md#7-grouped-channels-many-players-one-item). Such a channel can also take several
+targets in one send, each counted as if sent alone: see
+[Several targets in one send](Integration.md#8-several-targets-in-one-send).
 
 ## What each submission carries
 
