@@ -148,7 +148,11 @@ namespace FlyingAcorn.Soil.Feedback.Logic
     [Serializable]
     public class FeedbackTargetResult
     {
-        /// <summary>The target as sent; the same target twice in one send is answered once.</summary>
+        /// <summary>
+        /// The target as the server kept it, not always as sent: control characters dropped, trimmed, and runs of
+        /// whitespace made one space. Targets with the same <see cref="FeedbackProtocol.TargetKey"/> are answered once,
+        /// under the first spelling sent; match results to what the game sent by that key, not by this string.
+        /// </summary>
         public string target;
         public FeedbackStatusDetail detail;
         /// <summary>The saved submission, or the earlier one for AlreadyReceived. Null when the daily limit left it out.</summary>
@@ -299,14 +303,69 @@ namespace FlyingAcorn.Soil.Feedback.Logic
             return kept.ToString().Trim();
         }
 
-        /// <summary>Characters as the server counts them: an emoji outside the basic plane is one, not two.</summary>
+        /// <summary>
+        /// Characters as the server counts them: an emoji outside the basic plane is one, not two. A lone surrogate
+        /// reaches the server as U+FFFD, so it is one too.
+        /// </summary>
         public static int CountCharacters(string text)
         {
             if (string.IsNullOrEmpty(text)) return 0;
             var count = text.Length;
-            foreach (var c in text)
-                if (char.IsLowSurrogate(c)) count--;
+            for (var i = 0; i < text.Length - 1; i++)
+                if (char.IsSurrogatePair(text[i], text[i + 1]))
+                {
+                    count--;
+                    i++;
+                }
             return count;
+        }
+
+        /// <summary>
+        /// The key a grouped channel matches targets by (target_key on the server): cleaned as <see cref="Clean"/>,
+        /// Unicode NFC, runs of whitespace made one space, case folded. Two targets with the same key are one item, and
+        /// in a send of several only the first spelling gets a <see cref="FeedbackTargetResult"/>; compare keys to
+        /// match results to what the game sent. Case folding is ToLowerInvariant plus the full folds of ß, final
+        /// sigma, ΐ and ΰ, long s, micro sign, dotted capital I and the Latin ligatures ﬀ to ﬆ. That matches the
+        /// server for Latin, Cyrillic, Greek, Arabic, Persian, Hebrew and CJK words; rarer letters can get a key the
+        /// server does not: those whose folding is not their lowercase (Cherokee, Greek symbol variants and iota
+        /// subscript, Armenian ligatures, titlecase digraphs such as ǅ), letters newer than the runtime's Unicode
+        /// tables, cased letters outside the basic plane, and a few compatibility characters Mono does not normalize
+        /// as Python does.
+        /// </summary>
+        public static string TargetKey(string target)
+        {
+            var text = Clean(target).Normalize(System.Text.NormalizationForm.FormC);
+            var key = new System.Text.StringBuilder(text.Length);
+            var space = false;
+            foreach (var c in text)
+            {
+                if (char.IsWhiteSpace(c))
+                {
+                    space = key.Length > 0;
+                    continue;
+                }
+                if (space) key.Append(' ');
+                space = false;
+                // Matched before lowercasing: invariant lowercase turns İ into a plain i, where folding keeps the dot.
+                switch (c)
+                {
+                    case '\u00df': case '\u1e9e': key.Append("ss"); break; // ß, ẞ
+                    case '\u0130': key.Append("i\u0307"); break; // İ
+                    case '\u03c2': key.Append('\u03c3'); break; // ς
+                    case '\u0390': key.Append("\u03b9\u0308\u0301"); break; // ΐ
+                    case '\u03b0': key.Append("\u03c5\u0308\u0301"); break; // ΰ
+                    case '\u017f': key.Append('s'); break; // ſ
+                    case '\u00b5': key.Append('\u03bc'); break; // µ
+                    case '\ufb00': key.Append("ff"); break;
+                    case '\ufb01': key.Append("fi"); break;
+                    case '\ufb02': key.Append("fl"); break;
+                    case '\ufb03': key.Append("ffi"); break;
+                    case '\ufb04': key.Append("ffl"); break;
+                    case '\ufb05': case '\ufb06': key.Append("st"); break;
+                    default: key.Append(char.ToLowerInvariant(c)); break;
+                }
+            }
+            return key.ToString();
         }
 
         /// <summary>

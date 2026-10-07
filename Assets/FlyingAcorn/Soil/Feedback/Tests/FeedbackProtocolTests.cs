@@ -207,12 +207,60 @@ namespace FlyingAcorn.Soil.Feedback.Tests
         [Test]
         public void StatusNumbersMatchTheServer()
         {
-            // Pinned by feedback/tests.py test_codes_are_unique_and_never_renumbered on the server.
-            Assert.AreEqual(0, (int)FeedbackStatus.FeedbackSent);
-            Assert.AreEqual(13, (int)FeedbackStatus.DailyLimitReached);
-            Assert.AreEqual(15, (int)FeedbackStatus.FeedbackError);
-            Assert.AreEqual(16, (int)FeedbackStatus.TargetRequired);
-            Assert.AreEqual(17, (int)FeedbackStatus.TooManyTargets);
+            // feedback/return_codes.py, in code order; shipped games compare the numbers.
+            var expected = new[]
+            {
+                "feedback_sent", "already_received", "feedback_listed", "channels_listed", "channel_not_found",
+                "invalid_request", "rating_required", "rating_not_allowed", "invalid_rating", "message_required",
+                "message_too_long", "target_too_long", "data_too_large", "daily_limit_reached", "throttled",
+                "feedback_error", "target_required", "too_many_targets",
+            };
+            Assert.AreEqual(expected.Length, System.Enum.GetValues(typeof(FeedbackStatus)).Length);
+            for (var code = 0; code < expected.Length; code++)
+            {
+                var name = System.Enum.GetName(typeof(FeedbackStatus), code);
+                Assert.AreEqual(expected[code].Replace("_", ""), name?.ToLowerInvariant(), $"code {code}");
+            }
+        }
+
+        [Test]
+        public void CountCharacters_CountsOnlyRealPairsAsOne()
+        {
+            // A lone surrogate is sent as U+FFFD, one character on the server.
+            Assert.AreEqual(3, FeedbackProtocol.CountCharacters("a\udc00b"));
+            Assert.AreEqual(3, FeedbackProtocol.CountCharacters("a\ud800b"));
+            Assert.AreEqual(1, FeedbackProtocol.CountCharacters("\ud83d\ude00"));
+            // Low before high is two lone ones, not a pair.
+            Assert.AreEqual(2, FeedbackProtocol.CountCharacters("\ude00\ud83d"));
+            Assert.AreEqual(2, FeedbackProtocol.CountCharacters("\ud83d\ud83d\ude00"));
+        }
+
+        [Test]
+        public void TargetKey_MatchesTheServer()
+        {
+            // Expected keys are what the server's target_key (feedback/models.py) gives for the cleaned target.
+            Assert.AreEqual("bar, english", FeedbackProtocol.TargetKey("  BAR,\u00a0\u00a0English\u3000"));
+            Assert.AreEqual("caf\u00e9 , french", FeedbackProtocol.TargetKey(" Cafe\u0301 ,\t French\n"));
+            Assert.AreEqual("ab c", FeedbackProtocol.TargetKey("a\u0001b  \u2003 c"));
+            Assert.AreEqual("strasse, german", FeedbackProtocol.TargetKey("Stra\u00dfe, German"));
+            Assert.AreEqual(FeedbackProtocol.TargetKey("STRASSE, German"), FeedbackProtocol.TargetKey("Stra\u00dfe, German"));
+            Assert.AreEqual("i\u0307stanbul", FeedbackProtocol.TargetKey("\u0130STANBUL"));
+            Assert.AreEqual("\u03bf\u03b4\u03bf\u03c3", FeedbackProtocol.TargetKey("\u039f\u0394\u039f\u03a3"));
+            Assert.AreEqual("\u03bf\u03b4\u03bf\u03c3", FeedbackProtocol.TargetKey("\u03bf\u03b4\u03bf\u03c2"));
+            Assert.AreEqual("final s", FeedbackProtocol.TargetKey("\ufb01nal \u017f"));
+            // Persian keeps its zero-width non-joiner: it is not a space.
+            Assert.AreEqual("\u0628\u0627\u0631\u200c\u0647\u0627, persian",
+                FeedbackProtocol.TargetKey("\u0628\u0627\u0631\u200c\u0647\u0627,\tPersian"));
+            Assert.AreEqual("", FeedbackProtocol.TargetKey(null));
+        }
+
+        [Test]
+        public void TargetKey_MatchesAResultToWhatWasSent()
+        {
+            var result = FeedbackProtocol.ParseSend(201, SentSeveral);
+            var sent = new[] { "\u0628\u0627\u0631,  Persian", "BAR, English", " KITE, English" };
+            for (var i = 0; i < sent.Length; i++)
+                Assert.AreEqual(FeedbackProtocol.TargetKey(sent[i]), FeedbackProtocol.TargetKey(result.targets[i].target));
         }
 
         private const string ListChannels =

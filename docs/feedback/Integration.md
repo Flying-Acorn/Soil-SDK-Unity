@@ -120,10 +120,15 @@ once per target, ever. Use it when many players send the same small thing: a wor
 find too hard.
 
 - The target is required (`TargetRequired` otherwise); a rating and a message may both be left out.
-- The server only matches targets ignoring case and spacing. **Settle everything else in the game before sending**
-  (letter variants, diacritics, your own format): what you send is what the dashboard groups and exports, one per
-  line. For example, a word game can send `"BAR, English"`.
-- Sending the same target again answers `AlreadyReceived` and saves nothing, so a double tap or a retry is harmless.
+- The server only matches targets ignoring case, spacing and Unicode normalization (NFC);
+  `FeedbackProtocol.TargetKey(target)` gives the same key in the game. **Settle everything else in the game before
+  sending** (letter variants, diacritics, your own format): the first spelling the server receives of each target,
+  with control characters dropped and spaces collapsed, is what the dashboard shows and exports, one per line. For
+  example, a word game can send `"BAR, English"`.
+- With **once per target**, sending the same target again answers `AlreadyReceived` and saves nothing, so a double
+  tap or a retry is harmless. Without it, a repeat is only answered `AlreadyReceived` when it is a retry of the same
+  `FeedbackSubmission`, or has the same rating and message within a day; otherwise it is saved again and adds to the
+  item's submissions (the player still counts once).
 - When staff decide the item, every player who sent it sees that status in `GetMyFeedback`.
 
 ```csharp
@@ -140,11 +145,13 @@ into a message or `data` yourself, or the server cannot count or merge the words
 
 - Cap the list at the channel's `max_targets_per_send`; more is refused whole with `TooManyTargets`. So is any
   empty or too-long item (`TargetRequired`, `TargetTooLong`). `FeedbackProtocol.Check` tells you first.
-- The same target twice in one list is sent once.
+- Targets with the same key (`FeedbackProtocol.TargetKey`) in one list are sent once, under the first spelling.
 - Each target counts toward the daily limit, so a list can be partly saved. The first ones that fit go through.
 - `result.targets` has each distinct target's own result. `Accepted` is true when the server has it from this
   player (sent now or before), and `retry_after` is set when the limit left it out. `result.Status` is for the send
   as a whole: `FeedbackSent` if any was saved, else `DailyLimitReached` if any hit the limit, else `AlreadyReceived`.
+- Each result's `target` is the target as the server kept it (trimmed, spaces collapsed), not always the string you
+  sent. Match results to your list by `FeedbackProtocol.TargetKey`, as below, not by comparing strings.
 - Retrying the same `FeedbackSubmission` after a timeout saves nothing twice, and still tries the targets the limit
   left out.
 
@@ -154,8 +161,10 @@ var submission = new FeedbackSubmission("word_suggestion") { Targets = words.Sel
 if (FeedbackProtocol.Check(channel, submission) is { } problem) { ShowError(problem); return; }
 
 var result = await Feedback.Send(submission);        // or Feedback.SendTargets("word_suggestion", targets)
-foreach (var each in result.targets ?? new List<FeedbackTargetResult>())
-    if (each.Accepted) RememberSuggested(each.target);
+var accepted = new HashSet<string>((result.targets ?? new List<FeedbackTargetResult>())
+    .Where(each => each.Accepted).Select(each => FeedbackProtocol.TargetKey(each.target)));
+foreach (var target in submission.Targets)
+    if (accepted.Contains(FeedbackProtocol.TargetKey(target))) RememberSuggested(target);
 ShowThanks();
 ```
 
@@ -183,6 +192,7 @@ ShowThanks();
 | `Feedback.SendTargets(string channel, IList<string> targets, IDictionary<string, object> data = null)` | `UniTask<FeedbackSendResult>` with `targets` |
 | `Feedback.GetMyFeedback(string channel = null)` | `UniTask<FeedbackList>` |
 | `FeedbackProtocol.Check(FeedbackChannelInfo channel, FeedbackSubmission submission)` | `FeedbackStatus?` |
+| `FeedbackProtocol.TargetKey(string target)` | `string`: the key a grouped channel matches targets by |
 
 ## Other Documentations
 
