@@ -122,6 +122,9 @@ count of distinct players, reviewed once under **Feedback → Targets**. With **
 once per target, ever. Use it when many players send the same small thing: a word they want accepted, a level they
 find too hard.
 
+`GetChannels()` tells the game how a channel is set: `group_by_target`, `once_per_target` and
+`max_targets_per_send` (section 8), so a form can show a target field, or a list, only where the channel takes it.
+
 - The target is required (`TargetRequired` otherwise); a rating and a message may both be left out.
 - The server only matches targets ignoring case, spacing and Unicode normalization (NFC);
   `FeedbackProtocol.TargetKey(target)` gives the same key in the game. **Settle everything else in the game before
@@ -196,6 +199,8 @@ ShowThanks();
 | `Feedback.GetMyFeedback(string channel = null)` | `UniTask<FeedbackList>` |
 | `FeedbackProtocol.Check(FeedbackChannelInfo channel, FeedbackSubmission submission)` | `FeedbackStatus?` |
 | `FeedbackProtocol.TargetKey(string target)` | `string`: the key a grouped channel matches targets by |
+| `FeedbackProtocol.CountCharacters(string text)` | `int`: characters as the server counts them (an emoji is one), for a length counter |
+| `FeedbackProtocol.Clean(string text)` | `string`: the text as the server keeps it, control characters other than tab and newline dropped, trimmed |
 
 ## Other Documentations
 
