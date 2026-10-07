@@ -115,13 +115,19 @@ namespace FlyingAcorn.Soil.Push
                 _started = true;
             }
             PushHub.TokenReceived += SetToken;
-            PushHub.MessageReceived += message => Dispatch(message).Forget();
-            UserApiHandler.OnUserFilled += changed =>
-            {
-                // A sign-in that lands on another account: the same device now belongs to that player.
-                lock (Lock) _featureOff = false;
-                if (changed) Schedule();
-            };
+            PushHub.MessageReceived += OnHubMessage;
+            // Removed first: Core keeps this event across play sessions when the domain is not reloaded.
+            UserApiHandler.OnUserFilled -= OnUserFilled;
+            UserApiHandler.OnUserFilled += OnUserFilled;
+        }
+
+        private static void OnHubMessage(PushMessage message) => Dispatch(message).Forget();
+
+        private static void OnUserFilled(bool changed)
+        {
+            // A sign-in that lands on another account: the same device now belongs to that player.
+            lock (Lock) _featureOff = false;
+            if (changed) Schedule();
         }
 
         /// <summary>
@@ -317,13 +323,15 @@ namespace FlyingAcorn.Soil.Push
             request.SetRequestHeader("Content-Type", "application/json");
             var (status, body) = await Send(request, PushOperation.Unregister);
             var answer = PushProtocol.ParseStatus(body);
-            if (answer != null && answer.Status == PushStatus.Unregistered || status == 403)
+            if (answer != null && answer.Status == PushStatus.Unregistered)
             {
-                // Forgotten by Soil (or the game has no push at all): nothing left to undo.
+                // Forgotten by Soil: nothing left to undo.
                 SaveRecord(null);
                 MyDebug.Info("Soil-Push: device unregistered.");
                 return;
             }
+            // Refused (a 403 while the game's Push feature is off, say) or failed: the server may still hold the
+            // token, so the record stays and the next launch asks again.
             MyDebug.LogWarning($"Soil-Push: unregistering answered {status} {answer?.message ?? body}");
         }
 

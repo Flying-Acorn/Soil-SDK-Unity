@@ -12,7 +12,8 @@ Cloud Messaging:
 | Leaderboard prize | each player a leaderboard reset paid, on leaderboards with **notify winners** on |
 | Invite reward | the player who invited someone, when they are paid for it |
 
-The server sends every push at the moment the event happens. The game sends nothing; it only hands over its
+The server sends every push shortly after the event happens (within about a minute: a friend request waits 30
+seconds in case it is cancelled, and the sender runs every 15 seconds). The game sends nothing; it only hands over its
 device token. With the Firebase Messaging package in the project, one call does that for good:
 `Push.StartFirebaseBridge()`, once the game's own Firebase setup is ready.
 

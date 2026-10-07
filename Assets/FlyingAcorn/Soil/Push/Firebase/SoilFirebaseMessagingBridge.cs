@@ -32,6 +32,9 @@ namespace FlyingAcorn.Soil.Push.FirebaseBridge
             if (_subscribed) return;
             try
             {
+                // Firebase's events outlive a play session when the domain is not reloaded: never add a second copy.
+                FirebaseMessaging.TokenReceived -= OnTokenReceived;
+                FirebaseMessaging.MessageReceived -= OnMessageReceived;
                 FirebaseMessaging.TokenReceived += OnTokenReceived;
                 FirebaseMessaging.MessageReceived += OnMessageReceived;
                 _subscribed = true;
