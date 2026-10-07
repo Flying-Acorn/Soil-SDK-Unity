@@ -48,6 +48,7 @@ namespace FlyingAcorn.Soil.Feedback.Tests
         }
 
         [TestCase(404, "{\"detail\":{\"code\":4,\"message\":\"channel_not_found\"}}", FeedbackStatus.ChannelNotFound)]
+        [TestCase(409, "{\"detail\":{\"code\":18,\"message\":\"channel_disabled\"}}", FeedbackStatus.ChannelDisabled)]
         [TestCase(400, "{\"detail\":{\"code\":6,\"message\":\"rating_required\"}}", FeedbackStatus.RatingRequired)]
         [TestCase(400, "{\"detail\":{\"code\":10,\"message\":\"message_too_long\"}}", FeedbackStatus.MessageTooLong)]
         public void Refusals_AreAnswersNotFailures(long status, string body, FeedbackStatus expected)
@@ -213,7 +214,7 @@ namespace FlyingAcorn.Soil.Feedback.Tests
                 "feedback_sent", "already_received", "feedback_listed", "channels_listed", "channel_not_found",
                 "invalid_request", "rating_required", "rating_not_allowed", "invalid_rating", "message_required",
                 "message_too_long", "target_too_long", "data_too_large", "daily_limit_reached", "throttled",
-                "feedback_error", "target_required", "too_many_targets",
+                "feedback_error", "target_required", "too_many_targets", "channel_disabled",
             };
             Assert.AreEqual(expected.Length, System.Enum.GetValues(typeof(FeedbackStatus)).Length);
             for (var code = 0; code < expected.Length; code++)

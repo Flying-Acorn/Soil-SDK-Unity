@@ -16,7 +16,7 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         AlreadyReceived = 1,
         FeedbackListed = 2,
         ChannelsListed = 3,
-        /// <summary>No channel with that key in this game, or it is turned off on the dashboard.</summary>
+        /// <summary>No channel with that key in this game.</summary>
         ChannelNotFound = 4,
         InvalidRequest = 5,
         RatingRequired = 6,
@@ -35,6 +35,12 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         TargetRequired = 16,
         /// <summary>More <see cref="FeedbackSubmission.Targets"/> than the channel's <see cref="FeedbackChannelInfo.max_targets_per_send"/>.</summary>
         TooManyTargets = 17,
+        /// <summary>
+        /// HTTP 409. Staff turned the channel off on the dashboard: nothing was saved. Hide the form until the
+        /// channel list (Feedback.GetChannels) has it again. A retry of a send saved before then still answers
+        /// AlreadyReceived.
+        /// </summary>
+        ChannelDisabled = 18,
     }
 
     /// <summary>Whether a channel takes a 1 to 5 rating.</summary>
@@ -253,6 +259,7 @@ namespace FlyingAcorn.Soil.Feedback.Logic
         /// </summary>
         public static FeedbackStatus? Check(FeedbackChannelInfo channel, FeedbackSubmission submission)
         {
+            // The list holds only channels that are on: missing means unknown, or turned off since.
             if (channel == null) return FeedbackStatus.ChannelNotFound;
             // Cleaned and counted as the server does: control characters dropped, lengths in characters, not UTF-16.
             var message = Clean(submission.Message);

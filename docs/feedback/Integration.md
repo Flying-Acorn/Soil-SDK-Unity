@@ -40,6 +40,9 @@ private async void OnSendPressed(string text)
         case FeedbackStatus.MessageTooLong:
             ShowError("That's a bit long.");
             break;
+        case FeedbackStatus.ChannelDisabled:   // turned off on the dashboard
+            HideFeedbackButton();
+            break;
         default:
             ShowError("Could not send feedback.");
             break;
