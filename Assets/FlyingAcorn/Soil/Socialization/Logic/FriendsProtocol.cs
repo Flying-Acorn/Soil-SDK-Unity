@@ -31,7 +31,12 @@ namespace FlyingAcorn.Soil.Socialization.Logic
         InvalidRequest = 16,
         FriendsListed = 17,
         BlockLimitReached = 18,
-        // 19 is retired and never sent.
+        /// <summary>
+        /// HTTP 409. So many players block this one (the app's threshold, dashboard Friends → Settings) that they
+        /// cannot send or accept requests until enough of them unblock. Only ever about this player: nobody is told
+        /// that someone else is restricted. Blocking, declining and cancelling still work.
+        /// </summary>
+        SocializationRestricted = 19,
         /// <summary>
         /// HTTP 409, on a request only. This player cancelled their own request to that player, or that player
         /// declined it, less than 24 hours ago: wait before asking again. If that player has asked this one

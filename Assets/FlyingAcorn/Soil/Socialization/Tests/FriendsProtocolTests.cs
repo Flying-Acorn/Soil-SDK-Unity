@@ -62,6 +62,8 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [TestCase(405, 16, "invalid_request", FriendStatus.InvalidRequest)]
         [TestCase(400, 16, "invalid_request", FriendStatus.InvalidRequest)]
         [TestCase(500, 5, "friendship_error", FriendStatus.FriendshipError)]
+        // Being blocked by enough players pauses this player's new friendships: a refusal, like the other limits.
+        [TestCase(409, 19, "socialization_restricted", FriendStatus.SocializationRestricted)]
         public void ErrorsInTheCodeShapeAreAnswers(long http, int code, string message, FriendStatus status)
         {
             var body = $"{{\"detail\": {{\"code\": {code}, \"message\": \"{message}\"}}}}";
@@ -210,25 +212,19 @@ namespace FlyingAcorn.Soil.Socialization.Tests
         [Test]
         public void StatusCodesMatchTheServer()
         {
-            // socialization/return_codes.py; shipped games compare the numbers. Null is a retired code.
+            // socialization/return_codes.py; shipped games compare the numbers.
             var expected = new[]
             {
                 "friendship_exists", "friendship_created", "friendship_deleted", "friend_not_found",
                 "friendship_illegal_self", "friendship_error", "throttled", "request_sent", "request_declined",
                 "request_cancelled", "request_not_found", "user_blocked", "user_unblocked", "friend_blocked",
                 "friend_limit_reached", "request_limit_reached", "invalid_request", "friends_listed",
-                "block_limit_reached", null, "request_cooldown",
+                "block_limit_reached", "socialization_restricted", "request_cooldown",
             };
-            Assert.AreEqual(Array.FindAll(expected, name => name != null).Length,
-                Enum.GetValues(typeof(FriendStatus)).Length);
+            Assert.AreEqual(expected.Length, Enum.GetValues(typeof(FriendStatus)).Length);
             for (var code = 0; code < expected.Length; code++)
             {
                 var name = Enum.GetName(typeof(FriendStatus), code);
-                if (expected[code] == null)
-                {
-                    Assert.IsNull(name, $"code {code} is retired");
-                    continue;
-                }
                 Assert.AreEqual(expected[code].Replace("_", ""), name?.ToLowerInvariant(), $"code {code}");
             }
         }

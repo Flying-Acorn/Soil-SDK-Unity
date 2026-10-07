@@ -207,10 +207,10 @@ Things to know:
   tomorrow. It never blocks becoming friends: if the other player has asked in the meantime, sending still answers
   `FriendshipCreated`, and accepting their request works as usual.
 - **Too many blocks restrict a player.** When the app's threshold of players blocking someone is reached
-  (dashboard, Friends → Settings), that player's requests answer `RequestLimitReached` and accepting a request
-  from or to them answers `FriendLimitReached`, both HTTP 409. There is no code of its own, so nothing new to
-  handle, and nobody can tell that another player is restricted. Blocking still works. A request to a restricted
-  player answers `RequestSent` and waits until the restriction lifts.
+  (dashboard, Friends → Settings), that player's sends and accepts answer `SocializationRestricted` (HTTP 409)
+  until enough of them unblock. Tell them they can't add friends right now; don't send them off to clear a list.
+  Only the restricted player is ever told: their waiting requests are hidden from the players they asked, and a
+  request to them answers `RequestSent` as usual. Blocking, declining and cancelling still work.
 - **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
   simply never gets an answer. Do not show anything else.
 - **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
@@ -243,12 +243,12 @@ cannot name (`Succeeded` still tells you whether it went through).
 | 11 | `UserBlocked` | 200 | The player is blocked |
 | 12 | `UserUnblocked` | 200 | The player is unblocked |
 | 13 | `FriendBlocked` | 409 | This player blocked that one; unblock them first |
-| 14 | `FriendLimitReached` | 409 | One of the two friend lists is full, or one of the players is restricted |
-| 15 | `RequestLimitReached` | 409 | Too many sent requests waiting for an answer, or this player is restricted |
+| 14 | `FriendLimitReached` | 409 | One of the two friend lists is full |
+| 15 | `RequestLimitReached` | 409 | Too many sent requests waiting for an answer |
 | 16 | `InvalidRequest` | 400, 405 | The request was malformed, or used the wrong method |
 | 17 | `FriendsListed` | 200 | The answer of `GetFriendList` |
 | 18 | `BlockLimitReached` | 409 | Too many blocked players |
-| 19 | - | - | Retired; never sent |
+| 19 | `SocializationRestricted` | 409 | Too many players block this one: no sends or accepts for now |
 | 20 | `RequestCooldown` | 409 | Asked again within 24 hours of cancelling, or of being declined |
 
 ## Referrals: invite codes and rewards
