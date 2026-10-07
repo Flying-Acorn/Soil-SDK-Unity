@@ -17,14 +17,16 @@ rules:
 | Message | required, or optional when a rating alone is enough |
 | Longest message | 40 characters for a word, 2000 for a support message |
 | Per player per day | how many one player can send in any 24 hours |
-| On / off | off answers `ChannelNotFound`; nothing already sent is lost |
+| On / off | off answers `ChannelDisabled` and leaves it out of the game's channel list; nothing already sent is lost |
 
 The dashboard offers ready-made starting points: **Support**, **Rating with a reason**, **Ideas** and **Word
 suggestion**. Rules can be changed at any time without a new build; the key cannot, because your game sends it.
 
 A channel can also **group by target**: many players sending the same small thing (a word, a level) become one
 item with a player count, reviewed once, exported one per line. See
-[Grouped channels](Integration.md#7-grouped-channels-many-players-one-item).
+[Grouped channels](Integration.md#7-grouped-channels-many-players-one-item). Such a channel can also take several
+targets in one send, each counted as if sent alone: see
+[Several targets in one send](Integration.md#8-several-targets-in-one-send).
 
 ## What each submission carries
 
