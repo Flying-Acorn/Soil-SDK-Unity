@@ -7,36 +7,55 @@ contact to enable it. A superuser uploads the game's Firebase service-account ke
 
 ## 1. Firebase
 
-The game needs the Firebase Unity SDK's **Firebase Messaging** package (`com.google.firebase.messaging`) and its
-`google-services.json` / `GoogleService-Info.plist`, as any Firebase game does. The SDK's Firebase bridge
-(`Push/Firebase/`) compiles only when that package is in the project, and then starts on its own after the first
-scene loads:
+The game needs the Firebase Unity SDK's **Firebase Messaging** package (`com.google.firebase.messaging`, installed as
+a UPM package) and its `google-services.json` / `GoogleService-Info.plist`, as any Firebase game does. The SDK's
+Firebase bridge (`Push/Firebase/`) compiles only when that package is in the project. A Firebase imported as a
+`.unitypackage` is not detected; hand the token over yourself (below) in that case.
 
-- it waits for Firebase's dependencies to be available (it only checks them; your Firebase setup fixes them);
-- it hands every token Firebase reports to Soil, which registers it once Soil is ready;
-- it passes received pushes on to `Push.OnMessageReceived` and `Push.OnOpenedFromNotification`.
-
-No code is needed. On iOS, push also needs an APNs key uploaded to the Firebase project and the Push Notifications
-capability on the app.
-
-Android 13 and later asks the player for permission to show notifications; ask for it as you already do for local
-notifications (Unity Mobile Notifications). Soil does not ask.
-
-### Handing tokens over yourself
-
-A game that already handles Firebase Messaging can turn the bridge off and pass the token in:
+Start the bridge once your own Firebase setup reports its dependencies **Available**:
 
 ```csharp
 using FlyingAcorn.Soil.Push;
 
-private void Awake()
+FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
 {
-    Push.UseFirebaseBridge = false;   // In the first scene, before it finishes loading.
-}
+    if (task.Result == DependencyStatus.Available)
+        Push.StartFirebaseBridge();   // Safe to call more than once.
+});
+```
 
+From then on it hands every token Firebase reports to Soil (which registers it once Soil is ready) and passes
+received pushes on to `Push.OnMessageReceived` and `Push.OnOpenedFromNotification`.
+
+The bridge never checks or fixes Firebase's dependencies itself: Firebase allows only one check at a time, and a
+second one running beside yours would make your Firebase setup (Analytics, Crashlytics) fail for that session.
+That is why the game decides when it starts.
+
+**iOS:** starting the bridge starts Firebase Messaging, which asks the player for notification permission at that
+moment. Call `StartFirebaseBridge` when that prompt is welcome. Push also needs an APNs key uploaded to the
+Firebase project and the Push Notifications capability on the app.
+
+**Android:**
+- Android 13 and later asks the player for permission to show notifications; ask for it as you already do for
+  local notifications (Unity Mobile Notifications). Soil does not ask.
+- A tap on a push while the game is in the background reaches `Push.OnOpenedFromNotification` only when the main
+  activity is Firebase's `com.google.firebase.MessagingUnityPlayerActivity` (generated into
+  `Assets/Plugins/Android/` by the Firebase Messaging package; set it as the main activity in your
+  `AndroidManifest.xml`, and as Unity Mobile Notifications' custom activity if you use that). With the plain
+  `UnityPlayerActivity` the push still shows and opens the game, but the game is not told which push it was.
+- Give notifications your own small icon, or Android shows a white square: add
+  `<meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/<icon>" />`
+  inside `<application>`.
+
+### Handing tokens over yourself
+
+A game that handles Firebase Messaging itself, or has no UPM Firebase, passes the token in and never starts the
+bridge:
+
+```csharp
 private void OnTokenReceived(object sender, Firebase.Messaging.TokenReceivedEventArgs token)
 {
-    Push.SetToken(token.Token);       // Returns at once; registers in the background.
+    Push.SetToken(token.Token);       // Returns at once, from any thread; registers in the background.
 }
 ```
 
@@ -88,8 +107,11 @@ On Android, `ClearDelivered()` also removes the game's own local notifications t
 ## 5. Stopping pushes on one device (optional)
 
 ```csharp
-Push.ClearToken();   // For a "notifications off" setting in the game. Hand a token over again to start.
+Push.ClearToken();   // A "notifications off" setting: Soil forgets this device, and it stays off across launches.
+Push.Resume();       // Back on: the device registers again.
 ```
+
+`Push.OptedOut` says which way the player last chose.
 
 ## Behaviour
 

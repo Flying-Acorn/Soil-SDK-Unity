@@ -13,15 +13,16 @@ Cloud Messaging:
 | Invite reward | the player who invited someone, when they are paid for it |
 
 The server sends every push at the moment the event happens. The game sends nothing; it only hands over its
-device token, and with the Firebase Messaging package in the project, the SDK's Firebase bridge does that on its
-own.
+device token. With the Firebase Messaging package in the project, one call does that for good:
+`Push.StartFirebaseBridge()`, once the game's own Firebase setup is ready.
 
 ## What the game gets
 
-- **Nothing to call** for the pushes above. Add the SDK, keep Firebase Messaging in the project, and register on
-  the dashboard.
+- **One call** for the pushes above: `Push.StartFirebaseBridge()` after Firebase is ready. Add the SDK, keep
+  Firebase Messaging in the project, and set the game up on the dashboard.
 - **Taps**: `Push.OnOpenedFromNotification` says what the push was about (`PushKind`) and who or what (`Ref`), so a
-  tap can open the friends screen or the leaderboard. A tap that launched the game is kept until you subscribe.
+  tap can open the friends screen or the leaderboard. A tap that launched the game is kept until you subscribe. On
+  Android this needs Firebase's messaging activity (see Integration).
 - **Foreground pushes**: the phone shows nothing while the game is open; `Push.OnMessageReceived` lets you show an
   in-game note instead.
 - **Tray**: `Push.ClearDelivered()` removes the game's notifications from the tray, say when the friends screen

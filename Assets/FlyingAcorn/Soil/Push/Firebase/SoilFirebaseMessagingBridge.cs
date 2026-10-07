@@ -1,6 +1,4 @@
 using System;
-using System.Threading.Tasks;
-using Firebase;
 using Firebase.Messaging;
 using FlyingAcorn.Soil.Push.Logic;
 using UnityEngine;
@@ -10,59 +8,52 @@ namespace FlyingAcorn.Soil.Push.FirebaseBridge
     /// <summary>
     /// Hands Firebase Messaging's token and pushes to Soil. Compiled only when the project has the
     /// com.google.firebase.messaging package (see the asmdef's version define), so the SDK itself never depends on
-    /// Firebase. Starts on its own after the first scene loads, unless the game set Push.UseFirebaseBridge = false.
+    /// Firebase.
     /// <para>
-    /// It only checks Firebase's dependencies, never fixes them: the game's own Firebase setup does that (and shows
-    /// any Google Play services prompt). Devices without Google Play services, or where Google refuses a token,
-    /// simply never get a token; nothing waits on it.
+    /// It starts only when the game calls <c>Push.StartFirebaseBridge()</c>, after the game's own Firebase setup
+    /// reported its dependencies Available. It never checks or fixes Firebase's dependencies itself: Firebase allows
+    /// one check at a time, and a second one running beside the game's would break the game's Firebase setup.
+    /// On iOS, starting it is when the system asks the player for notification permission (Firebase Messaging asks
+    /// when it starts), so call it when that prompt is welcome.
     /// </para>
     /// </summary>
     internal static class SoilFirebaseMessagingBridge
     {
-        private const int Attempts = 6;
-        private const int RetryMilliseconds = 10000;
         private static bool _subscribed;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Start()
-        {
-            if (!PushHub.AutomaticBridge || _subscribed) return;
-            Run();
-        }
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetState() => _subscribed = false;
 
-        private static async void Run()
-        {
-            try
-            {
-                for (var attempt = 0; attempt < Attempts && !_subscribed; attempt++)
-                {
-                    var status = await FirebaseApp.CheckDependenciesAsync();
-                    if (status == DependencyStatus.Available)
-                    {
-                        Subscribe();
-                        return;
-                    }
-                    // The game's own Firebase setup may still be fixing them (a Play services update, say).
-                    await Task.Delay(RetryMilliseconds);
-                }
-                Debug.Log("[Soil-Push] Firebase Messaging is not available on this device; no push token.");
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[Soil-Push] Firebase Messaging could not start: {e.Message}");
-            }
-        }
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        private static void Listen() => PushHub.FirebaseStartRequested += Subscribe;
 
         private static void Subscribe()
         {
             if (_subscribed) return;
-            _subscribed = true;
-            FirebaseMessaging.TokenReceived += OnTokenReceived;
-            FirebaseMessaging.MessageReceived += OnMessageReceived;
+            try
+            {
+                FirebaseMessaging.TokenReceived += OnTokenReceived;
+                FirebaseMessaging.MessageReceived += OnMessageReceived;
+                _subscribed = true;
+            }
+            catch (Exception e)
+            {
+                // Firebase not usable on this device (no Google Play services, say): no token, nothing waits on it.
+                try
+                {
+                    FirebaseMessaging.TokenReceived -= OnTokenReceived;
+                }
+                catch (Exception)
+                {
+                    // Nothing was subscribed.
+                }
+                Debug.LogWarning($"[Soil-Push] Firebase Messaging could not start: {e.Message}");
+            }
         }
 
         private static void OnTokenReceived(object sender, TokenReceivedEventArgs args)
         {
+            // Firebase calls this on its own thread; Push moves the work to the main thread.
             PushHub.ReportToken(args?.Token);
         }
 

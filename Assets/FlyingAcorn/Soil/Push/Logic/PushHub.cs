@@ -17,6 +17,8 @@ namespace FlyingAcorn.Soil.Push.Logic
         private static readonly object Lock = new object();
         private static Action<string> _tokenReceived;
         private static Action<PushMessage> _messageReceived;
+        private static Action _firebaseStart;
+        private static bool _firebaseStartRequested;
         private static readonly List<PushMessage> Waiting = new List<PushMessage>();
         private const int MaxWaiting = 5;
 
@@ -24,10 +26,38 @@ namespace FlyingAcorn.Soil.Push.Logic
         public static string Token { get; private set; }
 
         /// <summary>
-        /// Whether the Firebase bridge may start on its own. A game that already hands tokens over itself sets this
-        /// to false before its first scene finishes loading (in Awake).
+        /// Raised once the game says Firebase is ready (Push.StartFirebaseBridge); the Firebase bridge listens. A
+        /// listener that subscribes after the request still gets it.
         /// </summary>
-        public static bool AutomaticBridge { get; set; } = true;
+        public static event Action FirebaseStartRequested
+        {
+            add
+            {
+                bool requested;
+                lock (Lock)
+                {
+                    _firebaseStart += value;
+                    requested = _firebaseStartRequested;
+                }
+                if (requested) value?.Invoke();
+            }
+            remove
+            {
+                lock (Lock) _firebaseStart -= value;
+            }
+        }
+
+        public static void RequestFirebaseStart()
+        {
+            Action handlers;
+            lock (Lock)
+            {
+                if (_firebaseStartRequested) return;
+                _firebaseStartRequested = true;
+                handlers = _firebaseStart;
+            }
+            handlers?.Invoke();
+        }
 
         /// <summary>Fired for every new token; a late subscriber gets the latest one at once.</summary>
         public static event Action<string> TokenReceived
@@ -40,7 +70,8 @@ namespace FlyingAcorn.Soil.Push.Logic
                     _tokenReceived += value;
                     token = Token;
                 }
-                if (!string.IsNullOrEmpty(token)) value?.Invoke(token);
+                // A newer token reported meanwhile already reached this subscriber; never replay an older one after it.
+                if (!string.IsNullOrEmpty(token) && token == Token) value?.Invoke(token);
             }
             remove
             {
@@ -98,16 +129,17 @@ namespace FlyingAcorn.Soil.Push.Logic
             handlers.Invoke(message);
         }
 
-        /// <summary>For tests: forget everything.</summary>
+        /// <summary>Forget everything: tests, and play mode without domain reload.</summary>
         public static void Reset()
         {
             lock (Lock)
             {
                 _tokenReceived = null;
                 _messageReceived = null;
+                _firebaseStart = null;
+                _firebaseStartRequested = false;
                 Waiting.Clear();
                 Token = null;
-                AutomaticBridge = true;
             }
         }
     }

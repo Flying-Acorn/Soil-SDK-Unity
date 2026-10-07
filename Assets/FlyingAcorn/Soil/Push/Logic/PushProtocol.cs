@@ -74,6 +74,15 @@ namespace FlyingAcorn.Soil.Push.Logic
         public IReadOnlyDictionary<string, string> Data { get; set; } = new Dictionary<string, string>();
     }
 
+    /// <summary>What the device should do about its registration right now.</summary>
+    public enum PushAction
+    {
+        None,
+        Register,
+        /// <summary>The player turned pushes off on this device: tell Soil to forget the registered token.</summary>
+        Unregister,
+    }
+
     /// <summary>What was last registered, to tell whether registering again is needed.</summary>
     [Serializable]
     public class PushRegistrationRecord
@@ -146,6 +155,18 @@ namespace FlyingAcorn.Soil.Push.Logic
             if (last == null) return true;
             return last.token != token || (last.language ?? "") != (language ?? "") || last.user != user ||
                    now - last.at >= RefreshSeconds || now < last.at;
+        }
+
+        /// <summary>
+        /// The next step for this device. Opted out: forget the registered token (if any), and never register,
+        /// whatever token the provider reports again. A game without the feature: nothing, this session.
+        /// </summary>
+        public static PushAction Decide(PushRegistrationRecord last, string token, string language, string user,
+            long now, bool optedOut, bool featureOff)
+        {
+            if (optedOut) return last != null && !string.IsNullOrEmpty(last.token) ? PushAction.Unregister : PushAction.None;
+            if (featureOff) return PushAction.None;
+            return ShouldRegister(last, token, language, user, now) ? PushAction.Register : PushAction.None;
         }
 
         public static PushKind ParseKind(string kind) => kind switch

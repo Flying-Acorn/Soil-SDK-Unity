@@ -87,6 +87,33 @@ namespace FlyingAcorn.Soil.Push.Tests
         }
 
         [Test]
+        public void Decide_OptedOutUnregistersOnceAndNeverRegistersAgain()
+        {
+            Assert.AreEqual(PushAction.Unregister, PushProtocol.Decide(Record(), "t", "fa", "u", Now, true, false));
+            Assert.AreEqual(PushAction.None, PushProtocol.Decide(null, "t", "fa", "u", Now, true, false),
+                "after the unregister succeeded the record is gone");
+            Assert.AreEqual(PushAction.None, PushProtocol.Decide(null, "new-token", "fa", "u", Now, true, false),
+                "a token reported again while opted out is not registered");
+            Assert.AreEqual(PushAction.Register, PushProtocol.Decide(null, "t", "fa", "u", Now, false, false),
+                "after Resume it registers again");
+        }
+
+        [Test]
+        public void Decide_AGameWithoutTheFeatureDoesNothing()
+        {
+            Assert.AreEqual(PushAction.None, PushProtocol.Decide(null, "t", "fa", "u", Now, false, true));
+            Assert.AreEqual(PushAction.Unregister, PushProtocol.Decide(Record(), "t", "fa", "u", Now, true, true),
+                "opting out still forgets the token");
+        }
+
+        [Test]
+        public void Decide_FollowsTheRegisterRules()
+        {
+            Assert.AreEqual(PushAction.None, PushProtocol.Decide(Record(), "t", "fa", "u", Now + 60, false, false));
+            Assert.AreEqual(PushAction.Register, PushProtocol.Decide(Record(), "t", "fa", "u2", Now, false, false));
+        }
+
+        [Test]
         public void ShouldRegister_NeverWithoutATokenOrAPlayer()
         {
             Assert.IsFalse(PushProtocol.ShouldRegister(null, null, "fa", "u", Now));
@@ -196,11 +223,25 @@ namespace FlyingAcorn.Soil.Push.Tests
         }
 
         [Test]
-        public void TheBridgeCanBeTurnedOff()
+        public void TheFirebaseStartReachesALateListenerOnce()
         {
-            Assert.IsTrue(PushHub.AutomaticBridge);
-            PushHub.AutomaticBridge = false;
-            Assert.IsFalse(PushHub.AutomaticBridge);
+            var starts = 0;
+            PushHub.RequestFirebaseStart();
+            PushHub.RequestFirebaseStart();
+            PushHub.FirebaseStartRequested += () => starts++;
+            Assert.AreEqual(1, starts);
+            PushHub.RequestFirebaseStart();
+            Assert.AreEqual(1, starts, "asking again does nothing");
+        }
+
+        [Test]
+        public void TheFirebaseStartWaitsForTheGame()
+        {
+            var starts = 0;
+            PushHub.FirebaseStartRequested += () => starts++;
+            Assert.AreEqual(0, starts, "the bridge never starts on its own");
+            PushHub.RequestFirebaseStart();
+            Assert.AreEqual(1, starts);
         }
     }
 }
