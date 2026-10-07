@@ -156,6 +156,54 @@ namespace FlyingAcorn.Soil.Feedback.Tests
                 new FeedbackSubmission("word_suggestion") { Rating = 3, Target = new string('t', 101) }));
         }
 
+        private const string GroupedChannels =
+            "{\"detail\":{\"code\":3,\"message\":\"channels_listed\"},\"channels\":[{\"key\":\"word_suggestion\"," +
+            "\"name\":\"Word suggestions\",\"rating\":\"none\",\"message_required\":false,\"max_message_length\":200," +
+            "\"daily_limit\":20,\"remaining_today\":20,\"group_by_target\":true,\"once_per_target\":true}]}";
+
+        [Test]
+        public void GroupedChannel_ParsesItsOptions()
+        {
+            var words = FeedbackProtocol.ParseChannels(200, GroupedChannels).Find("word_suggestion");
+            Assert.IsTrue(words.group_by_target);
+            Assert.IsTrue(words.once_per_target);
+            // Older servers do not send them: off.
+            Assert.IsFalse(FeedbackProtocol.ParseChannels(200, Channels).Find("rate_app").group_by_target);
+        }
+
+        [Test]
+        public void GroupedChannel_TakesTheTargetAlone_AndNeedsOne()
+        {
+            var words = FeedbackProtocol.ParseChannels(200, GroupedChannels).Find("word_suggestion");
+            Assert.IsNull(FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = "BAR, English" }));
+            Assert.AreEqual(FeedbackStatus.TargetRequired,
+                FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = "   " }));
+            Assert.AreEqual(FeedbackStatus.TargetTooLong,
+                FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = new string('t', 101) }));
+        }
+
+        [Test]
+        public void Check_CleansAndCountsLikeTheServer()
+        {
+            var words = FeedbackProtocol.ParseChannels(200, GroupedChannels).Find("word_suggestion");
+            // Only control characters: nothing left, as the server sees it.
+            Assert.AreEqual(FeedbackStatus.TargetRequired,
+                FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = "\u0001\u0007 " }));
+            // 100 emoji are 200 UTF-16 units but 100 characters: allowed, as on the server.
+            var emoji = string.Concat(System.Linq.Enumerable.Repeat("\U0001F600", 100));
+            Assert.AreEqual(100, FeedbackProtocol.CountCharacters(emoji));
+            Assert.IsNull(FeedbackProtocol.Check(words, new FeedbackSubmission("word_suggestion") { Target = emoji }));
+            Assert.AreEqual("a\tb\nc", FeedbackProtocol.Clean(" a\tb\u0000\nc\u007f "));
+        }
+
+        [Test]
+        public void TargetRequired_IsARefusal()
+        {
+            var result = FeedbackProtocol.ParseSend(400, "{\"detail\":{\"code\":16,\"message\":\"target_required\"}}");
+            Assert.AreEqual(FeedbackStatus.TargetRequired, result.Status);
+            Assert.IsFalse(result.Succeeded);
+        }
+
         [Test]
         public void StatusNumbersMatchTheServer()
         {
@@ -163,6 +211,7 @@ namespace FlyingAcorn.Soil.Feedback.Tests
             Assert.AreEqual(0, (int)FeedbackStatus.FeedbackSent);
             Assert.AreEqual(13, (int)FeedbackStatus.DailyLimitReached);
             Assert.AreEqual(15, (int)FeedbackStatus.FeedbackError);
+            Assert.AreEqual(16, (int)FeedbackStatus.TargetRequired);
         }
     }
 }
