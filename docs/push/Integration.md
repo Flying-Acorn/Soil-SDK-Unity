@@ -32,8 +32,12 @@ second one running beside yours would make your Firebase setup (Analytics, Crash
 That is why the game decides when it starts.
 
 **iOS:** starting the bridge starts Firebase Messaging, which asks the player for notification permission at that
-moment. Call `StartFirebaseBridge` when that prompt is welcome. Push also needs an APNs key uploaded to the
-Firebase project and the Push Notifications capability on the app.
+moment. Call `StartFirebaseBridge` when that prompt is welcome. Push also needs an APNs key (`.p8`) uploaded to the
+Firebase project and the Push Notifications capability on the app. The built app's entitlements must carry
+`aps-environment` (`development` for debug builds, `production` for TestFlight and the App Store): without it
+Firebase gets no APNs token, so no FCM token, and nothing reaches Soil. Add it with a post-build step
+(`ProjectCapabilityManager.AddPushNotifications`), or Unity Mobile Notifications' "Enable Push Notifications"
+setting. One `.p8` key serves both environments.
 
 **Android:**
 - Android 13 and later asks the player for permission to show notifications; ask for it as you already do for
@@ -46,6 +50,11 @@ Firebase project and the Push Notifications capability on the app.
 - Give notifications your own small icon, or Android shows a white square: add
   `<meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/<icon>" />`
   inside `<application>`.
+- Pushes land in Firebase's own "Miscellaneous" notification channel unless you name one of yours:
+  `<meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="<channel id>" />`.
+  Players who silence that channel in the OS settings silence pushes only.
+- Devices without Google Play services (Huawei, some custom ROMs) never get a token. They play as usual and
+  simply receive no pushes.
 
 ### Handing tokens over yourself
 
@@ -119,3 +128,11 @@ Push.Resume();       // Back on: the device registers again.
   when the token, the language or the player changed, or once a week. A failure is tried again on the next launch.
 - `Push.Enabled` says whether Soil was sending pushes when the device last registered. Informational only.
 - An app without the Push notifications feature answers 403; the SDK stops asking for that session.
+
+## Before players get it
+
+The SDK's tests cover its logic, not Firebase on a device. On a test build, check in this order:
+1. The device shows up under **Push → Log** for your player code. If not, Firebase gave no token: check the
+   bridge started, the Messaging package is the UPM one, and on iOS the `aps-environment` entitlement.
+2. **Push → Test send** arrives within about 15 seconds, in the background and with the game closed.
+3. If you changed the main activity for taps: every deep link and local-notification tap still opens the game.
