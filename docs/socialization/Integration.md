@@ -210,7 +210,9 @@ Things to know:
   (dashboard, Friends → Settings), that player's sends and accepts answer `SocializationRestricted` (HTTP 409)
   until enough of them unblock. Tell them they can't add friends right now; don't send them off to clear a list.
   Only the restricted player is ever told: their waiting requests are hidden from the players they asked, and a
-  request to them answers `RequestSent` as usual. Blocking, declining and cancelling still work.
+  request to them answers `RequestSent` as usual. When the restriction lifts, the requests they sent are dropped,
+  so fetch the outgoing list again rather than assuming they still wait. Blocking, declining and cancelling still
+  work.
 - **Being blocked looks like waiting**: a request to someone who blocked the player answers `RequestSent` and
   simply never gets an answer. Do not show anything else.
 - **After signing in** onto an existing account, the player's friends, requests and blocks move with them. Fetch
