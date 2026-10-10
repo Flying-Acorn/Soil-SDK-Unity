@@ -120,6 +120,8 @@ Each switch is per phone, kept across launches and sent to Soil, which then reco
 phone:
 
 ```csharp
+using FlyingAcorn.Soil.Push.Logic;   // PushGroup
+
 friendsToggle.isOn = Push.IsEnabled(PushGroup.Friends);
 friendsToggle.onValueChanged.AddListener(on => Push.SetEnabled(PushGroup.Friends, on));
 rewardsToggle.isOn = Push.IsEnabled(PushGroup.Rewards);
@@ -138,7 +140,7 @@ pushRows.SetActive(Push.Available);   // False once Soil said this game has no P
 ## Behaviour
 
 - Registering never blocks and never throws to the game. It waits until `SoilServices.Ready`, runs once, and only
-  when the token, the language or the player changed, or once a week. A failure is tried again on the next launch.
+  when the token, the language, a group switch or the player changed, or once a week. A failure is tried again on the next launch.
 - `Push.Enabled` says whether Soil was sending pushes when the device last registered. Informational only.
 - An app without the Push notifications feature answers 403; the SDK stops asking for that session.
 
