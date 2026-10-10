@@ -27,8 +27,8 @@ namespace FlyingAcorn.Soil.Push
     /// </para>
     /// <para>
     /// Nothing here ever blocks or throws to the game: registering waits for Soil to be ready, runs once, only
-    /// when the token, the language or the player changed (or once a week), and a failure is tried again on the
-    /// next launch, never in a loop.
+    /// when the token, the language, a group switch or the player changed (or once a week), and a failure is
+    /// tried again on the next launch, never in a loop.
     /// </para>
     /// </summary>
     public static class Push
@@ -59,7 +59,7 @@ namespace FlyingAcorn.Soil.Push
 
         /// <summary>
         /// Whether the player turned every push off on this device (<see cref="ClearToken"/>, or every group off
-        /// with <see cref="SetEnabled"/>). Soil then forgets the device.
+        /// with <see cref="SetEnabled"/>). Soil then forgets the device. Main thread.
         /// </summary>
         [UsedImplicitly]
         public static bool OptedOut => PushProtocol.AllMuted(Muted);
@@ -152,9 +152,11 @@ namespace FlyingAcorn.Soil.Push
 
         private static void OnUserFilled(bool changed)
         {
-            // A sign-in that lands on another account: the same device now belongs to that player.
+            // A sign-in that lands on another account: the same device now belongs to that player, so ask again.
+            // Every other refresh of the player keeps this session's answer.
+            if (!changed) return;
             lock (Lock) _featureOff = false;
-            if (changed) Schedule();
+            Schedule();
         }
 
         /// <summary>
@@ -190,7 +192,7 @@ namespace FlyingAcorn.Soil.Push
             Schedule();
         }
 
-        /// <summary>Whether this device takes pushes of a group (the game's notification settings).</summary>
+        /// <summary>Whether this device takes pushes of a group (the game's notification settings). Main thread.</summary>
         public static bool IsEnabled(PushGroup group) => !PushProtocol.ParseMuted(Muted).Contains(group);
 
         /// <summary>
@@ -389,10 +391,12 @@ namespace FlyingAcorn.Soil.Push
             var user = SoilServices.UserInfo?.uuid;
             var language = PlayerPrefs.GetString(LanguageKey, "");
             var muted = Muted;
-            // Before any push can come: Soil needs this device registered first.
-            if (!featureOff && !OptedOut) EnsureChannels(language);
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var record = LoadRecord();
+            // A switch changed before Firebase handed this session's token over: send it with the token last registered.
+            token = PushProtocol.TokenFor(token, record, user);
+            // Before any push can come (Soil needs this device registered first), and only where one can come.
+            if (!featureOff && !OptedOut && !string.IsNullOrEmpty(token)) EnsureChannels(language);
             switch (PushProtocol.Decide(record, token, language, user, now, OptedOut, featureOff, muted))
             {
                 case PushAction.Register:

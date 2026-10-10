@@ -168,6 +168,17 @@ namespace FlyingAcorn.Soil.Push.Tests
         }
 
         [Test]
+        public void TokenFor_FallsBackToTheLastTokenOfTheSamePlayer()
+        {
+            var record = new PushRegistrationRecord { token = "old", user = "u" };
+            Assert.AreEqual("new", PushProtocol.TokenFor("new", record, "u"));
+            Assert.AreEqual("old", PushProtocol.TokenFor(null, record, "u"), "a switch before Firebase reports");
+            Assert.IsNull(PushProtocol.TokenFor(null, record, "someone-else"), "never another player's");
+            Assert.IsNull(PushProtocol.TokenFor(null, null, "u"));
+            Assert.IsNull(PushProtocol.TokenFor("", record, null));
+        }
+
+        [Test]
         public void Groups_MatchTheServersNamesAndChannels()
         {
             Assert.AreEqual(new[] { "friends", "rewards" }, PushProtocol.Groups.Select(PushProtocol.GroupName).ToArray());

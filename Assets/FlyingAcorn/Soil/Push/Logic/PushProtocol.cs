@@ -229,6 +229,14 @@ namespace FlyingAcorn.Soil.Push.Logic
         }
 
         /// <summary>
+        /// The token to register with: this session's, else the one last registered for the same player, so a
+        /// switch changed before Firebase reports the token still reaches Soil at once.
+        /// </summary>
+        public static string TokenFor(string current, PushRegistrationRecord last, string user) =>
+            !string.IsNullOrEmpty(current) ? current
+            : last != null && !string.IsNullOrEmpty(user) && last.user == user ? last.token : null;
+
+        /// <summary>
         /// Whether the device should register now: never registered, or the token, the language, the muted groups or
         /// the player changed, or the last registration is older than a week. Keeps the SDK from calling on every
         /// launch.
