@@ -1097,19 +1097,11 @@ namespace FlyingAcorn.Soil.Advertisement.Data
         /// </summary>
         private static string ResolveAssetUrl(string url)
         {
-            if (string.IsNullOrEmpty(url))
+            if (string.IsNullOrEmpty(url) || AssetCachePlan.IsAbsoluteHttpUrl(url))
                 return url;
 
-            // Check if URL is already absolute (has protocol)
-            if (url.StartsWith("http://") || url.StartsWith("https://"))
-                return url;
-
-            // If relative, prepend with AssetsBaseDomain
-            var constants = new Constants();
-            var baseDomain = constants.AssetsBaseDomain.TrimEnd('/');
-            var relativePath = url.TrimStart('/');
-
-            return $"{baseDomain}/{relativePath}";
+            // If relative, complete it with AssetsBaseDomain
+            return AssetCachePlan.ResolveAssetUrl(url, new Constants().AssetsBaseDomain);
         }
 
         /// <summary>
@@ -1373,11 +1365,13 @@ namespace FlyingAcorn.Soil.Advertisement.Data
             MyDebug.Verbose($"Cleared {assetsToDelete.Count} cached assets for format {adFormat}");
         }
 
+        /// <summary>
         /// Clears old cached assets based on age (older than specified days)
         /// </summary>
         public static async UniTask ClearOldAssetsAsync(int olderThanDays = 7)
         {
-            var cutoffDate = DateTime.Now.AddDays(-olderThanDays);
+            // CachedAt is UTC (see CacheAssetAsync).
+            var cutoffDate = DateTime.UtcNow.AddDays(-olderThanDays);
             List<AssetCacheEntry> assetsToDelete;
 
             lock (_lockObject)

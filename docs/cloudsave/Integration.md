@@ -155,7 +155,7 @@ catch (SoilException e)
 
 ## Local Caching
 
-Data is automatically cached locally using `CloudSavePlayerPrefs`. Access cached data:
+Data is automatically cached locally using `CloudSavePlayerPrefs`. The cache is kept per signed-in user, so after a user change it holds only the new user's saves, and it is empty while no user is signed in. Access cached data:
 
 ```csharp
 // Get all saved keys

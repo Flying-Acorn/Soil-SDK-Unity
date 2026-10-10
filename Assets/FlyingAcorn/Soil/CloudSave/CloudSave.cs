@@ -59,6 +59,8 @@ namespace FlyingAcorn.Soil.CloudSave
             };
 
             var stringBody = JsonConvert.SerializeObject(payload, Formatting.None);
+            // The response belongs to this user even if the user changes while the request is in flight
+            var requestUser = SoilServices.UserInfo?.uuid;
 
             using var request = new UnityWebRequest(CloudSaveUrl, UnityWebRequest.kHttpVerbPOST)
             {
@@ -95,7 +97,7 @@ namespace FlyingAcorn.Soil.CloudSave
                 throw new SoilException("Failed to save data", SoilExceptionErrorCode.InvalidResponse);
             }
 
-            CloudSavePlayerPrefs.Save(saveResponse);
+            CloudSavePlayerPrefs.Save(saveResponse, requestUser);
             MyDebug.Info($"{key} saved in cloud");
         }
 
@@ -124,6 +126,7 @@ namespace FlyingAcorn.Soil.CloudSave
                 query += $"&user={otherUserID}";
             if (extraScopes is { Count: > 0 })
                 query += $"&extra_scopes={string.Join(",", extraScopes.Distinct())}";
+            var requestUser = SoilServices.UserInfo?.uuid;
             using var request = new UnityWebRequest($"{CloudSaveUrl}{query}", UnityWebRequest.kHttpVerbGET)
             {
                 downloadHandler = new DownloadHandlerBuffer()
@@ -162,8 +165,8 @@ namespace FlyingAcorn.Soil.CloudSave
                 throw new SoilException("Failed to load data", SoilExceptionErrorCode.InvalidResponse);
             }
 
-            if (string.IsNullOrEmpty(otherUserID) || otherUserID == SoilServices.UserInfo.uuid)
-                CloudSavePlayerPrefs.Save(saveResponse);
+            if (string.IsNullOrEmpty(otherUserID) || otherUserID == requestUser)
+                CloudSavePlayerPrefs.Save(saveResponse, requestUser);
             MyDebug.Verbose($"{key} loaded from cloud");
             return saveResponse;
         }

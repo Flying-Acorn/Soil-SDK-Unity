@@ -19,8 +19,8 @@ SCENARIO=outage       NativeAds/rotation-e2e/run.sh --no-build # ad server fails
 Close the Unity Editor on this project first. `run.sh` copies `SoilRotationE2E/` into
 `Assets/`, points the SDK's API URL at `http://127.0.0.1:8001/api`, builds in batch mode and puts
 every file back. `proxy.py` serves that port in front of the dev server and adds the
-`CF-IPCountry` header Cloudflare adds in production (`COUNTRY`, default `IR` — the cross-promo
-campaigns target Iran); the emulator reaches it through `adb reverse`. Asset URLs are whatever the
+`CF-IPCountry` header Cloudflare adds in production (`COUNTRY`, default `IR`, the country the
+test campaigns are set up for); the emulator reaches it through `adb reverse`. Asset URLs are whatever the
 server returns, so media may come from the production CDN.
 
 `drive.py` launches the player with the scenario, closes each fullscreen ad with the back key once

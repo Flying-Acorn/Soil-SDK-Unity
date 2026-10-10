@@ -112,6 +112,31 @@ namespace FlyingAcorn.Soil.Advertisement.Logic
             return builder.ToString();
         }
 
+        /// <summary>
+        /// The URL to download an asset from: an absolute http(s) URL as it is (any letter case),
+        /// a scheme-relative one ("//host/path") on <paramref name="baseDomain"/>'s scheme, and a
+        /// relative one on <paramref name="baseDomain"/> (scheme and host, e.g. https://soil.example).
+        /// </summary>
+        public static string ResolveAssetUrl(string url, string baseDomain)
+        {
+            if (string.IsNullOrEmpty(url) || IsAbsoluteHttpUrl(url)) return url;
+
+            var trimmedBase = (baseDomain ?? string.Empty).TrimEnd('/');
+            if (url.StartsWith("//", StringComparison.Ordinal))
+            {
+                var schemeEnd = trimmedBase.IndexOf("://", StringComparison.Ordinal);
+                var scheme = schemeEnd > 0 ? trimmedBase.Substring(0, schemeEnd) : "https";
+                return $"{scheme}:{url}";
+            }
+
+            return $"{trimmedBase}/{url.TrimStart('/')}";
+        }
+
+        /// <summary>Whether a URL is an absolute http or https one, in any letter case.</summary>
+        public static bool IsAbsoluteHttpUrl(string url) =>
+            url != null && (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                            || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+
         /// <summary>A file extension (with its dot) taken from a URL, or "" when it is not a plain one.</summary>
         public static string SafeExtension(string extension)
         {
