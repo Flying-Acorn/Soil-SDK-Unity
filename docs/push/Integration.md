@@ -50,9 +50,10 @@ setting. One `.p8` key serves both environments.
 - Give notifications your own small icon, or Android shows a white square: add
   `<meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/<icon>" />`
   inside `<application>`.
-- Pushes land in Firebase's own "Miscellaneous" notification channel unless you name one of yours:
-  `<meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="<channel id>" />`.
-  Players who silence that channel in the OS settings silence pushes only.
+- The SDK creates two notification channels, named in the game's language (`Push.SetLanguage`; English until it is called):
+  **Friends** (`soil_friends`: requests received and accepted; sound and the tray, no pop-up) and **Rewards**
+  (`soil_rewards`: leaderboard prizes and invite rewards; pops up). Soil puts every push in one of them. Android
+  fixes a channel's importance once it exists on a phone, so these are not configurable.
 - Devices without Google Play services (Huawei, some custom ROMs) never get a token. They play as usual and
   simply receive no pushes.
 
@@ -113,14 +114,26 @@ private void OnFriendsScreenOpened() => Push.ClearDelivered();
 
 On Android, `ClearDelivered()` also removes the game's own local notifications that are showing.
 
-## 5. Stopping pushes on one device (optional)
+## 5. Notification settings in the game (optional)
+
+Each switch is per phone, kept across launches and sent to Soil, which then records nothing of that group for this
+phone:
 
 ```csharp
-Push.ClearToken();   // A "notifications off" setting: Soil forgets this device, and it stays off across launches.
-Push.Resume();       // Back on: the device registers again.
+friendsToggle.isOn = Push.IsEnabled(PushGroup.Friends);
+friendsToggle.onValueChanged.AddListener(on => Push.SetEnabled(PushGroup.Friends, on));
+rewardsToggle.isOn = Push.IsEnabled(PushGroup.Rewards);
+rewardsToggle.onValueChanged.AddListener(on => Push.SetEnabled(PushGroup.Rewards, on));
+
+pushRows.SetActive(Push.Available);   // False once Soil said this game has no Push feature (this session).
 ```
 
-`Push.OptedOut` says which way the player last chose.
+- With every group off, Soil forgets the phone, as with `Push.ClearToken()`. `Push.Resume()` turns them all back on.
+  `Push.OptedOut` says whether every group is off.
+- The phone's own permission wins over these switches: while it blocks the game's notifications, nothing shows.
+  Read that with your notification package (Unity Mobile Notifications: `AndroidNotificationCenter.UserPermissionToPost`,
+  `iOSNotificationCenter.GetNotificationSettings()`), and send the player to the phone's settings with
+  `Push.OpenNotificationSettings()` (on Android, the game's notification page with its channels).
 
 ## Behaviour
 
