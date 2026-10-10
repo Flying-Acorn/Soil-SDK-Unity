@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using FlyingAcorn.Soil.Push.Logic;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -164,6 +165,58 @@ namespace FlyingAcorn.Soil.Push.Tests
             Assert.IsFalse(message.IsSoil);
             Assert.AreEqual(PushKind.Unknown, message.Kind);
             Assert.IsNotNull(PushProtocol.FromData(null, null, null, false).Data);
+        }
+
+        [Test]
+        public void Groups_MatchTheServersNamesAndChannels()
+        {
+            Assert.AreEqual(new[] { "friends", "rewards" }, PushProtocol.Groups.Select(PushProtocol.GroupName).ToArray());
+            Assert.AreEqual("soil_friends", PushProtocol.Channel(PushGroup.Friends, "fa").Id);
+            Assert.AreEqual("soil_rewards", PushProtocol.Channel(PushGroup.Rewards, "en").Id);
+            // Friends never interrupt; rewards pop up on top.
+            Assert.AreEqual(PushProtocol.ImportanceDefault, PushProtocol.Channel(PushGroup.Friends, "en").Importance);
+            Assert.AreEqual(PushProtocol.ImportanceHigh, PushProtocol.Channel(PushGroup.Rewards, "fa").Importance);
+        }
+
+        [TestCase("fa", "دوستان")]
+        [TestCase("Persian", "دوستان")]
+        [TestCase("fa-IR", "دوستان")]
+        [TestCase("English", "Friends")]
+        [TestCase("", "Friends")]
+        [TestCase(null, "Friends")]
+        public void Channels_AreNamedInTheGamesLanguage(string language, string friends)
+        {
+            Assert.AreEqual(friends, PushProtocol.Channel(PushGroup.Friends, language).Name);
+        }
+
+        [Test]
+        public void Muted_KeepsOnlyKnownGroupsInAFixedOrder()
+        {
+            Assert.AreEqual("friends,rewards", PushProtocol.MutedText(new[] { PushGroup.Rewards, PushGroup.Friends }));
+            Assert.AreEqual("", PushProtocol.MutedText(null));
+            Assert.AreEqual(new[] { PushGroup.Rewards }, PushProtocol.ParseMuted("rewards,ads,").ToArray());
+            Assert.IsTrue(PushProtocol.AllMuted("friends,rewards"));
+            Assert.IsFalse(PushProtocol.AllMuted("friends"));
+            Assert.IsFalse(PushProtocol.AllMuted(null));
+        }
+
+        [Test]
+        public void RegisterJson_SendsMutedEvenWhenEmpty()
+        {
+            Assert.AreEqual(new JArray("friends"), JObject.Parse(PushProtocol.RegisterJson("t", null, "", "friends"))["muted"]);
+            // Turning a group back on must reach the server.
+            Assert.AreEqual(new JArray(), JObject.Parse(PushProtocol.RegisterJson("t", null, "", ""))["muted"]);
+        }
+
+        [Test]
+        public void ShouldRegister_WhenTheMutedGroupsChange()
+        {
+            var record = new PushRegistrationRecord { token = "t", language = "fa", user = "u", at = Now };
+            Assert.IsFalse(PushProtocol.ShouldRegister(record, "t", "fa", "u", Now, ""), "a record from before groups");
+            Assert.IsTrue(PushProtocol.ShouldRegister(record, "t", "fa", "u", Now, "friends"));
+            record.muted = "friends";
+            Assert.IsFalse(PushProtocol.ShouldRegister(record, "t", "fa", "u", Now, "friends"));
+            Assert.AreEqual(PushAction.Register, PushProtocol.Decide(record, "t", "fa", "u", Now, false, false, ""));
         }
     }
 

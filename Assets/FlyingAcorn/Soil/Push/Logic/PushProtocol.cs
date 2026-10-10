@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -83,12 +84,36 @@ namespace FlyingAcorn.Soil.Push.Logic
         Unregister,
     }
 
+    /// <summary>
+    /// The kinds a player can turn off on one device, in the game's notification settings. Each is also the Android
+    /// notification channel its pushes land in (push/models.py GROUPS and ANDROID_CHANNELS on the server).
+    /// </summary>
+    public enum PushGroup
+    {
+        /// <summary>Friend requests received and accepted. Sound and the tray, no pop-up.</summary>
+        Friends,
+        /// <summary>Leaderboard prizes and invite rewards. Pops up on top.</summary>
+        Rewards,
+    }
+
+    /// <summary>An Android notification channel the SDK creates for one group.</summary>
+    public class PushChannel
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        /// <summary>Android's NotificationManager importance. Fixed by Android once a channel exists on a phone.</summary>
+        public int Importance { get; set; }
+    }
+
     /// <summary>What was last registered, to tell whether registering again is needed.</summary>
     [Serializable]
     public class PushRegistrationRecord
     {
         public string token;
         public string language;
+        /// <summary>The groups turned off, as <see cref="PushProtocol.MutedText"/> writes them.</summary>
+        public string muted;
         public string user;
         /// <summary>Unix seconds.</summary>
         public long at;
@@ -105,11 +130,70 @@ namespace FlyingAcorn.Soil.Push.Logic
             DateParseHandling = DateParseHandling.None,
         };
 
-        public static string RegisterJson(string token, string platform, string language)
+        // Android's NotificationManager.IMPORTANCE_DEFAULT and IMPORTANCE_HIGH.
+        public const int ImportanceDefault = 3;
+        public const int ImportanceHigh = 4;
+
+        public static readonly IReadOnlyList<PushGroup> Groups = new[] { PushGroup.Friends, PushGroup.Rewards };
+
+        /// <summary>The group's name on the server.</summary>
+        public static string GroupName(PushGroup group) => group == PushGroup.Friends ? "friends" : "rewards";
+
+        /// <summary>The groups turned off, in a fixed order, as the device stores and sends them ("friends,rewards").</summary>
+        public static string MutedText(IEnumerable<PushGroup> muted)
         {
-            var body = new Dictionary<string, string> { ["token"] = token };
+            var set = new HashSet<PushGroup>(muted ?? Array.Empty<PushGroup>());
+            return string.Join(",", Groups.Where(set.Contains).Select(GroupName));
+        }
+
+        public static IReadOnlyList<PushGroup> ParseMuted(string text)
+        {
+            var names = new HashSet<string>((text ?? "").Split(','));
+            return Groups.Where(group => names.Contains(GroupName(group))).ToList();
+        }
+
+        /// <summary>Every group off: the device then asks Soil to forget it rather than to mute everything.</summary>
+        public static bool AllMuted(string text) => ParseMuted(text).Count == Groups.Count;
+
+        /// <summary>"fa" for Persian in any of the ways games name it, else "en".</summary>
+        public static string ChannelLanguage(string language)
+        {
+            var value = (language ?? "").Trim().ToLowerInvariant();
+            return value == "fa" || value.StartsWith("fa-") || value.StartsWith("fa_") || value == "persian" ||
+                   value == "farsi" || value == "فارسی"
+                ? "fa"
+                : "en";
+        }
+
+        /// <summary>The Android channel for a group, named in the game's language.</summary>
+        public static PushChannel Channel(PushGroup group, string language)
+        {
+            var fa = ChannelLanguage(language) == "fa";
+            return group == PushGroup.Friends
+                ? new PushChannel
+                {
+                    Id = "soil_friends",
+                    Name = fa ? "دوستان" : "Friends",
+                    Description = fa ? "درخواست و پذیرش دوستی" : "Friend requests and accepted requests",
+                    Importance = ImportanceDefault,
+                }
+                : new PushChannel
+                {
+                    Id = "soil_rewards",
+                    Name = fa ? "جوایز" : "Rewards",
+                    Description = fa ? "جایزه‌ی جدول و دعوت" : "Leaderboard prizes and invite rewards",
+                    Importance = ImportanceHigh,
+                };
+        }
+
+        /// <summary>The register body. muted: <see cref="MutedText"/>, sent whenever given, even empty, so turning a group
+        /// back on reaches the server; null leaves it out.</summary>
+        public static string RegisterJson(string token, string platform, string language, string muted = null)
+        {
+            var body = new Dictionary<string, object> { ["token"] = token };
             if (!string.IsNullOrEmpty(platform)) body["platform"] = platform;
             if (!string.IsNullOrEmpty(language)) body["language"] = language;
+            if (muted != null) body["muted"] = ParseMuted(muted).Select(GroupName).ToList();
             return JsonConvert.SerializeObject(body);
         }
 
@@ -145,16 +229,17 @@ namespace FlyingAcorn.Soil.Push.Logic
         }
 
         /// <summary>
-        /// Whether the device should register now: never registered, or the token, the language or the player
-        /// changed, or the last registration is older than a week. Keeps the SDK from calling on every launch.
+        /// Whether the device should register now: never registered, or the token, the language, the muted groups or
+        /// the player changed, or the last registration is older than a week. Keeps the SDK from calling on every
+        /// launch.
         /// </summary>
         public static bool ShouldRegister(PushRegistrationRecord last, string token, string language, string user,
-            long now)
+            long now, string muted = "")
         {
             if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(user)) return false;
             if (last == null) return true;
             return last.token != token || (last.language ?? "") != (language ?? "") || last.user != user ||
-                   now - last.at >= RefreshSeconds || now < last.at;
+                   (last.muted ?? "") != (muted ?? "") || now - last.at >= RefreshSeconds || now < last.at;
         }
 
         /// <summary>
@@ -162,11 +247,11 @@ namespace FlyingAcorn.Soil.Push.Logic
         /// whatever token the provider reports again. A game without the feature: nothing, this session.
         /// </summary>
         public static PushAction Decide(PushRegistrationRecord last, string token, string language, string user,
-            long now, bool optedOut, bool featureOff)
+            long now, bool optedOut, bool featureOff, string muted = "")
         {
             if (optedOut) return last != null && !string.IsNullOrEmpty(last.token) ? PushAction.Unregister : PushAction.None;
             if (featureOff) return PushAction.None;
-            return ShouldRegister(last, token, language, user, now) ? PushAction.Register : PushAction.None;
+            return ShouldRegister(last, token, language, user, now, muted) ? PushAction.Register : PushAction.None;
         }
 
         public static PushKind ParseKind(string kind) => kind switch
